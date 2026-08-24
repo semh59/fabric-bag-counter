@@ -1,0 +1,77 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cs-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: cuval_sayim_db
+      POSTGRES_USER: cuval_admin
+      POSTGRES_PASSWORD: cuval_secure_2026
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cuval_admin -d cuval_sayim_db"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.core
+    container_name: cs-api
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
+      DATABASE_SYNC_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
+      NODE_ID: 1
+      LOG_LEVEL: INFO
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+
+  jobrunner:
+    build:
+      context: .
+      dockerfile: Dockerfile.core
+    container_name: cs-jobrunner
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
+      DATABASE_SYNC_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
+      NODE_ID: 1
+      LOG_LEVEL: INFO
+    command: ["python", "-m", "services.jobrunner.worker"]
+    volumes:
+      - ./data:/app/data
+
+  erp-relay:
+    build:
+      context: .
+      dockerfile: Dockerfile.core
+    container_name: cs-erp-relay
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
+      DATABASE_SYNC_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
+      NODE_ID: 1
+      LOG_LEVEL: INFO
+    command: ["python", "-m", "services.erp_relay.worker"]
+    volumes:
+      - ./data:/app/data
+
+volumes:
+  postgres_data:
+
