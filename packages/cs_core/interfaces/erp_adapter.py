@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Protocol, runtime_checkable
 
@@ -27,7 +27,7 @@ class SessionPayload:
     area_estimate_total: float = 0.0
     external_ref: str | None = None
     erp_material_code: str | None = None
-    opened_at: datetime = field(default_factory=datetime.utcnow)
+    opened_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     closed_at: datetime | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 

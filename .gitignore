@@ -55,4 +55,8 @@ Thumbs.db
 # Heavy Runtime Artifacts / Local Video storage
 data/videos/*.mp4
 data/videos/*.avi
+data/erp_exports/*.csv
+data/test_exports/*.csv
+data/csv_exports/*.csv
 *.log
+

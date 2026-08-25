@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from sqlalchemy import (
     JSON,
@@ -30,7 +30,7 @@ class SiteORM(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), default="Europe/Istanbul")
     locale: Mapped[str] = mapped_column(String(16), default="tr_TR")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     lines = relationship("LineORM", back_populates="site", cascade="all, delete-orphan")
     nodes = relationship("NodeORM", back_populates="site", cascade="all, delete-orphan")
@@ -45,7 +45,7 @@ class NodeORM(Base):
     hostname: Mapped[str] = mapped_column(String(255), nullable=False)
     gpu_info: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     status: Mapped[str] = mapped_column(String(32), default="online")
-    last_heartbeat: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_heartbeat: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     site = relationship("SiteORM", back_populates="nodes")
     cameras = relationship("CameraORM", back_populates="node")
@@ -79,7 +79,7 @@ class CameraORM(Base):
     source_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     role: Mapped[str] = mapped_column(String(32), default="counting")  # counting | vehicle_watchdog | auxiliary
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     line = relationship("LineORM", back_populates="cameras")
     node = relationship("NodeORM", back_populates="cameras")
@@ -129,7 +129,7 @@ class LineCalibrationORM(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     line_id: Mapped[int] = mapped_column(Integer, ForeignKey("line.id", ondelete="CASCADE"), nullable=False)
     stage: Mapped[str] = mapped_column(String(32), nullable=False)  # motion | scale
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     created_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     # Stage 1: motion
@@ -158,7 +158,7 @@ class DatasetVersionORM(Base):
     synthetic_count: Mapped[int] = mapped_column(Integer, default=0)
     split_spec: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     annotation_guide_version: Mapped[str] = mapped_column(String(32), default="2.0")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     training_runs = relationship("TrainingRunORM", back_populates="dataset_version")
 
@@ -190,7 +190,7 @@ class ModelVersionORM(Base):
     onnx_path: Mapped[str] = mapped_column(Text, nullable=False)
     eval_scores: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     stage: Mapped[str] = mapped_column(String(32), default="draft")  # draft | shadow | active | retired
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     training_run = relationship("TrainingRunORM", back_populates="model_versions")
     bundles = relationship("DeploymentBundleORM", back_populates="model_version")
@@ -205,7 +205,7 @@ class ConfigVersionORM(Base):
     payload_schema_version: Mapped[int] = mapped_column(Integer, default=2)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     line = relationship("LineORM", back_populates="configs")
     bundles = relationship("DeploymentBundleORM", back_populates="config_version")
@@ -220,7 +220,7 @@ class DeploymentBundleORM(Base):
     config_version_id: Mapped[int] = mapped_column(Integer, ForeignKey("config_version.id"), nullable=False)
     calibration_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("line_calibration.id"), nullable=True)
     git_commit: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    activated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    activated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     deactivated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     activated_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
@@ -239,7 +239,7 @@ class SessionORM(Base):
     external_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
     target_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="open")  # open, counting, paused, degraded, closed, reconcile_required, reconciled
-    opened_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    opened_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     locked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     counted_total: Mapped[int] = mapped_column(Integer, default=0)
@@ -275,7 +275,7 @@ class CountEventORM(Base):
     merge_flag: Mapped[bool] = mapped_column(Boolean, default=False)
     deployment_bundle_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     evidence_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     session = relationship("SessionORM", back_populates="events")
 
@@ -291,7 +291,7 @@ class ReconciliationORM(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     session_id: Mapped[int] = mapped_column(Integer, ForeignKey("session.id", ondelete="CASCADE"), nullable=False)
     trigger_reason: Mapped[str] = mapped_column(String(64), nullable=False)  # degraded_session | count_area_mismatch | erp_conflict | operator_request
-    opened_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    opened_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     assigned_role: Mapped[str] = mapped_column(String(32), default="engineer")
     evidence_refs: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     resolution: Mapped[str | None] = mapped_column(String(32), nullable=True)  # accept_system | manual_override | void_session
@@ -316,7 +316,7 @@ class JobORM(Base):
     lease_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
@@ -330,10 +330,10 @@ class OutboxORM(Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     status: Mapped[str] = mapped_column(String(32), default="pending")  # pending | in_progress | sent | failed | reconcile_required
     attempts: Mapped[int] = mapped_column(Integer, default=0)
-    next_attempt_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     external_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     session = relationship("SessionORM", back_populates="outbox_entries")
 
@@ -347,4 +347,4 @@ class UserAccountORM(Base):
     role: Mapped[str] = mapped_column(String(32), nullable=False)  # operator | engineer | admin
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))

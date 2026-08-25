@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -35,7 +35,7 @@ class CalibrationRepository:
             belt_direction_vector=belt_direction_vector,
             is_active=is_active,
             created_by=created_by,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
         self.db.add(calib)
         self.db.commit()
@@ -67,7 +67,7 @@ class CalibrationRepository:
             source_model_version_id=source_model_version_id,
             is_active=is_active,
             created_by=created_by,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
         self.db.add(calib)
         self.db.commit()

@@ -43,10 +43,10 @@ def main():
         initial_count_text = page.locator("#live-count").inner_text()
         print(f"  [OK] Initial Digital Counter value: {initial_count_text}")
 
-        # 3. Click "+1 Çuval Geçir" button
-        print("\n[4/10] Testing '+1 Çuval Geçir' Interactive Button...")
-        pass_btn = page.locator("button:has-text('+1 Çuval Geçir')")
-        assert pass_btn.is_visible(), "+1 Çuval button not found!"
+        # 3. Click "+1 Normal Çuval" button
+        print("\n[4/10] Testing '+1 Normal Çuval' Interactive Button...")
+        pass_btn = page.locator("button:has-text('+1 Normal Çuval')").first
+        assert pass_btn.is_visible(), "+1 Normal Çuval button not found!"
         pass_btn.click()
         page.wait_for_timeout(1500)
 
@@ -55,12 +55,13 @@ def main():
 
         # 4. Click "-1 Geri Al" button
         print("\n[5/10] Testing '-1 Geri Al' Rollback Button...")
-        rollback_btn = page.locator("button:has-text('-1 Geri Al')")
+        rollback_btn = page.locator("button:has-text('-1 Geri Al')").first
         assert rollback_btn.is_visible(), "-1 Geri Al button not found!"
         rollback_btn.click()
         page.wait_for_timeout(1500)
         after_rollback_text = page.locator("#live-count").inner_text()
         print(f"  [OK] Counter after rollback: {after_rollback_text}")
+
 
         # 5. Switch to Sessions Tab & Test Ledger Modal
         print("\n[6/10] Testing 'Oturumlar' Tab and 'Defter' Modal...")

@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import random
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Generator
 import cv2
 import numpy as np
@@ -153,7 +153,7 @@ class LiveStreamRenderer:
     def process_and_annotate_frame(self, frame: np.ndarray, session_id: int | None = None) -> tuple[np.ndarray, int | None]:
         """Run full OpenCV CV segmentation, tracking, gate crossing, and draw HUD annotations."""
         self.frame_idx += 1
-        t_now = datetime.utcnow()
+        t_now = datetime.now(timezone.utc)
         mono_ns = int(time.perf_counter() * 1e9)
 
         # 1. Run CV Segmentation & Counting Engine
@@ -281,18 +281,23 @@ def get_stream_generator(line_id: int = 1) -> Generator[bytes, None, None]:
         _renderers[line_id] = LiveStreamRenderer(line_id=line_id)
 
     renderer = _renderers[line_id]
+    cached_session_id = None
+    last_session_check = 0.0
 
     while True:
-        # Find active session
-        session_id = None
-        try:
-            with get_sync_session() as db:
-                sess_repo = SessionRepository(db)
-                sess = sess_repo.get_active_session(line_id)
-                if sess:
-                    session_id = sess.id
-        except Exception:
-            pass
+        # Check active session periodically (every 1s) to avoid DB lock and query overhead on every frame
+        now = time.time()
+        if now - last_session_check > 1.0:
+            last_session_check = now
+            try:
+                with get_sync_session() as db:
+                    sess_repo = SessionRepository(db)
+                    sess = sess_repo.get_active_session(line_id)
+                    cached_session_id = sess.id if sess else None
+            except Exception:
+                cached_session_id = None
+
+        session_id = cached_session_id
 
         # 1. Acquire frame
         if renderer.video_cap and renderer.video_cap.isOpened():
@@ -316,4 +321,5 @@ def get_stream_generator(line_id: int = 1) -> Generator[bytes, None, None]:
             b"--frame\r\n"
             b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
         )
-        time.sleep(0.04)  # ~25 FPS
+        time.sleep(0.02)  # ~30-40 FPS smooth streaming
+

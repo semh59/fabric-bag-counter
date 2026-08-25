@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 import numpy as np
 from PIL import Image
@@ -56,7 +56,7 @@ class FileVideoSource:
 
         self.frame_counter += 1
         mono_ns = time.monotonic_ns()
-        wall = datetime.utcnow()
+        wall = datetime.now(timezone.utc)
 
         return Frame(
             camera_id=self.config.get("camera_id", 1),

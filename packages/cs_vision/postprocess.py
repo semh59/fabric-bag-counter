@@ -27,8 +27,8 @@ def postprocess_rfdetr_seg(
     orig_h, orig_w = orig_shape
     pad_w, pad_h = pad
 
-    bag_bodies = []
-    print_marks = []
+    raw_bag_bodies = []
+    raw_print_marks = []
 
     for i in range(len(scores)):
         score = float(scores[i])
@@ -56,11 +56,8 @@ def postprocess_rfdetr_seg(
                 if rmask.ndim == 2:
                     # Resize mask to original image size
                     pil_mask = Image.fromarray((rmask > mask_threshold).astype(np.uint8) * 255)
-                    # Unpad and scale
-                    # First unpad
                     mask_h, mask_w = rmask.shape
                     if mask_h != orig_h or mask_w != orig_w:
-                        # Full image mask resizing
                         resized_mask = pil_mask.resize((int(mask_w / scale), int(mask_h / scale)), Image.Resampling.NEAREST)
                         full_mask = np.zeros((orig_h, orig_w), dtype=bool)
                         res_arr = np.array(resized_mask) > 128
@@ -79,15 +76,52 @@ def postprocess_rfdetr_seg(
                 bx1, by1, bx2, by2 = map(int, unpadded_box)
                 full_mask[by1:by2, bx1:bx2] = True
 
-            bag_bodies.append({
+            raw_bag_bodies.append({
                 "box": unpadded_box,
                 "score": score,
                 "mask": full_mask,
             })
         elif cls_id == 1:  # print_mark
-            print_marks.append({
+            raw_print_marks.append({
                 "box": unpadded_box,
                 "score": score,
             })
 
-    return bag_bodies, print_marks
+    # Apply NMS on bag bodies
+    bag_bodies = []
+    if raw_bag_bodies:
+        boxes_list = [b["box"] for b in raw_bag_bodies]
+        scores_list = [b["score"] for b in raw_bag_bodies]
+        boxes_np = np.array(boxes_list, dtype=np.float32)
+        scores_np = np.array(scores_list, dtype=np.float32)
+        
+        x1 = boxes_np[:, 0]
+        y1 = boxes_np[:, 1]
+        x2 = boxes_np[:, 2]
+        y2 = boxes_np[:, 3]
+        areas = (x2 - x1) * (y2 - y1)
+        order = scores_np.argsort()[::-1]
+        
+        keep = []
+        while order.size > 0:
+            idx = order[0]
+            keep.append(int(idx))
+            if order.size == 1:
+                break
+            xx1 = np.maximum(x1[idx], x1[order[1:]])
+            yy1 = np.maximum(y1[idx], y1[order[1:]])
+            xx2 = np.minimum(x2[idx], x2[order[1:]])
+            yy2 = np.minimum(y2[idx], y2[order[1:]])
+            
+            w = np.maximum(0.0, xx2 - xx1)
+            h = np.maximum(0.0, yy2 - yy1)
+            inter = w * h
+            ovr = inter / np.maximum(1.0, areas[idx] + areas[order[1:]] - inter)
+            
+            inds = np.where(ovr <= 0.45)[0]
+            order = order[inds + 1]
+
+        bag_bodies = [raw_bag_bodies[k] for k in keep]
+
+    return bag_bodies, raw_print_marks
+

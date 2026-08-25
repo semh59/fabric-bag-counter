@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
@@ -128,7 +128,7 @@ class SiteBase(BaseModel):
 
 class Site(SiteBase):
     id: int
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class NodeBase(BaseModel):
@@ -140,7 +140,7 @@ class NodeBase(BaseModel):
 
 class Node(NodeBase):
     id: int
-    last_heartbeat: datetime = Field(default_factory=datetime.utcnow)
+    last_heartbeat: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class LineBase(BaseModel):
@@ -165,7 +165,7 @@ class CameraBase(BaseModel):
 
 class Camera(CameraBase):
     id: int
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class CameraEpoch(BaseModel):
@@ -212,7 +212,7 @@ class LineCalibrationBase(BaseModel):
 
 class LineCalibration(LineCalibrationBase):
     id: int
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class DatasetVersionBase(BaseModel):
@@ -227,7 +227,7 @@ class DatasetVersionBase(BaseModel):
 
 class DatasetVersion(DatasetVersionBase):
     id: int
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class TrainingRunBase(BaseModel):
@@ -256,7 +256,7 @@ class ModelVersionBase(BaseModel):
 
 class ModelVersion(ModelVersionBase):
     id: int
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class ConfigVersionBase(BaseModel):
@@ -269,7 +269,7 @@ class ConfigVersionBase(BaseModel):
 
 class ConfigVersion(ConfigVersionBase):
     id: int
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class DeploymentBundleBase(BaseModel):
@@ -283,7 +283,7 @@ class DeploymentBundleBase(BaseModel):
 
 class DeploymentBundle(DeploymentBundleBase):
     id: int
-    activated_at: datetime = Field(default_factory=datetime.utcnow)
+    activated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     deactivated_at: datetime | None = None
 
 
@@ -306,7 +306,7 @@ class CountEventBase(BaseModel):
 
 class CountEvent(CountEventBase):
     event_id: UUID = Field(default_factory=uuid4)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class SessionBase(BaseModel):
@@ -319,7 +319,7 @@ class SessionBase(BaseModel):
 
 class Session(SessionBase):
     id: int
-    opened_at: datetime = Field(default_factory=datetime.utcnow)
+    opened_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     closed_at: datetime | None = None
     locked_at: datetime | None = None
     counted_total: int = 0
@@ -341,7 +341,7 @@ class ReconciliationBase(BaseModel):
 
 class Reconciliation(ReconciliationBase):
     id: int
-    opened_at: datetime = Field(default_factory=datetime.utcnow)
+    opened_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     resolved_at: datetime | None = None
 
 
@@ -360,7 +360,7 @@ class JobBase(BaseModel):
 
 class Job(JobBase):
     id: int
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     started_at: datetime | None = None
     finished_at: datetime | None = None
 
@@ -370,14 +370,14 @@ class OutboxBase(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
     status: OutboxStatus = OutboxStatus.PENDING
     attempts: int = 0
-    next_attempt_at: datetime = Field(default_factory=datetime.utcnow)
+    next_attempt_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     external_ref: str | None = None
     last_error: str | None = None
 
 
 class Outbox(OutboxBase):
     id: int
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class UserAccount(BaseModel):
@@ -386,7 +386,7 @@ class UserAccount(BaseModel):
     role: UserRole
     hashed_password: str
     is_active: bool = True
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class AuthToken(BaseModel):

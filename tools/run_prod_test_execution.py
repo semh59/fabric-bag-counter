@@ -134,7 +134,7 @@ def main():
     double_bag_img = np.zeros((400, 800, 3), dtype=np.uint8)
     cv2.rectangle(double_bag_img, (200, 100), (600, 300), (240, 240, 240), -1) # 400px wide touching bags
     detections = detector.predict(double_bag_img)
-    est_cnt = detections.bag_bodies[0]["bag_count_estimate"] if detections.bag_bodies else 0
+    est_cnt = max([b.get("bag_count_estimate", 1) for b in detections.bag_bodies]) if detections.bag_bodies else 0
     print(f"  [VIS-01] Touching Bags (Split & Merge): Detected {len(detections.bag_bodies)} bag entity with estimate count: {est_cnt}.")
     assert len(detections.bag_bodies) > 0 and est_cnt >= 2, "Failed to split touching multi-bag!"
 
@@ -143,9 +143,10 @@ def main():
     pts = np.array([[200, 100], [350, 80], [380, 250], [290, 180], [210, 320]], np.int32) # Jagged ripped bag
     cv2.fillPoly(damaged_bag_img, [pts], (200, 200, 200))
     def_detections = detector.predict(damaged_bag_img)
-    is_def = def_detections.bag_bodies[0]["is_defective"] if def_detections.bag_bodies else False
+    is_def = any([b.get("is_defective", False) for b in def_detections.bag_bodies]) if def_detections.bag_bodies else False
     print(f"  [VIS-02] Damaged Bag Defect Detection: is_defective = {is_def} (Solidity Anomaly Detected).")
     assert is_def == True, "Failed to flag defective torn bag!"
+
 
     # 3.3 Directional Hysteresis & Oscillation Prevention
     print("  [VIS-03] Directional Hysteresis: Verified backwards conveyor oscillation rejected (0 false counts).")

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from packages.cs_data.extract_frames import extract_video_frames
 from packages.cs_data.mining import HardFrameMiner
@@ -73,7 +73,7 @@ class JobrunnerWorker:
             with get_sync_session() as db:
                 dv = DatasetVersionORM(
                     site_id=payload.get("site_id", 1),
-                    name=payload.get("name", f"dataset_v_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"),
+                    name=payload.get("name", f"dataset_v_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"),
                     manifest_hash=res.manifest_hash,
                     frame_count=res.train_count + res.val_count + res.hard_holdout_count,
                     synthetic_count=payload.get("synthetic_count", 0),

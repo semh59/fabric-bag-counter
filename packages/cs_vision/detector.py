@@ -124,19 +124,51 @@ class VisionDetector:
                 mask_threshold=self.mask_threshold,
             )
 
-            # Enrich bag count estimation using single source of calibration
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image.copy()
+
+            # Enrich bag count estimation and defect flags using single source of calibration
             for bag in bag_bodies:
                 mask = bag.get("mask")
-                if mask is not None and self.is_scale_calibrated and self.mean_bag_gate_area_px:
-                    mask_area = float(np.sum(mask > 0))
-                    if mask_area >= (self.mean_bag_gate_area_px * self.merge_area_ratio):
-                        bag["bag_count_estimate"] = max(2, int(round(mask_area / self.mean_bag_gate_area_px)))
-                    else:
-                        bag["bag_count_estimate"] = 1
-                else:
-                    bag["bag_count_estimate"] = 1
+                box = bag.get("box", [0, 0, 0, 0])
+                bw = max(1.0, float(box[2] - box[0]))
+                bh = max(1.0, float(box[3] - box[1]))
+                aspect_ratio = bw / bh
+
+                solidity = 0.95
+                mask_area = float(bw * bh)
+                bx1, by1, bx2, by2 = int(max(0, box[0])), int(max(0, box[1])), int(min(w, box[2])), int(min(h, box[3]))
+                if bx2 > bx1 and by2 > by1:
+                    roi_gray = gray[by1:by2, bx1:bx2]
+                    if roi_gray.size > 0:
+                        _, roi_thresh = cv2.threshold(roi_gray, 30, 255, cv2.THRESH_BINARY)
+                        cnts, _ = cv2.findContours(roi_thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                        if cnts:
+                            cnt = max(cnts, key=cv2.contourArea)
+                            c_area = cv2.contourArea(cnt)
+                            hull = cv2.convexHull(cnt)
+                            hull_area = cv2.contourArea(hull)
+                            if hull_area > 0:
+                                solidity = float(c_area) / float(hull_area)
+                            bag["contour"] = cnt + np.array([bx1, by1])
+
+                is_defective = bool(solidity < 0.82 or aspect_ratio < 0.35 or aspect_ratio > 3.2)
+                defect_type = "DAMAGED_DEFORMED" if is_defective else "NONE"
+
+                bag_count_estimate = 1
+                if self.is_scale_calibrated and self.mean_bag_gate_area_px:
+                    effective_area = max(mask_area, bw * bh)
+                    if effective_area >= (self.mean_bag_gate_area_px * self.merge_area_ratio):
+                        bag_count_estimate = max(2, int(round(effective_area / self.mean_bag_gate_area_px)))
+
+                bag["solidity"] = round(solidity, 3)
+                bag["is_defective"] = is_defective
+                bag["defect_type"] = defect_type
+                bag["bag_count_estimate"] = bag_count_estimate
+
 
             return DetectionResult(bag_bodies=bag_bodies, print_marks=print_marks)
+
+
 
         # =======================================================================
         # 2. GEÇİCİ / PLACEHOLDER — Gerçek model eğitilene/yüklenene kadar Fallback

@@ -1,6 +1,6 @@
 """Unit tests for Job queue leasing, heartbeat, and expired lease recovery (§5.8)."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from packages.cs_storage.db import get_sync_session, init_db_sync
 from packages.cs_storage.models_orm import JobORM
 from packages.cs_storage.repositories.job_repo import JobRepository
@@ -40,7 +40,7 @@ def test_expired_lease_reclaim():
         assert leased.id == job.id
 
         # Manually expire the lease timestamp in database
-        leased.lease_until = datetime.utcnow() - timedelta(seconds=10)
+        leased.lease_until = datetime.now(timezone.utc) - timedelta(seconds=10)
         db.commit()
 
         # Reclaim

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Sequence
 import bcrypt
 from sqlalchemy import select
@@ -41,7 +41,7 @@ class UserRepository:
             role=role,
             hashed_password=hash_password(password),
             is_active=True,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
         self.db.add(user)
         self.db.commit()

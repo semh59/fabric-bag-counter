@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -31,7 +31,7 @@ class SessionRepository:
             external_ref=external_ref,
             target_count=target_count,
             status="open",
-            opened_at=datetime.utcnow(),
+            opened_at=datetime.now(timezone.utc),
             counted_total=0,
             area_estimate_total=0.0,
             discrepancy_flag=False,
@@ -126,7 +126,7 @@ class SessionRepository:
         # Derive final total directly from ledger sum(direction)
         total_count = self.ledger_repo.get_session_total_count(session_id)
         session.counted_total = total_count
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         session.closed_at = now
         session.locked_at = now
 

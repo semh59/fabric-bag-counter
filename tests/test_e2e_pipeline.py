@@ -1,6 +1,6 @@
 """End-to-end integration tests using synthetic scenes and CountingEngine (§11 M3, M5)."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import numpy as np
 from packages.cs_counting.engine import CountingEngine
 from packages.cs_data.synth import SyntheticBagGenerator
@@ -53,7 +53,7 @@ def test_e2e_counting_pipeline():
     engine.merge_detector.update_calibration(mean_bag_area_px=15000.0, is_active=True)
 
     # Simulate 30 frames of bag moving across conveyor from x=150 to x=500
-    base_time = datetime.utcnow()
+    base_time = datetime.now(timezone.utc)
     for f_idx in range(30):
         t_frame = base_time + timedelta(milliseconds=40 * f_idx)
         mono_ns = int(f_idx * 40 * 1e6)

@@ -15,7 +15,7 @@ Tests:
 12. Scenario 12: UI Buttons & RBAC Security for Operator, Engineer, and Admin
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 from fastapi.testclient import TestClient
 import numpy as np
@@ -204,7 +204,7 @@ def test_scenario_1_normal_single_stream():
         )
         sess_id = sess.id
 
-    t_base = datetime.utcnow()
+    t_base = datetime.now(timezone.utc)
     # 10 bags passing sequentially
     for bag_idx in range(10):
         for step in range(10):
@@ -294,7 +294,7 @@ def test_scenario_3_conveyor_backward_slip():
         post_gate_offset=40.0,
     )
     track = BagTrack(box=[200, 100, 240, 140], score=0.95)
-    t_now = datetime.utcnow()
+    t_now = datetime.now(timezone.utc)
 
     with get_sync_session() as db:
         session_repo = SessionRepository(db)
@@ -379,7 +379,7 @@ def test_scenario_4_and_5_multi_camera_and_epoch_increment():
         ep_cam2_a = epoch_repo.increment_and_get_epoch(env["cam2_id"])
         assert ep_cam1_a >= 1 and ep_cam2_a >= 1
 
-        t_now = datetime.utcnow()
+        t_now = datetime.now(timezone.utc)
         # Cam 1 records bag 1 (track 100)
         ledger_repo.record_event(
             session_id=sess.id,
@@ -434,7 +434,7 @@ def test_scenario_6_and_7_degradation_and_reconciliation_trigger():
             stream_epoch=1,
             frame_index=i,
             monotonic_ns=i * 40000000,
-            wall_clock=datetime.utcnow(),
+            wall_clock=datetime.now(timezone.utc),
             shm_name=f"shm_test_{i}",
             shape=(480, 640, 3),
             dtype="uint8",
@@ -528,7 +528,7 @@ def test_scenario_8_and_9_outbox_and_erp_dispatch():
         area_estimate_total=250.0,
         external_ref="DELIVERY-7788",
         erp_material_code="MAT-FLOUR-50KG",
-        opened_at=datetime.utcnow(),
+        opened_at=datetime.now(timezone.utc),
     )
     res_sap = sap_adapter.submit_session(payload)
     # Verifies retryable network error capture when endpoint is offline

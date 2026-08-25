@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -31,7 +31,7 @@ class ConfigRepository:
             payload_schema_version=payload_schema_version,
             note=note,
             created_by=created_by,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
         self.db.add(cfg)
         self.db.commit()
@@ -64,7 +64,7 @@ class ConfigRepository:
         activated_by: str | None = None,
     ) -> DeploymentBundleORM:
         """Activate a new deployment bundle, deactivating previous active bundle."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         # Deactivate existing active bundles for this line
         prev_bundles = self.db.execute(
             select(DeploymentBundleORM).where(

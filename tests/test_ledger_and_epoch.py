@@ -1,6 +1,6 @@
 """Unit tests for LedgerRepository idempotency, persistent stream epoch, and total count derivation (§5.2, §5.5)."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from packages.cs_storage.db import get_sync_session, init_db_sync
 from packages.cs_storage.models_orm import CameraORM, LineORM, ProductProfileORM, SessionORM, SiteORM
 from packages.cs_storage.repositories.camera_epoch_repo import CameraEpochRepository
@@ -49,7 +49,7 @@ def test_ledger_idempotency_and_net_count_derivation():
         ledger_repo = LedgerRepository(db)
 
         sess = session_repo.create_session(line_id=line_id, product_profile_id=profile_id)
-        t_now = datetime.utcnow()
+        t_now = datetime.now(timezone.utc)
 
         # 1. Record first crossing (track 10, seq 1, dir +1)
         ev1, created1 = ledger_repo.record_event(

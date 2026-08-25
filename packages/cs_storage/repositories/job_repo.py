@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Sequence
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -32,7 +32,7 @@ class JobRepository:
             requires_gpu=requires_gpu,
             attempts=0,
             max_attempts=max_attempts,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
         self.db.add(job)
         self.db.commit()
@@ -58,7 +58,7 @@ class JobRepository:
         if job is None:
             return None
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         job.status = "running"
         job.attempts += 1
         job.lease_until = now + timedelta(seconds=lease_seconds)
@@ -74,7 +74,7 @@ class JobRepository:
         """Extend lease and update heartbeat timestamp."""
         job = self.db.execute(select(JobORM).where(JobORM.id == job_id)).scalar_one_or_none()
         if job and job.status == "running":
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             job.heartbeat_at = now
             job.lease_until = now + timedelta(seconds=extension_seconds)
             self.db.commit()
@@ -86,7 +86,7 @@ class JobRepository:
         job = self.db.execute(select(JobORM).where(JobORM.id == job_id)).scalar_one_or_none()
         if job:
             job.status = "completed"
-            job.finished_at = datetime.utcnow()
+            job.finished_at = datetime.now(timezone.utc)
             if result_payload:
                 job.payload = {**job.payload, "result": result_payload}
             self.db.commit()
@@ -98,7 +98,7 @@ class JobRepository:
             job.last_error = error_message
             if job.attempts >= job.max_attempts:
                 job.status = "failed"
-                job.finished_at = datetime.utcnow()
+                job.finished_at = datetime.now(timezone.utc)
             else:
                 # Return to queued for retry
                 job.status = "queued"
@@ -110,14 +110,14 @@ class JobRepository:
         job = self.db.execute(select(JobORM).where(JobORM.id == job_id)).scalar_one_or_none()
         if job and job.status in ["queued", "running"]:
             job.status = "cancelled"
-            job.finished_at = datetime.utcnow()
+            job.finished_at = datetime.now(timezone.utc)
             self.db.commit()
             return True
         return False
 
     def reclaim_expired_leases(self) -> int:
         """Recover stalled running jobs whose lease expired."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         stmt = select(JobORM).where(
             JobORM.status == "running",
             JobORM.lease_until < now,

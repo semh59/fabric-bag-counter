@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -27,7 +27,7 @@ class OutboxRepository:
             payload=payload,
             status="pending",
             attempts=0,
-            next_attempt_at=datetime.utcnow(),
+            next_attempt_at=datetime.now(timezone.utc),
             external_ref=external_ref,
         )
         self.db.add(entry)
@@ -37,7 +37,7 @@ class OutboxRepository:
 
     def fetch_pending_entries(self, limit: int = 10) -> Sequence[OutboxORM]:
         """Fetch pending outbox records ready for delivery."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         stmt = (
             select(OutboxORM)
             .where(
@@ -81,7 +81,7 @@ class OutboxRepository:
                 entry.status = "reconcile_required"
             else:
                 entry.status = "pending"
-                entry.next_attempt_at = datetime.utcnow() + timedelta(seconds=backoff_seconds * (2 ** (entry.attempts - 1)))
+                entry.next_attempt_at = datetime.now(timezone.utc) + timedelta(seconds=backoff_seconds * (2 ** (entry.attempts - 1)))
             self.db.commit()
 
     def route_to_reconciliation(self, entry_id: int, reason: str) -> None:

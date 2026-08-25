@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated, Any
 import os
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, WebSocket, WebSocketDisconnect, status
@@ -498,7 +498,7 @@ def get_session_dispatch_report(sess_id: int, user: Annotated[CurrentUser, Depen
         damaged_count = sum(1 for e in events if getattr(e, "confidence", 1.0) < 0.85)
 
         import hashlib
-        data_str = f"SESS:{sess.id}|REF:{sess.external_ref}|COUNT:{counted}|PROD:{erp_sku}|TS:{datetime.utcnow().isoformat()}"
+        data_str = f"SESS:{sess.id}|REF:{sess.external_ref}|COUNT:{counted}|PROD:{erp_sku}|TS:{datetime.now(timezone.utc).isoformat()}"
         crypto_seal = hashlib.sha256(data_str.encode()).hexdigest().upper()
 
         return {
@@ -516,8 +516,8 @@ def get_session_dispatch_report(sess_id: int, user: Annotated[CurrentUser, Depen
             "status": sess.status,
             "reconciliation_status": "TAM MUTABAKAT" if diff == 0 else ("FAZLA SEVKİYAT" if diff > 0 else "EKSİK SEVKİYAT"),
             "damaged_count": damaged_count,
-            "started_at": sess.opened_at.isoformat() if sess.opened_at else datetime.utcnow().isoformat(),
-            "closed_at": sess.closed_at.isoformat() if sess.closed_at else datetime.utcnow().isoformat(),
+            "started_at": sess.opened_at.isoformat() if sess.opened_at else datetime.now(timezone.utc).isoformat(),
+            "closed_at": sess.closed_at.isoformat() if sess.closed_at else datetime.now(timezone.utc).isoformat(),
             "crypto_seal": crypto_seal,
             "event_count": len(events),
         }
@@ -700,7 +700,7 @@ def get_system_health(user: Annotated[CurrentUser, Depends(get_current_user)]):
         nodes = db.query(NodeORM).all()
         return {
             "status": "healthy",
-            "timestamp": datetime.utcnow(),
+            "timestamp": datetime.now(timezone.utc),
             "nodes": [{"id": n.id, "hostname": n.hostname, "status": n.status} for n in nodes],
         }
 
@@ -771,7 +771,7 @@ def simulate_bag_crossing(sess_id: int, req: SimulateBagRequest = SimulateBagReq
             track_id=track_id,
             crossing_seq=1,
             gate_id=gate_id,
-            crossing_timestamp=datetime.utcnow(),
+            crossing_timestamp=datetime.now(timezone.utc),
             frame_index=(current_events_count + 1) * 300,
             direction=req.direction,
             confidence=req.confidence,

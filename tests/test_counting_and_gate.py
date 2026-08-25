@@ -1,6 +1,6 @@
 """Unit tests for GateStateMachine, crossing_seq, and backward slip handling (§5.5, §6.8)."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from packages.cs_counting.gate import GateStateMachine
 from packages.cs_tracking.tracker import BagTrack
 
@@ -17,7 +17,7 @@ def test_gate_state_machine_forward_crossing():
     )
 
     track = BagTrack(box=[50, 0, 70, 20], score=0.9)  # cx = 60 (PRE zone)
-    t_now = datetime.utcnow()
+    t_now = datetime.now(timezone.utc)
 
     # Step 1: In PRE zone
     events1 = gate.process_tracks([track], frame_index=1, monotonic_ns=1000, wall_clock=t_now)
@@ -45,7 +45,7 @@ def test_gate_backward_slip_net_counting():
     )
 
     track = BagTrack(box=[50, 0, 70, 20], score=0.9)  # cx = 60 (PRE)
-    t_now = datetime.utcnow()
+    t_now = datetime.now(timezone.utc)
     gate.process_tracks([track], frame_index=1, monotonic_ns=1000, wall_clock=t_now)
 
     # 1. Forward crossing (cx = 120)

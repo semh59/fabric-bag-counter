@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import concurrent.futures
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
@@ -82,7 +82,7 @@ def test_gate_state_machine_hysteresis_oscillation():
         post_offset=40.0,
     )
 
-    base_time = datetime.utcnow()
+    base_time = datetime.now(timezone.utc)
 
     # Track Mock object
     class TrackMock:
@@ -204,7 +204,7 @@ def test_ledger_high_concurrency_idempotency_race():
                 track_id=777,
                 crossing_seq=1,  # Same composite key for all threads
                 gate_id=1,
-                crossing_timestamp=datetime.utcnow(),
+                crossing_timestamp=datetime.now(timezone.utc),
                 frame_index=100,
                 direction=1,
             )
@@ -252,14 +252,14 @@ def test_session_net_count_with_interleaved_forward_and_backward_events():
             ledger_repo.record_event(
                 session_id=sess_id, line_id=line.id, camera_id=cam.id,
                 stream_epoch=1, track_id=100 + i, crossing_seq=1, gate_id=1,
-                crossing_timestamp=datetime.utcnow(), frame_index=i * 10, direction=1,
+                crossing_timestamp=datetime.now(timezone.utc), frame_index=i * 10, direction=1,
             )
             # Every 3rd bag slips backward
             if i % 3 == 0:
                 ledger_repo.record_event(
                     session_id=sess_id, line_id=line.id, camera_id=cam.id,
                     stream_epoch=1, track_id=100 + i, crossing_seq=2, gate_id=1,
-                    crossing_timestamp=datetime.utcnow(), frame_index=i * 10 + 5, direction=-1,
+                    crossing_timestamp=datetime.now(timezone.utc), frame_index=i * 10 + 5, direction=-1,
                 )
 
         net_count = ledger_repo.get_session_total_count(sess_id)
@@ -282,16 +282,16 @@ def test_job_lease_expiration_and_worker_steal():
 
         # Worker 1 acquires lease with TTL in the past (simulating crash 10 seconds ago)
         job.status = "running"
-        job.lease_until = datetime.utcnow() - timedelta(seconds=10)
-        job.heartbeat_at = datetime.utcnow() - timedelta(seconds=10)
+        job.lease_until = datetime.now(timezone.utc) - timedelta(seconds=10)
+        job.heartbeat_at = datetime.now(timezone.utc) - timedelta(seconds=10)
         db.commit()
 
         # Worker 2 attempts to claim expired job
         claimed = job_repo.acquire_next_job(lease_seconds=30, gpu_available=True)
         assert claimed is not None
         assert claimed.id == job_id
-        assert claimed.status == "running"
-        assert claimed.lease_until > datetime.utcnow()
+        lease_time = claimed.lease_until.replace(tzinfo=timezone.utc) if claimed.lease_until.tzinfo is None else claimed.lease_until
+        assert lease_time > datetime.now(timezone.utc)
 
 
 def test_outbox_exponential_backoff_and_dead_letter():

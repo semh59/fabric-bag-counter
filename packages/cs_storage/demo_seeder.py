@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -56,7 +56,7 @@ def seed_demo_data(db: Session, force_reset: bool = False) -> None:
         name="Gebze Cimento & Yapi Kimyasallari Fabrikasi",
         timezone="Europe/Istanbul",
         locale="tr_TR",
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db.add(site)
     db.commit()
@@ -75,7 +75,7 @@ def seed_demo_data(db: Session, force_reset: bool = False) -> None:
             "temp_c": 52,
         },
         status="online",
-        last_heartbeat=datetime.utcnow(),
+        last_heartbeat=datetime.now(timezone.utc),
     )
     db.add(node)
     db.commit()
@@ -116,7 +116,7 @@ def seed_demo_data(db: Session, force_reset: bool = False) -> None:
         },
         role="counting",
         enabled=True,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db.add(camera)
     db.commit()
@@ -174,7 +174,7 @@ def seed_demo_data(db: Session, force_reset: bool = False) -> None:
         },
         note="Standart fabrika konveyor bant konfigurasyonu",
         created_by="admin",
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db.add(cfg)
     db.commit()
@@ -191,7 +191,7 @@ def seed_demo_data(db: Session, force_reset: bool = False) -> None:
         bag_area_stddev_px=1200.0,
         is_active=True,
         created_by="admin",
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db.add(calib)
     db.commit()
@@ -206,7 +206,7 @@ def seed_demo_data(db: Session, force_reset: bool = False) -> None:
         synthetic_count=1380,
         split_spec={"train": 0.8, "val": 0.15, "test": 0.05},
         annotation_guide_version="2.0",
-        created_at=datetime.utcnow() - timedelta(days=1),
+        created_at=datetime.now(timezone.utc) - timedelta(days=1),
     )
     db.add(ds)
     db.commit()
@@ -218,8 +218,8 @@ def seed_demo_data(db: Session, force_reset: bool = False) -> None:
         run_kind="fine_tune",
         status="completed",
         hyperparams={"batch_size": 16, "learning_rate": 1e-4, "optimizer": "AdamW"},
-        started_at=datetime.utcnow() - timedelta(hours=12),
-        finished_at=datetime.utcnow() - timedelta(hours=10),
+        started_at=datetime.now(timezone.utc) - timedelta(hours=12),
+        finished_at=datetime.now(timezone.utc) - timedelta(hours=10),
         metrics={"loss": 0.038, "mAP_50": 0.968, "epochs": 50},
     )
     db.add(tr)
@@ -239,7 +239,7 @@ def seed_demo_data(db: Session, force_reset: bool = False) -> None:
             "fps": 52.4,
             "latency_ms": 19.1,
         },
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db.add(mv)
     db.commit()
@@ -252,7 +252,7 @@ def seed_demo_data(db: Session, force_reset: bool = False) -> None:
         config_version_id=cfg.id,
         calibration_id=calib.id,
         git_commit="c29f8a4",
-        activated_at=datetime.utcnow(),
+        activated_at=datetime.now(timezone.utc),
         activated_by="admin",
     )
     db.add(bundle)
@@ -266,8 +266,8 @@ def seed_demo_data(db: Session, force_reset: bool = False) -> None:
         external_ref="IRS-2026-0840",
         target_count=200,
         status="closed",
-        opened_at=datetime.utcnow() - timedelta(hours=6),
-        closed_at=datetime.utcnow() - timedelta(hours=4),
+        opened_at=datetime.now(timezone.utc) - timedelta(hours=6),
+        closed_at=datetime.now(timezone.utc) - timedelta(hours=4),
         counted_total=200,
         area_estimate_total=199.6,
         discrepancy_flag=False,
@@ -278,8 +278,8 @@ def seed_demo_data(db: Session, force_reset: bool = False) -> None:
         external_ref="IRS-2026-0841",
         target_count=150,
         status="reconcile_required",
-        opened_at=datetime.utcnow() - timedelta(hours=4),
-        closed_at=datetime.utcnow() - timedelta(hours=2),
+        opened_at=datetime.now(timezone.utc) - timedelta(hours=4),
+        closed_at=datetime.now(timezone.utc) - timedelta(hours=2),
         counted_total=148,
         area_estimate_total=132.4,
         discrepancy_flag=True,
@@ -296,7 +296,7 @@ def seed_demo_data(db: Session, force_reset: bool = False) -> None:
         external_ref="IRS-2026-0842",
         target_count=200,
         status="counting",
-        opened_at=datetime.utcnow() - timedelta(minutes=45),
+        opened_at=datetime.now(timezone.utc) - timedelta(minutes=45),
         counted_total=142,
         area_estimate_total=141.8,
         discrepancy_flag=False,
@@ -335,7 +335,7 @@ def seed_demo_data(db: Session, force_reset: bool = False) -> None:
     rec = ReconciliationORM(
         session_id=past_session2.id,
         trigger_reason="count_area_mismatch",
-        opened_at=datetime.utcnow() - timedelta(hours=2),
+        opened_at=datetime.now(timezone.utc) - timedelta(hours=2),
         note="Ledger sayimi: 148 adet, Alan tahmini: 132.4 adet (Fark: %10.5 > %5.0 tolerans). Olasi cuval ust uste binme.",
     )
     db.add(rec)
@@ -352,7 +352,7 @@ def seed_demo_data(db: Session, force_reset: bool = False) -> None:
         status="sent",
         attempts=1,
         external_ref=past_session1.external_ref,
-        created_at=datetime.utcnow() - timedelta(hours=4),
+        created_at=datetime.now(timezone.utc) - timedelta(hours=4),
     )
     ob2 = OutboxORM(
         session_id=past_session2.id,
@@ -365,7 +365,7 @@ def seed_demo_data(db: Session, force_reset: bool = False) -> None:
         status="pending",
         attempts=0,
         external_ref=past_session2.external_ref,
-        created_at=datetime.utcnow() - timedelta(hours=2),
+        created_at=datetime.now(timezone.utc) - timedelta(hours=2),
     )
     db.add_all([ob1, ob2])
 
@@ -375,18 +375,18 @@ def seed_demo_data(db: Session, force_reset: bool = False) -> None:
         payload={"dataset_id": ds.id, "epochs": 50},
         status="completed",
         priority=5,
-        created_at=datetime.utcnow() - timedelta(hours=12),
-        started_at=datetime.utcnow() - timedelta(hours=12),
-        finished_at=datetime.utcnow() - timedelta(hours=10),
+        created_at=datetime.now(timezone.utc) - timedelta(hours=12),
+        started_at=datetime.now(timezone.utc) - timedelta(hours=12),
+        finished_at=datetime.now(timezone.utc) - timedelta(hours=10),
     )
     j2 = JobORM(
         kind="calibrate_motion",
         payload={"line_id": line.id, "algorithm": "lucas_kanade"},
         status="completed",
         priority=3,
-        created_at=datetime.utcnow() - timedelta(hours=8),
-        started_at=datetime.utcnow() - timedelta(hours=8),
-        finished_at=datetime.utcnow() - timedelta(hours=8),
+        created_at=datetime.now(timezone.utc) - timedelta(hours=8),
+        started_at=datetime.now(timezone.utc) - timedelta(hours=8),
+        finished_at=datetime.now(timezone.utc) - timedelta(hours=8),
     )
     db.add_all([j1, j2])
     db.commit()

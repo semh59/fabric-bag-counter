@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -28,7 +28,7 @@ class ReconciliationRepository:
             trigger_reason=trigger_reason,
             assigned_role=assigned_role,
             evidence_refs=evidence_refs or {},
-            opened_at=datetime.utcnow(),
+            opened_at=datetime.now(timezone.utc),
         )
         self.db.add(rec)
         self.db.commit()
@@ -58,7 +58,7 @@ class ReconciliationRepository:
         if not rec:
             return None
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         rec.resolution = resolution
         rec.resolved_count = resolved_count
         rec.resolved_by = resolved_by
