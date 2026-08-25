@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
+import jwt
 from fastapi import Cookie, Depends, HTTPException, Header, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -13,8 +15,12 @@ from packages.cs_storage.db import get_sync_session
 from packages.cs_storage.models_orm import UserAccountORM
 from packages.cs_storage.repositories.user_repo import UserRepository
 
-# Secret key for signing / sessions
+logger = logging.getLogger(__name__)
+
+# Secret key and algorithm for cryptographically signed JWT tokens
 SECRET_KEY = os.getenv("SECRET_KEY", "cuval_secret_production_key_2026")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))  # 24 hours
 
 
 class CurrentUser(BaseModel):
@@ -23,11 +29,22 @@ class CurrentUser(BaseModel):
     role: UserRole
 
 
+def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = None) -> str:
+    """Create a cryptographically signed JWT access token."""
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + (
+        expires_delta if expires_delta else timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
 def get_current_user(
     authorization: str | None = Header(None),
     session_token: str | None = Cookie(None),
 ) -> CurrentUser:
-    """Resolve authenticated user from Authorization header or session cookie."""
+    """Resolve authenticated user by cryptographically validating the signed JWT token (§8.1)."""
     token = None
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
@@ -35,27 +52,43 @@ def get_current_user(
         token = session_token
 
     if not token:
-        # Default fallback for testing or unauthorized request
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication credentials required.",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Format: user_id:username:role:secret
+    # Cryptographic JWT Signature Verification
     try:
-        parts = token.split(":")
-        if len(parts) >= 3:
-            uid = int(parts[0])
-            username = parts[1]
-            role = UserRole(parts[2])
-            return CurrentUser(user_id=uid, username=username, role=role)
-    except Exception:
-        pass
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id_str = payload.get("sub")
+        username = payload.get("username")
+        role_str = payload.get("role")
 
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or expired session token.",
-    )
+        if user_id_str is None or username is None or role_str is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token payload structure.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        uid = int(user_id_str)
+        role = UserRole(role_str)
+        return CurrentUser(user_id=uid, username=username, role=role)
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session token has expired. Please log in again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except (jwt.PyJWTError, ValueError, KeyError) as e:
+        logger.warning(f"[Auth] Rejected unauthorized token verification: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid signature or malformed session token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 def require_role(*allowed_roles: UserRole):

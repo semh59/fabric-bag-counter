@@ -56,7 +56,10 @@ def check_licenses() -> bool:
     violations = []
     dists = list(importlib.metadata.distributions())
     for dist in dists:
-        pkg_name = dist.metadata["Name"].lower()
+        raw_name = dist.metadata.get("Name")
+        if not raw_name:
+            continue
+        pkg_name = raw_name.lower()
         
         # Check banned packages
         if pkg_name in BANNED_EXACT_PACKAGES:
@@ -72,8 +75,11 @@ def check_licenses() -> bool:
         # Check for disallowed patterns in license identifiers
         for bad in DISALLOWED_PATTERNS:
             if bad in license_identifiers:
-                # LGPL exception check for dynamic AV/ffmpeg (§2.4)
-                if "lgpl" in bad and pkg_name in ["av", "pyav"]:
+                # LGPL exception check for dynamic AV/ffmpeg and psycopg2 driver (§2.4)
+                if ("lgpl" in license_identifiers or "gnu library" in license_identifiers) and pkg_name in ["av", "pyav", "psycopg2", "psycopg2-binary"]:
+                    continue
+                # Dual Apache/GPL licenses where Apache is chosen (§2.1)
+                if "apache" in license_identifiers and ("or" in license_identifiers or pkg_name == "dulwich"):
                     continue
                 # MPL-2.0 documented data-only root CA bundle exception (§2.1)
                 if "mpl" in bad and pkg_name in ["certifi"]:

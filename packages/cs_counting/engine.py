@@ -87,9 +87,10 @@ class CountingEngine:
             if hypothesis.is_merged:
                 merge_count += 1
                 # If two bags merged, register latent tracks
+                cnt = max(2, hypothesis.estimated_object_count)
                 for seed in hypothesis.centroid_seeds:
-                    w = (box[2] - box[0]) / 2.0
-                    h = (box[3] - box[1]) / 2.0
+                    w = (box[2] - box[0]) / float(cnt)
+                    h = (box[3] - box[1]) / float(cnt)
                     latent_box = [seed[0] - w / 2, seed[1] - h / 2, seed[0] + w / 2, seed[1] + h / 2]
                     enriched_detections.append({
                         "box": latent_box,

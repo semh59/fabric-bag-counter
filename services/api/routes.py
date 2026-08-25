@@ -51,7 +51,7 @@ from packages.cs_storage.repositories.outbox_repo import OutboxRepository
 from packages.cs_storage.repositories.reconciliation_repo import ReconciliationRepository
 from packages.cs_storage.repositories.session_repo import SessionRepository
 from packages.cs_storage.repositories.user_repo import UserRepository
-from services.api.auth import CurrentUser, get_current_user, require_role
+from services.api.auth import CurrentUser, create_access_token, get_current_user, require_role
 
 router = APIRouter()
 
@@ -127,7 +127,7 @@ class SubmitJobResponse(BaseModel):
 
 @router.post("/auth/login", response_model=LoginResponse)
 def login(req: LoginRequest, response: Response):
-    """Authenticate user and issue session token / cookie."""
+    """Authenticate user and issue cryptographically signed JWT session token / cookie (§8.1)."""
     with get_sync_session() as db:
         user_repo = UserRepository(db)
         user_repo.seed_default_users()
@@ -135,9 +135,31 @@ def login(req: LoginRequest, response: Response):
         if not user:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
 
-        token = f"{user.id}:{user.username}:{user.role}:cuval_secret"
+        token = create_access_token(data={"sub": str(user.id), "username": user.username, "role": user.role})
         response.set_cookie(key="session_token", value=token, httponly=True, max_age=86400)
         return LoginResponse(token=token, username=user.username, role=UserRole(user.role))
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+
+@router.post("/auth/change-password")
+def change_password(
+    req: ChangePasswordRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+):
+    """Update password for authenticated user (§8.1)."""
+    with get_sync_session() as db:
+        user_repo = UserRepository(db)
+        auth_user = user_repo.authenticate(current_user.username, req.old_password)
+        if not auth_user:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password incorrect.")
+        if len(req.new_password) < 6:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password must be at least 6 characters.")
+        user_repo.update_password(current_user.username, req.new_password)
+        return {"status": "success", "message": "Password changed successfully."}
 
 
 class RegisterUserRequest(BaseModel):

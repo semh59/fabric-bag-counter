@@ -20,7 +20,7 @@ class MergeHypothesis:
 
 
 class MergeDetector:
-    """Multi-signal detector to identify two merged bags under single mask segmentation."""
+    """Multi-signal detector to identify merged/overlapping bags under single mask segmentation."""
 
     def __init__(
         self,
@@ -34,9 +34,15 @@ class MergeDetector:
         self.min_votes = min_votes
         self.is_scale_calibrated = is_scale_calibrated
 
-    def update_calibration(self, mean_bag_area_px: float | None, is_active: bool) -> None:
+    def update_calibration(
+        self,
+        mean_bag_area_px: float | None,
+        is_active: bool,
+        merge_area_ratio: float = 1.50,
+    ) -> None:
         """Update scale calibration parameters."""
         self.mean_bag_gate_area_px = mean_bag_area_px
+        self.merge_area_ratio = merge_area_ratio
         self.is_scale_calibrated = is_active and (mean_bag_area_px is not None and mean_bag_area_px > 0)
 
     def analyze_detection(
@@ -72,7 +78,7 @@ class MergeDetector:
         solidity = mask_area / box_area if box_area > 0 else 1.0
 
         # Normal single bag rectangular solidity is typically 0.70 - 0.90
-        # Two shingled bags create an L-shape or stepped contour with lower solidity or elongated ratio
+        # Shingled bags create an L-shape or stepped contour with lower solidity or elongated ratio
         aspect_ratio = max(box_w / box_h, box_h / box_w)
         if solidity < 0.55 or aspect_ratio > 2.8:
             votes.append("signal_shape_convexity_deficit")
@@ -86,8 +92,8 @@ class MergeDetector:
         # -------------------------------------------------------------------
         # Signal 4: Print mark count within same mask
         # -------------------------------------------------------------------
+        marks_inside = 0
         if print_marks and mask is not None:
-            marks_inside = 0
             for pm in print_marks:
                 pbox = pm.get("box", [0, 0, 0, 0])
                 pcx = int((pbox[0] + pbox[2]) / 2.0)
@@ -101,16 +107,33 @@ class MergeDetector:
         is_merged = len(votes) >= self.min_votes
         confidence = float(len(votes)) / 4.0
 
-        # Derive centroid seeds for latent tracks or watershed separation
+        # Calculate generalized multi-bag count (2, 3, 4+ bags)
+        estimated_count = 1
         seeds = []
         if is_merged:
-            # Estimate 2 centers along the major axis
+            if marks_inside >= 2:
+                estimated_count = marks_inside
+            elif self.mean_bag_gate_area_px and self.mean_bag_gate_area_px > 0:
+                area_ratio = mask_area / self.mean_bag_gate_area_px
+                if area_ratio >= 3.4:
+                    estimated_count = max(4, int(round(area_ratio / 0.85)))
+                elif area_ratio >= 2.4:
+                    estimated_count = 3
+                elif area_ratio >= self.merge_area_ratio:
+                    estimated_count = 2
+                else:
+                    estimated_count = 2
+            else:
+                estimated_count = 2
+
             cx = (box[0] + box[2]) / 2.0
             cy = (box[1] + box[3]) / 2.0
-            if box_w >= box_h:
-                seeds = [(box[0] + box_w * 0.25, cy), (box[0] + box_w * 0.75, cy)]
-            else:
-                seeds = [(cx, box[1] + box_h * 0.25), (cx, box[1] + box_h * 0.75)]
+            for i in range(estimated_count):
+                fraction = (i + 0.5) / float(estimated_count)
+                if box_w >= box_h:
+                    seeds.append((box[0] + box_w * fraction, cy))
+                else:
+                    seeds.append((cx, box[1] + box_h * fraction))
         else:
             seeds = [((box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0)]
 
@@ -118,6 +141,6 @@ class MergeDetector:
             is_merged=is_merged,
             confidence=confidence,
             signal_votes=votes,
-            estimated_object_count=2 if is_merged else 1,
+            estimated_object_count=estimated_count,
             centroid_seeds=seeds,
         )

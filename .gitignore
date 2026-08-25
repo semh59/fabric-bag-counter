@@ -38,6 +38,11 @@ htmlcov/
 .tox/
 .nox/
 
+# Databases & Local Test Artifacts
+*.db
+*.sqlite*
+test_model.onnx
+
 # IDE & OS
 .idea/
 .vscode/
