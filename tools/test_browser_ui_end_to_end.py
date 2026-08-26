@@ -17,6 +17,17 @@ def main():
     print("    REAL BROWSER AUTOMATED INTERACTION & VERIFICATION")
     print("=" * 60)
 
+    # Verify if FastAPI web server is running at localhost:8080
+    import urllib.request
+    try:
+        urllib.request.urlopen("http://localhost:8080", timeout=2)
+    except Exception:
+        print("\n[SKIP] Local web server is not actively running at http://localhost:8080.")
+        print("       To execute real Playwright E2E browser tests:")
+        print("       1. Start server: python -m uvicorn services.api.main:app --port 8080")
+        print("       2. Re-run: python tools/test_browser_ui_end_to_end.py\n")
+        return 0
+
     with sync_playwright() as p:
         # Launch Chromium browser in headless mode
         print("\n[1/10] Launching Chromium Browser...")

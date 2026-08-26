@@ -35,7 +35,7 @@ def postprocess_rfdetr_seg(
         if score < conf_threshold:
             continue
 
-        cls_id = int(classes[i])
+        cls_id = int(round(float(classes[i])))
         box = boxes[i]
 
         # Invert letterbox on box coordinates: [x1, y1, x2, y2]

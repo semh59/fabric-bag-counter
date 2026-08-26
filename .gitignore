@@ -4,9 +4,9 @@ __pycache__/
 *$py.class
 *.so
 .Python
-build/
+/build/
 develop-eggs/
-dist/
+/dist/
 downloads/
 eggs/
 .eggs/
@@ -51,6 +51,9 @@ test_model.onnx
 *~
 .DS_Store
 Thumbs.db
+
+# Web dashboard build tooling (downloaded standalone Tailwind CLI binary)
+web/.bin/
 
 # Heavy Runtime Artifacts / Local Video storage
 data/videos/*.mp4

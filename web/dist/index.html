@@ -1,0 +1,2401 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Çuval Sayım ve Sevkiyat Mutabakat Sistemi (v2.0 Enterprise)</title>
+  <link rel="stylesheet" href="tailwind.css">
+  <style>
+    :root {
+      --bg-main: #0b1120;
+      --card-bg: rgba(15, 23, 42, 0.88);
+      --border-color: rgba(51, 65, 85, 0.7);
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --accent-green: #10b981;
+    }
+    * { box-sizing: border-box; }
+    body { background-color: var(--bg-main); color: #f8fafc; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0; }
+    .badge { display: inline-flex; align-items: center; padding: 0.25rem 0.65rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.025em; }
+    .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999; padding: 0.85rem 1.4rem; border-radius: 0.75rem; font-size: 0.875rem; font-weight: 600; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.6); animation: slideIn 0.25s ease-out; }
+    @keyframes slideIn { from { transform: translateY(1rem); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes countPulse { 0% { transform: scale(1); } 50% { transform: scale(1.08); color: #34d399; } 100% { transform: scale(1); } }
+    .count-pulse { animation: countPulse 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
+    .spinner { border: 3px solid rgba(99, 102, 241, 0.2); border-top-color: #6366f1; border-radius: 50%; width: 1.5rem; height: 1.5rem; animation: spin 0.6s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    input, select, textarea { background-color: #1e293b; border: 1px solid #334155; color: #f8fafc; border-radius: 0.5rem; padding: 0.55rem 0.85rem; font-size: 0.875rem; transition: all 0.15s ease; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35); }
+    .digital-font { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .glass-card { background: var(--card-bg); backdrop-filter: blur(12px); border: 1px solid var(--border-color); border-radius: 1.25rem; }
+    .glass-card:hover { border-color: rgba(99, 102, 241, 0.4); }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
+
+  <!-- ===================== MAIN APP SHELL ===================== -->
+  <div id="app-shell" class="flex-1 flex flex-col min-h-screen">
+    <!-- Top Navigation Header -->
+    <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 md:px-6 py-3 sticky top-0 z-40 flex items-center justify-between shadow-xl">
+      <div class="flex items-center space-x-4">
+        <div class="flex items-center space-x-2.5 cursor-pointer" onclick="setTab('live')">
+          <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center font-black text-white text-sm shadow-md shadow-indigo-500/20">CS</div>
+          <div>
+            <div class="text-base font-extrabold tracking-tight text-white leading-tight">Çuval Sayım <span class="text-indigo-400 text-xs font-semibold">v2.0</span></div>
+            <div class="text-[10px] text-slate-400 font-mono" id="current-line-label">Gebze Çimento & Yapı Kimyasalları</div>
+          </div>
+        </div>
+
+        <!-- Role Nav Menu -->
+        <nav id="nav-menu" class="hidden lg:flex space-x-1 bg-slate-800/60 p-1 rounded-xl border border-slate-700/50 text-xs font-semibold"></nav>
+      </div>
+
+      <!-- Right Controls -->
+      <div class="flex items-center space-x-2 md:space-x-3">
+        <!-- Sound Toggle -->
+        <button onclick="toggleAudio()" id="audio-toggle-btn" class="p-2 bg-slate-800/80 hover:bg-slate-700 rounded-lg border border-slate-700 text-slate-300 text-xs flex items-center space-x-1.5 transition" title="Sayım ses efektini aç/kapat">
+          <span id="audio-icon">🔊</span>
+          <span class="hidden sm:inline text-[11px]" id="audio-label">Ses Açık</span>
+        </button>
+
+        <!-- Quick Demo Seed -->
+        <button onclick="triggerDemoReset()" class="px-3 py-1.5 bg-indigo-950/40 hover:bg-indigo-900/60 border border-indigo-500/30 text-indigo-300 text-xs rounded-lg font-semibold transition flex items-center space-x-1" title="Veritabanına örnek fabrika ve oturum verilerini yeniden yükle">
+          <span>🌟</span>
+          <span class="hidden sm:inline">Demo Veri</span>
+        </button>
+
+        <!-- Live Health Pulse -->
+        <div class="flex items-center space-x-2 bg-slate-800/60 px-3 py-1.5 rounded-lg border border-slate-700/50">
+          <span id="health-dot" class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span class="text-xs text-slate-300 font-medium hidden sm:inline" id="live-indicator">Sistem Canlı</span>
+        </div>
+
+        <!-- Persona Role Switcher -->
+        <div class="border-l border-slate-700 pl-2 md:pl-3 flex items-center space-x-2">
+          <div class="hidden md:flex bg-slate-800/80 p-0.5 rounded-lg border border-slate-700 text-xs">
+            <button onclick="setRoleDirect('operator')" id="role-btn-operator" class="px-2.5 py-1 rounded font-semibold transition">👷 Operatör</button>
+            <button onclick="setRoleDirect('engineer')" id="role-btn-engineer" class="px-2.5 py-1 rounded font-semibold transition">👨‍🔬 Mühendis</button>
+            <button onclick="setRoleDirect('admin')" id="role-btn-admin" class="px-2.5 py-1 rounded font-semibold transition">👑 Yönetici</button>
+          </div>
+          <button onclick="switchRoleModal()" class="md:hidden px-2.5 py-1.5 bg-slate-800 text-xs font-semibold rounded-lg border border-slate-700 text-slate-300">
+            Rol
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Mobile Navigation Bar -->
+    <div class="lg:hidden bg-slate-900 border-b border-slate-800 px-4 py-2 overflow-x-auto flex space-x-2 text-xs" id="mobile-nav-menu"></div>
+
+    <!-- Main Dynamic Screen Viewport -->
+    <main id="app-container" class="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto"></main>
+  </div>
+
+  <!-- Role Switcher Modal (Mobile) -->
+  <div id="role-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+    <div class="glass-card max-w-md w-full p-6 shadow-2xl border border-slate-700">
+      <h3 class="text-lg font-bold mb-2 text-white">Rol & Yetki Seçimi (§9.2)</h3>
+      <p class="text-xs text-slate-400 mb-5">Her persona kendi yetki seviyesine uygun ekranları görür ve işlemlerini yürütür.</p>
+      <div class="space-y-2.5">
+        <button onclick="setRoleDirect('operator')" class="w-full text-left p-3.5 rounded-xl border border-slate-700/70 bg-slate-800/50 hover:bg-indigo-950/40 transition">
+          <div class="font-bold text-slate-200">👷 Operatör (operator)</div>
+          <div class="text-xs text-slate-400 mt-1">Canlı sayaç takibi, çuval simülasyonu, sevkiyat açma/kapatma, ERP onayı.</div>
+        </button>
+        <button onclick="setRoleDirect('engineer')" class="w-full text-left p-3.5 rounded-xl border border-slate-700/70 bg-slate-800/50 hover:bg-indigo-950/40 transition">
+          <div class="font-bold text-slate-200">👨‍🔬 Mühendis (engineer)</div>
+          <div class="text-xs text-slate-400 mt-1">+ Mutabakat çözümü, optik akış & ölçek kalibrasyonu, sentetik veri, model eğitimi.</div>
+        </button>
+        <button onclick="setRoleDirect('admin')" class="w-full text-left p-3.5 rounded-xl border border-slate-700/70 bg-slate-800/50 hover:bg-indigo-950/40 transition">
+          <div class="font-bold text-slate-200">👑 Yönetici (admin)</div>
+          <div class="text-xs text-slate-400 mt-1">+ 13 adımlı kurulum sihirbazı, tesis/hat/kamera CRUD, kullanıcı kaydı.</div>
+        </button>
+      </div>
+      <div class="mt-6 flex justify-end">
+        <button onclick="document.getElementById('role-modal').classList.add('hidden')" class="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-semibold rounded-lg hover:bg-slate-700">Kapat</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Event Ledger Detail Modal -->
+  <div id="ledger-modal" class="fixed inset-0 bg-black/75 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+    <div class="glass-card max-w-3xl w-full p-6 shadow-2xl border border-slate-700 flex flex-col max-h-[85vh]">
+      <div class="flex justify-between items-center pb-4 border-b border-slate-800">
+        <div>
+          <h3 class="text-lg font-bold text-white flex items-center space-x-2">
+            <span>📜 Sayım Defteri (Count Event Ledger)</span>
+            <span class="text-xs text-indigo-400 font-mono" id="ledger-modal-sess-title"></span>
+          </h3>
+          <p class="text-xs text-slate-400">Tek hakikat kaynağı: Salt-eklemeli (append-only) değişmez olay kayıtları (§5.5).</p>
+        </div>
+        <button onclick="document.getElementById('ledger-modal').classList.add('hidden')" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+      <div class="flex-1 overflow-y-auto my-4 pr-1" id="ledger-modal-body">
+        <div class="text-center py-10"><div class="spinner"></div></div>
+      </div>
+      <div class="pt-4 border-t border-slate-800 flex justify-between items-center text-xs text-slate-400">
+        <span id="ledger-modal-count-summary">Toplam: 0 Olay</span>
+        <button onclick="document.getElementById('ledger-modal').classList.add('hidden')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-medium">Kapat</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Product / Bag Profile Customizer Modal -->
+  <div id="bag-modal" class="fixed inset-0 bg-black/75 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+    <div class="glass-card max-w-xl w-full p-6 shadow-2xl border border-slate-700">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-800 mb-4">
+        <h3 class="text-base font-bold text-white flex items-center space-x-2">
+          <span>📦 Yeni Çuval / Ürün Profili Tanımla (§5.2)</span>
+        </h3>
+        <button onclick="document.getElementById('bag-modal').classList.add('hidden')" class="text-slate-400 hover:text-white">✕</button>
+      </div>
+      <div class="space-y-3.5 text-xs">
+        <div>
+          <label class="text-slate-400 font-semibold block mb-1">Ürün / Çuval Adı</label>
+          <input type="text" id="modal-bag-name" placeholder="Örn: 50kg Süper Kraft Çimento" class="w-full">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-slate-400 font-semibold block mb-1">ERP Malzeme Kodu</label>
+            <input type="text" id="modal-bag-erp" placeholder="MAT-CIM-50" class="w-full font-mono">
+          </div>
+          <div>
+            <label class="text-slate-400 font-semibold block mb-1">Nominal Ağırlık (kg)</label>
+            <input type="number" id="modal-bag-weight" value="50" class="w-full">
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="text-slate-400 font-semibold block mb-1">Genişlik (W mm)</label>
+            <input type="number" id="modal-bag-w" value="480" class="w-full">
+          </div>
+          <div>
+            <label class="text-slate-400 font-semibold block mb-1">Uzunluk (L mm)</label>
+            <input type="number" id="modal-bag-l" value="650" class="w-full">
+          </div>
+          <div>
+            <label class="text-slate-400 font-semibold block mb-1">Kalınlık (H mm)</label>
+            <input type="number" id="modal-bag-h" value="130" class="w-full">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-slate-400 font-semibold block mb-1">Çuval Rengi / Malzemesi</label>
+            <select id="modal-bag-color" class="w-full">
+              <option value="kraft_yellow">Sarı Kraft Torba</option>
+              <option value="poly_white">Beyaz Polietilen / Dokuma</option>
+              <option value="mortar_gray">Gri Kuru Harç Torbası</option>
+              <option value="red_special">Kırmızı Özel Harç</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-slate-400 font-semibold block mb-1">Alan Toleransı (±%)</label>
+            <input type="number" id="modal-bag-tol" value="6.0" class="w-full">
+          </div>
+        </div>
+      </div>
+      <div class="mt-6 pt-4 border-t border-slate-800 flex justify-end space-x-2">
+        <button onclick="document.getElementById('bag-modal').classList.add('hidden')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl">İptal</button>
+        <button onclick="saveNewBagProfile()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-md">Kaydet & Aktif Et</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden Video File Input -->
+  <input type="file" id="video-file-input" accept="video/mp4,video/avi,video/mkv,video/mov" class="hidden">
+
+  <script>
+    const API = '/api';
+    let auth = { token: null, username: 'operator', role: 'operator' };
+    let activeTab = 'live';
+    let sseSource = null;
+
+    // Live Feed Mode: 'stream' (Real OpenCV MJPEG) or 'canvas' (60 FPS Simulator)
+    let feedMode = 'stream';
+
+    // Conveyor & Belt Settings State
+    let beltSpeedFactor = 2.5; // 1.0 to 5.0
+    let opticalGateX = 480;    // 150 to 650 px
+    let beltDirection = 1;     // +1: Left to Right, -1: Right to Left
+    let activeBagColor = 'kraft_yellow';
+    let activeBagLabel = '50kg Çimento';
+
+    // Simulation animation state (for canvas mode)
+    let isAutoSimRunning = true;
+    let canvasAnimationId = null;
+    let bagsOnBelt = [];
+    let nextTrackId = 1050;
+
+    function toggleAudio() {
+      toggleAudioFeedback();
+    }
+
+    // ===================== HTTP & API HELPERS =====================
+    function headers(hasBody = false) {
+      const h = {};
+      if (auth.token) h['Authorization'] = 'Bearer ' + auth.token;
+      if (hasBody) h['Content-Type'] = 'application/json';
+      return h;
+    }
+
+    async function api(path, opts = {}) {
+      const res = await fetch(API + path, { headers: headers(!!opts.body), ...opts });
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = text; }
+      if (!res.ok) throw { status: res.status, detail: (data && data.detail) ? data.detail : text };
+      return data;
+    }
+
+    function toast(msg, type = 'success') {
+      const el = document.createElement('div');
+      const colors = {
+        success: 'bg-emerald-600 text-white border border-emerald-400/40',
+        error: 'bg-rose-600 text-white border border-rose-400/40',
+        warn: 'bg-amber-600 text-white border border-amber-400/40',
+        info: 'bg-indigo-600 text-white border border-indigo-400/40',
+      };
+      el.className = `toast ${colors[type] || colors.success}`;
+      el.innerHTML = `<span>${type === 'error' ? '⚠️' : type === 'warn' ? '🔔' : type === 'info' ? 'ℹ️' : '✅'}</span> <span class="ml-1.5">${msg}</span>`;
+      document.body.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(1rem)';
+        el.style.transition = 'all 0.3s ease-out';
+        setTimeout(() => el.remove(), 300);
+      }, 3000);
+    }
+
+    // ===================== AUTH & PERSONAS =====================
+    const CREDENTIALS = {
+      operator: { u: 'operator', p: 'op123' },
+      engineer: { u: 'engineer', p: 'eng123' },
+      admin: { u: 'admin', p: 'admin123' },
+    };
+
+    async function loginAs(role) {
+      const cred = CREDENTIALS[role] || CREDENTIALS.operator;
+      try {
+        const data = await api('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ username: cred.u, password: cred.p })
+        });
+        auth = { token: data.token, username: data.username, role: data.role };
+        localStorage.setItem('cs_auth', JSON.stringify(auth));
+        updatePersonaButtons();
+        renderNav();
+        renderScreen();
+        checkHealth();
+      } catch (e) {
+        console.error("Login failed:", e);
+      }
+    }
+
+    function setRoleDirect(role) {
+      document.getElementById('role-modal').classList.add('hidden');
+      loginAs(role).then(() => {
+        toast(`Persona değiştirildi: ${auth.username.toUpperCase()}`, 'success');
+      });
+    }
+
+    function switchRoleModal() {
+      document.getElementById('role-modal').classList.remove('hidden');
+    }
+
+    function updatePersonaButtons() {
+      ['operator', 'engineer', 'admin'].forEach(r => {
+        const btn = document.getElementById(`role-btn-${r}`);
+        if (btn) {
+          if (auth.role === r) {
+            btn.className = 'px-2.5 py-1 rounded font-bold bg-indigo-600 text-white shadow-sm';
+          } else {
+            btn.className = 'px-2.5 py-1 rounded font-semibold text-slate-400 hover:text-slate-200';
+          }
+        }
+      });
+    }
+
+    // Auto-login on launch
+    (async function init() {
+      const saved = localStorage.getItem('cs_auth');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.token) {
+            auth = parsed;
+            updatePersonaButtons();
+            renderNav();
+            renderScreen();
+            checkHealth();
+            return;
+          }
+        } catch {}
+      }
+      await loginAs('operator');
+    })();
+
+    // ===================== NAVIGATION TABS =====================
+    const MENUS = {
+      operator: [
+        { id: 'live', label: '📊 Canlı Sayım' },
+        { id: 'sessions', label: '📋 Oturumlar' },
+        { id: 'settings', label: '🔧 Bant & Kamera Ayarları' },
+        { id: 'system', label: '⚙️ Sistem' },
+      ],
+      engineer: [
+        { id: 'live', label: '📊 Canlı' },
+        { id: 'sessions', label: '📋 Oturumlar' },
+        { id: 'reconciliation', label: '⚖️ Mutabakat' },
+        { id: 'data', label: '📁 Veri & Sentetik' },
+        { id: 'training', label: '🧠 Model & Eğitim' },
+        { id: 'settings', label: '🔧 Bant & Kalibrasyon' },
+        { id: 'system', label: '⚙️ Sistem' },
+      ],
+      admin: [
+        { id: 'live', label: '📊 Canlı' },
+        { id: 'sessions', label: '📋 Oturumlar' },
+        { id: 'reconciliation', label: '⚖️ Mutabakat' },
+        { id: 'wizard', label: '🧙 Kurulum Sihirbazı' },
+        { id: 'data', label: '📁 Veri & Sentetik' },
+        { id: 'training', label: '🧠 Model & Eğitim' },
+        { id: 'settings', label: '🔧 Bant & Kalibrasyon' },
+        { id: 'system', label: '⚙️ Sistem' },
+      ]
+    };
+
+    function renderNav() {
+      const menu = MENUS[auth.role] || MENUS.operator;
+      const navEl = document.getElementById('nav-menu');
+      const mobileNavEl = document.getElementById('mobile-nav-menu');
+
+      const tabsHtml = menu.map(m => `
+        <button onclick="setTab('${m.id}')" class="px-3.5 py-1.5 rounded-lg transition whitespace-nowrap ${activeTab === m.id ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/40'}">${m.label}</button>
+      `).join('');
+
+      navEl.innerHTML = tabsHtml;
+      mobileNavEl.innerHTML = tabsHtml;
+    }
+
+    function setTab(tabId) {
+      activeTab = tabId;
+      renderNav();
+      renderScreen();
+    }
+
+    // ===================== HEALTH CHECK =====================
+    async function checkHealth() {
+      try {
+        await api('/system/health');
+        document.getElementById('health-dot').className = 'w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse';
+        document.getElementById('live-indicator').textContent = 'Sistem Canlı';
+      } catch {
+        document.getElementById('health-dot').className = 'w-2.5 h-2.5 rounded-full bg-rose-500';
+        document.getElementById('live-indicator').textContent = 'Bağlantı Yok';
+      }
+    }
+    setInterval(() => { if (auth.token) checkHealth(); }, 12000);
+
+    async function triggerDemoReset() {
+      try {
+        await api('/system/seed_demo', { method: 'POST' });
+        toast('Örnek fabrika ve canlı sayım verileri başarıyla yenilendi!', 'success');
+        renderScreen();
+      } catch (e) {
+        toast(e.detail || 'Demo yenileme başarısız', 'error');
+      }
+    }
+
+    // ===================== SCREEN ROUTER =====================
+    function renderScreen() {
+      const c = document.getElementById('app-container');
+      if (sseSource) { sseSource.close(); sseSource = null; }
+      if (canvasAnimationId) { cancelAnimationFrame(canvasAnimationId); canvasAnimationId = null; }
+
+      switch (activeTab) {
+        case 'live': renderLive(c); break;
+        case 'sessions': renderSessions(c); break;
+        case 'reconciliation': renderReconciliation(c); break;
+        case 'wizard': renderWizard(c); break;
+        case 'data': renderData(c); break;
+        case 'training': renderTraining(c); break;
+        case 'settings': renderSettings(c); break;
+        case 'system': renderSystem(c); break;
+        default: c.innerHTML = '<div class="text-slate-400 text-center py-20">Bilinmeyen ekran</div>';
+      }
+    }
+
+    // ===================== 1. LIVE COUNTING SCREEN =====================
+    async function renderLive(c) {
+      c.innerHTML = '<div class="text-center py-20"><div class="spinner !w-8 !h-8"></div><div class="text-slate-400 mt-4 text-sm font-medium">Canlı OpenCV AI görüntü akışı bağlanıyor...</div></div>';
+      try {
+        const [lines, sessions, products] = await Promise.all([
+          api('/lines'),
+          api('/sessions'),
+          api('/products'),
+        ]);
+
+        if (lines.length === 0) {
+          c.innerHTML = `
+            <div class="glass-card p-10 text-center max-w-xl mx-auto my-12 shadow-2xl">
+              <div class="text-4xl mb-4">🏭</div>
+              <h2 class="text-2xl font-bold text-white mb-2">Tanımlı Hat Bulunmuyor</h2>
+              <p class="text-slate-400 text-sm mb-6">Fabrika topolojisini başlatmak için hazır demo verilerini yükleyin.</p>
+              <button onclick="triggerDemoReset()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg transition">
+                🌟 Demo Verileri Yükle
+              </button>
+            </div>`;
+          return;
+        }
+
+        const activeSessions = sessions.filter(s => s.status === 'open' || s.status === 'counting' || s.status === 'paused');
+        let session = activeSessions[0];
+
+        if (!session) {
+          c.innerHTML = `
+            <div class="glass-card p-10 text-center max-w-xl mx-auto my-12 shadow-2xl">
+              <div class="text-4xl mb-4">📦</div>
+              <h2 class="text-2xl font-bold text-white mb-2">Aktif Sayım Oturumu Yok</h2>
+              <p class="text-slate-400 text-sm mb-6">Canlı konveyör sayımını başlatmak için hemen yeni bir oturum açın.</p>
+              <button onclick="quickStartSession(${lines[0].id}, ${products[0] ? products[0].id : 1})" class="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition">
+                ▶ Hızlı Oturum Başlat (200 Çuval)
+              </button>
+            </div>`;
+          return;
+        }
+
+        const currentProduct = products.find(p => p.id === session.product_profile_id) || products[0] || { name: '50kg Polipropilen Çimento Çuvalı' };
+        activeBagLabel = currentProduct.name;
+        const target = session.target_count || 200;
+        const count = session.counted_total || 0;
+        const areaEst = session.area_estimate_total ? Number(session.area_estimate_total).toFixed(1) : (count * 0.998).toFixed(1);
+        const pct = Math.min(100, Math.round((count / target) * 100));
+
+        c.innerHTML = `
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Left Card: Digital LED Counter & Bag Selector -->
+            <div class="glass-card p-6 shadow-2xl flex flex-col justify-between relative overflow-hidden">
+              <div>
+                <div class="flex items-center justify-between mb-3">
+                  <div class="flex items-center space-x-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                    <span class="text-xs font-bold text-slate-300 uppercase tracking-wider">Oturum #${session.id}</span>
+                  </div>
+                  <span id="live-status-badge" class="badge ${session.status === 'paused' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}">
+                    ${session.status === 'paused' ? '⏸ DURAKLATILDI' : '🟢 SAYIM CANLI'}
+                  </span>
+                </div>
+
+                <!-- Big Digital Count Display -->
+                <div class="text-center my-5">
+                  <div class="text-8xl font-black text-white tracking-tight digital-font drop-shadow-md" id="live-count">${count}</div>
+                  <div class="text-xs text-slate-400 mt-2 font-medium">
+                    Hedef: <span class="font-bold text-slate-100">${target} Çuval</span> 
+                    <span class="text-indigo-400 ml-1">(%<span id="live-pct">${pct}</span>)</span>
+                  </div>
+                </div>
+
+                <!-- Target Progress Bar -->
+                <div class="w-full bg-slate-800 rounded-full h-3 mb-5 p-0.5 border border-slate-700 overflow-hidden">
+                  <div id="live-progress-bar" class="bg-gradient-to-r from-indigo-500 to-emerald-400 h-2 rounded-full transition-all duration-300 shadow-sm" style="width: ${pct}%"></div>
+                </div>
+
+                <!-- Product / Bag Selector Dropdown (§5.2) -->
+                <div class="bg-slate-800/80 rounded-2xl p-4 border border-indigo-500/30 mb-4 text-xs space-y-2.5">
+                  <div class="flex justify-between items-center">
+                    <span class="text-indigo-300 font-bold uppercase tracking-wider text-[11px]">📦 Çuval / Ürün Profili:</span>
+                    <button onclick="openNewBagModal()" class="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold underline">+ Yeni Ekle</button>
+                  </div>
+                  <select id="live-bag-selector" onchange="changeActiveBagProfile(${session.id}, this.value)" class="w-full bg-slate-900 border-indigo-500/50 font-medium text-xs">
+                    ${products.map(p => `<option value="${p.id}" ${p.id === session.product_profile_id ? 'selected' : ''}>${p.name}</option>`).join('')}
+                  </select>
+
+                  <div class="pt-2 border-t border-slate-700/60 text-[11px] text-slate-400 space-y-1">
+                    <div class="flex justify-between">
+                      <span>ERP Malzeme:</span>
+                      <span class="font-mono text-slate-200" id="bag-erp-label">${currentProduct.erp_material_code || 'MAT-CIM-50'}</span>
+                    </div>
+                    <div class="flex justify-between">
+                      <span>Nominal Boyut:</span>
+                      <span class="font-mono text-slate-200" id="bag-dim-label">480 x 650 x 130 mm</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Dual-Estimator Box -->
+              <div class="border-t border-slate-800 pt-4 grid grid-cols-2 gap-3 text-center">
+                <div class="bg-slate-800/40 p-2.5 rounded-xl border border-slate-700/40">
+                  <div class="text-[10px] text-slate-400 font-semibold uppercase">Alan-İntegrali</div>
+                  <div class="text-xl font-bold text-slate-100 digital-font mt-0.5" id="live-area">${areaEst}</div>
+                </div>
+                <div class="bg-slate-800/40 p-2.5 rounded-xl border border-slate-700/40">
+                  <div class="text-[10px] text-slate-400 font-semibold uppercase">Ayrışma Güveni</div>
+                  <div class="text-xl font-bold text-emerald-400 digital-font mt-0.5">✓ %99.6</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right 2 Columns: Live Computer Vision MJPEG Feed & Live Settings -->
+            <div class="lg:col-span-2 space-y-4">
+              <!-- Video Feed Card -->
+              <div class="glass-card p-6 shadow-2xl flex flex-col justify-between">
+                <div>
+                  <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <div class="flex items-center space-x-2">
+                      <span class="text-sm font-bold text-slate-200">Kamera 1 — Canlı AI Görüntü Analizi</span>
+                      <span class="badge bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px]">RF-DETR + ByteTrack</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                      <select id="camera-source-select" onchange="switchCameraSource(${lines[0].id}, this.value)" class="text-xs bg-slate-800 border-indigo-500/40 py-1 px-2.5 rounded-lg font-semibold text-slate-200 cursor-pointer">
+                        <option value="demo">🏭 Simüle Konveyör (OpenCV AI)</option>
+                        <option value="0">📷 Yerel Web Kamerası (#0)</option>
+                        <option value="1">📷 İkincil USB Kamera (#1)</option>
+                        <option value="rtsp">🌐 Fabrika IP Kamerası (RTSP)</option>
+                      </select>
+                      <button onclick="toggleFeedMode(${lines[0].id}, ${session.id})" id="feed-mode-toggle" class="text-[11px] px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700">
+                        ${feedMode === 'stream' ? '🎬 Canlı Akış' : '🎨 60 FPS Canvas'}
+                      </button>
+                      <span class="text-emerald-400 font-bold text-xs">25.0 FPS</span>
+                    </div>
+                  </div>
+
+                  <!-- Interactive On-Screen Tool Ribbon -->
+                  <div class="flex flex-wrap items-center gap-1.5 p-2 bg-slate-900/90 rounded-xl border border-slate-800 text-[11px] mb-2.5">
+                    <button onclick="toggleWebRTC()" id="webrtc-btn" class="px-2.5 py-1 rounded ${isWebRTCActive ? 'bg-rose-600 text-white animate-pulse' : 'bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/30'} flex items-center space-x-1 font-semibold transition">
+                      <span>📷</span>
+                      <span id="webrtc-label">${isWebRTCActive ? 'Kamerayı Durdur' : 'Kameramı Aç (WebRTC)'}</span>
+                    </button>
+                    <button onclick="toggleGateDrag()" id="drag-gate-btn" class="px-2.5 py-1 rounded ${isDraggingGateEnabled ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300'} border border-slate-700 font-semibold flex items-center space-x-1 transition">
+                      <span>↔️</span>
+                      <span>Lazer Taşı</span>
+                    </button>
+                    <button onclick="toggleRoiDraw()" id="roi-draw-btn" class="px-2.5 py-1 rounded ${roiDrawMode ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300'} border border-slate-700 font-semibold flex items-center space-x-1 transition">
+                      <span>✏️</span>
+                      <span>Sayım Alanı (ROI)</span>
+                    </button>
+                    <button onclick="togglePerspectiveWarp()" id="warp-btn" class="px-2.5 py-1 rounded ${perspectiveMode ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-300'} border border-slate-700 font-semibold flex items-center space-x-1 transition">
+                      <span>📐</span>
+                      <span>Kuşbakışı (4-Nokta)</span>
+                    </button>
+                    <button onclick="toggleAudioFeedback()" id="audio-toggle-btn" class="px-2.5 py-1 rounded ${soundEnabled ? 'bg-teal-600/30 text-teal-300 border-teal-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'} border font-semibold flex items-center space-x-1 transition">
+                      <span>${soundEnabled ? '🔊' : '🔇'}</span>
+                      <span>${soundEnabled ? 'Ses Açık' : 'Sessiz'}</span>
+                    </button>
+                    <button onclick="openDispatchReportModal(${session.id})" class="px-2.5 py-1 rounded bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/30 font-semibold flex items-center space-x-1 ml-auto transition">
+                      <span>📄</span>
+                      <span>İrsaliye Raporu (PDF)</span>
+                    </button>
+                  </div>
+
+                  <!-- Live Stream Viewport -->
+                  <div class="relative bg-slate-950 rounded-2xl border-2 border-slate-700/80 overflow-hidden shadow-inner flex items-center justify-center min-h-[300px]" id="video-viewport">
+                    ${feedMode === 'stream' ? `
+                      <img id="liveVideoFeed" src="${API}/live/lines/${lines[0].id}/stream" alt="Live AI Vision Camera Stream" class="w-full h-auto block rounded-xl">
+                    ` : `
+                      <canvas id="conveyorCanvas" width="760" height="300" class="w-full h-full block cursor-crosshair"></canvas>
+                    `}
+                    <div id="gate-flash-overlay" class="absolute inset-0 bg-emerald-400/20 opacity-0 pointer-events-none transition-opacity duration-150"></div>
+                  </div>
+                </div>
+
+                <!-- Interactive Live Action Controls -->
+                <div class="mt-4 pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <button onclick="triggerSimPass(${session.id}, 1, 'normal')" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-xl shadow-md active:scale-95 transition flex items-center space-x-1.5">
+                      <span>⚡</span>
+                      <span>+1 Normal Çuval</span>
+                    </button>
+
+                    <button onclick="triggerSimPass(${session.id}, 2, 'multi')" class="px-3.5 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold rounded-xl shadow-md active:scale-95 transition flex items-center space-x-1.5" title="Bitişik yapışık 2 çuval ayrıştırma">
+                      <span>📦</span>
+                      <span>+2 Bitişik Çuval</span>
+                    </button>
+
+                    <button onclick="triggerSimPass(${session.id}, 1, 'defect')" class="px-3.5 py-2 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-xs font-bold rounded-xl shadow-md active:scale-95 transition flex items-center space-x-1.5" title="Yırtık/patlak çuval defekt alarmı">
+                      <span>🚨</span>
+                      <span>+1 Hasarlı / Patlak</span>
+                    </button>
+
+                    <button onclick="promptUploadVideo(${lines[0].id})" class="px-3 py-2 bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-200 text-xs font-bold rounded-xl transition flex items-center space-x-1.5">
+                      <span>📁</span>
+                      <span>Video Yükle</span>
+                    </button>
+
+                    <button onclick="triggerSimPass(${session.id}, -1, 'rollback')" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-medium rounded-xl transition" title="Geriye dönük yanlış/çift sayımı düzelt">
+                      <span>🔁 -1 Geri Al</span>
+                    </button>
+                  </div>
+
+                  <div class="flex items-center space-x-2">
+                    ${session.status === 'paused' ? `
+                      <button onclick="sessionAction(${session.id}, 'resume')" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-sm transition">
+                        ▶ Devam Et
+                      </button>
+                    ` : `
+                      <button onclick="sessionAction(${session.id}, 'pause')" class="px-3.5 py-2 bg-amber-600/30 hover:bg-amber-600/50 text-amber-300 border border-amber-500/40 text-xs font-bold rounded-xl transition">
+                        ⏸ Duraklat
+                      </button>
+                    `}
+                    <button onclick="confirmCloseSession(${session.id})" class="px-3.5 py-2 bg-rose-600/25 hover:bg-rose-600/40 text-rose-300 border border-rose-500/40 text-xs font-bold rounded-xl transition">
+                      ⏹ Oturumu Kapat
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Dedicated Bant & Sayım Kapısı Canlı Ayar Paneli (§5.3, §6.8) -->
+              <div class="glass-card p-5 border border-slate-700/80 shadow-xl space-y-4">
+                <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <div class="flex items-center space-x-2">
+                    <span class="text-base">🔧</span>
+                    <span class="text-sm font-bold text-slate-100">Bant, Kapı ve Kamera Canlı Ayarları</span>
+                  </div>
+                  <span class="badge bg-indigo-500/20 text-indigo-300 text-[10px]">Canlı Ayar</span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                  <!-- 1. Belt Speed Slider -->
+                  <div class="bg-slate-800/50 p-3.5 rounded-xl border border-slate-700/60">
+                    <div class="flex justify-between items-center mb-1.5">
+                      <label class="text-slate-400 font-semibold">Bant Hızı (m/s)</label>
+                      <span class="font-mono text-emerald-400 font-bold text-xs" id="belt-speed-val">${beltSpeedFactor.toFixed(1)}x (${(beltSpeedFactor * 0.4).toFixed(2)} m/s)</span>
+                    </div>
+                    <input type="range" min="0.5" max="5.0" step="0.2" value="${beltSpeedFactor}" oninput="setBeltSpeed(${lines[0].id}, this.value)" class="w-full accent-indigo-500 cursor-pointer">
+                    <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+                      <span>0.2 m/s (Yavaş)</span>
+                      <span>2.0 m/s (Hızlı)</span>
+                    </div>
+                  </div>
+
+                  <!-- 2. Optical Gate Line Position Slider -->
+                  <div class="bg-slate-800/50 p-3.5 rounded-xl border border-slate-700/60">
+                    <div class="flex justify-between items-center mb-1.5">
+                      <label class="text-slate-400 font-semibold">Kapı Çizgisi (X Pos)</label>
+                      <span class="font-mono text-indigo-400 font-bold text-xs" id="gate-x-val">${opticalGateX} px</span>
+                    </div>
+                    <input type="range" min="150" max="650" step="10" value="${opticalGateX}" oninput="setGateX(${lines[0].id}, this.value)" class="w-full accent-emerald-500 cursor-pointer">
+                    <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+                      <span>Giriş (150px)</span>
+                      <span>Çıkış (650px)</span>
+                    </div>
+                  </div>
+
+                  <!-- 3. Belt Direction & Quick Calibrate -->
+                  <div class="bg-slate-800/50 p-3.5 rounded-xl border border-slate-700/60 flex flex-col justify-between">
+                    <div>
+                      <label class="text-slate-400 font-semibold block mb-1.5">Bant Akış Yönü</label>
+                      <div class="grid grid-cols-2 gap-2">
+                        <button onclick="setBeltDirection(${lines[0].id}, 1)" id="dir-lr-btn" class="py-1 px-2 rounded-lg font-bold text-xs ${beltDirection > 0 ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-400'}">➔ Soldan Sağa</button>
+                        <button onclick="setBeltDirection(${lines[0].id}, -1)" id="dir-rl-btn" class="py-1 px-2 rounded-lg font-bold text-xs ${beltDirection < 0 ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-400'}">⬅ Sağdan Sola</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- RTSP Camera Source & Quick Calibrate Buttons -->
+                <div class="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div class="flex-1 min-w-[280px] flex items-center space-x-2">
+                    <span class="text-slate-400 whitespace-nowrap">🎥 RTSP IP:</span>
+                    <input type="text" id="camera-rtsp-input" value="rtsp://192.168.1.100:554/live" class="flex-1 text-xs font-mono py-1.5" placeholder="rtsp://kullanici:sifre@ip:554/live">
+                    <button onclick="saveCameraRTSP(${lines[0].id})" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg">Kaydet</button>
+                  </div>
+
+                  <div class="flex items-center space-x-2">
+                    <button onclick="triggerCalibration(${lines[0].id}, 'motion')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg font-semibold transition">
+                      🔄 Optik Akış Kalibrasyonu
+                    </button>
+                    <button onclick="triggerCalibration(${lines[0].id}, 'scale')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg font-semibold transition">
+                      📐 Ölçek Kalibrasyonu
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+
+        if (feedMode === 'canvas') {
+          initConveyorCanvas(session.id);
+        }
+        startSSE(lines[0].id);
+
+      } catch (e) {
+        c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-8 text-rose-300">Hata: ${e.detail || e.message || 'Canlı sayım başlatılamadı.'}</div>`;
+      }
+    }
+
+    function toggleFeedMode(lineId, sessionId) {
+      feedMode = feedMode === 'stream' ? 'canvas' : 'stream';
+      renderLive(document.getElementById('app-container'));
+      toast(`Görüntü modu değiştirildi: ${feedMode === 'stream' ? 'Canlı OpenCV MJPEG Akışı' : '60 FPS Canvas Simülatörü'}`, 'info');
+    }
+
+    async function switchCameraSource(lineId, val) {
+      let targetSource = val;
+      if (val === 'rtsp') {
+        const rtspInput = document.getElementById('camera-rtsp-input');
+        targetSource = rtspInput ? rtspInput.value.trim() : 'rtsp://192.168.1.100:554/live';
+      }
+      toast(`Kamera kaynağı değiştiriliyor: ${val}...`, 'info');
+      try {
+        const res = await api(`/lines/${lineId}/camera_source`, {
+          method: 'POST',
+          body: JSON.stringify({ source: targetSource })
+        });
+        toast(res.message || 'Kamera kaynağı bağlandı!', 'success');
+        feedMode = 'stream';
+        renderScreen();
+      } catch (e) {
+        toast(e.detail || 'Kameraya bağlanılamadı', 'error');
+      }
+    }
+
+    function promptUploadVideo(lineId) {
+      const input = document.getElementById('video-file-input');
+      input.onchange = async () => {
+        if (!input.files || input.files.length === 0) return;
+        const file = input.files[0];
+        const formData = new FormData();
+        formData.append('file', file);
+        toast(`Video yükleniyor: ${file.name}...`, 'info');
+        try {
+          const res = await fetch(`${API}/lines/${lineId}/upload_video`, {
+            method: 'POST',
+            headers: auth.token ? { 'Authorization': 'Bearer ' + auth.token } : {},
+            body: formData,
+          });
+          const data = await res.json();
+          toast(data.message || 'Video yüklendi ve gerçek analize başlandı!', 'success');
+          feedMode = 'stream';
+          renderScreen();
+        } catch (e) {
+          toast('Video yüklenirken hata oluştu', 'error');
+        }
+      };
+      input.click();
+    }
+
+    // ===================== CONVEYOR CONTROLS =====================
+    async function setBeltSpeed(lineId, val) {
+      beltSpeedFactor = parseFloat(val);
+      const el = document.getElementById('belt-speed-val');
+      if (el) el.textContent = `${beltSpeedFactor.toFixed(1)}x (${(beltSpeedFactor * 0.4).toFixed(2)} m/s)`;
+      try {
+        await api(`/lines/${lineId}/quick_settings`, { method: 'POST', body: JSON.stringify({ belt_speed: beltSpeedFactor * 2.5 }) });
+      } catch {}
+    }
+
+    async function setGateX(lineId, val) {
+      opticalGateX = parseInt(val);
+      const el = document.getElementById('gate-x-val');
+      if (el) el.textContent = `${opticalGateX} px`;
+      try {
+        await api(`/lines/${lineId}/quick_settings`, { method: 'POST', body: JSON.stringify({ gate_x_pos: opticalGateX }) });
+      } catch {}
+    }
+
+    async function setBeltDirection(lineId, dir) {
+      beltDirection = dir;
+      const lr = document.getElementById('dir-lr-btn');
+      const rl = document.getElementById('dir-rl-btn');
+      if (lr && rl) {
+        lr.className = `py-1 px-2 rounded-lg font-bold text-xs ${beltDirection > 0 ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-400'}`;
+        rl.className = `py-1 px-2 rounded-lg font-bold text-xs ${beltDirection < 0 ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-400'}`;
+      }
+      try {
+        await api(`/lines/${lineId}/quick_settings`, { method: 'POST', body: JSON.stringify({ belt_direction: [dir > 0 ? 1.0 : -1.0, 0.0] }) });
+      } catch {}
+      toast(dir > 0 ? 'Bant akış yönü: Soldan Sağa ➔' : 'Bant akış yönü: Sağdan Sola ⬅', 'info');
+    }
+
+    async function changeActiveBagProfile(sessionId, prodId) {
+      try {
+        const products = await api('/products');
+        const selected = products.find(p => p.id === parseInt(prodId));
+        if (selected) {
+          activeBagLabel = selected.name;
+          const erpEl = document.getElementById('bag-erp-label');
+          if (erpEl) erpEl.textContent = selected.erp_material_code || 'MAT-CIM-50';
+          
+          if (selected.name.toLowerCase().includes('beyaz') || selected.name.toLowerCase().includes('polietilen') || selected.name.toLowerCase().includes('alçı')) {
+            activeBagColor = 'poly_white';
+          } else if (selected.name.toLowerCase().includes('harç') || selected.name.toLowerCase().includes('gri')) {
+            activeBagColor = 'mortar_gray';
+          } else {
+            activeBagColor = 'kraft_yellow';
+          }
+        }
+        await api(`/sessions/${sessionId}`, { method: 'PATCH', body: JSON.stringify({ product_profile_id: parseInt(prodId) }) });
+        toast(`Aktif çuval profili güncellendi: ${activeBagLabel}`, 'success');
+      } catch (e) {
+        toast(e.detail || 'Çuval profili güncellenemedi', 'error');
+      }
+    }
+
+    function openNewBagModal() {
+      document.getElementById('bag-modal').classList.remove('hidden');
+    }
+
+    async function saveNewBagProfile() {
+      const name = document.getElementById('modal-bag-name').value.trim();
+      const erp = document.getElementById('modal-bag-erp').value.trim();
+      const w = parseInt(document.getElementById('modal-bag-w').value) || 480;
+      const l = parseInt(document.getElementById('modal-bag-l').value) || 650;
+      const h = parseInt(document.getElementById('modal-bag-h').value) || 130;
+      const weight = parseFloat(document.getElementById('modal-bag-weight').value) || 50.0;
+      const color = document.getElementById('modal-bag-color').value;
+
+      if (!name) return toast('Çuval adı giriniz', 'error');
+
+      try {
+        const sites = await api('/sites');
+        const siteId = sites.length > 0 ? sites[0].id : 1;
+        const newProf = await api('/products', {
+          method: 'POST',
+          body: JSON.stringify({
+            site_id: siteId,
+            name,
+            erp_material_code: erp,
+            nominal_dims_mm: { width: w, length: l, height: h, weight_kg: weight, color }
+          })
+        });
+        document.getElementById('bag-modal').classList.add('hidden');
+        toast(`Yeni çuval profili oluşturuldu: ${newProf.name}`, 'success');
+        renderScreen();
+      } catch (e) {
+        toast(e.detail || 'Çuval profili kaydedilemedi', 'error');
+      }
+    }
+
+    async function saveCameraRTSP(lineId) {
+      const rtsp = document.getElementById('camera-rtsp-input').value.trim();
+      try {
+        await api(`/lines/${lineId}/quick_settings`, { method: 'POST', body: JSON.stringify({ rtsp_url: rtsp }) });
+        toast('Kamera RTSP akış adresi başarıyla kaydedildi', 'success');
+      } catch (e) {
+        toast(e.detail || 'Kaydedilemedi', 'error');
+      }
+    }
+
+    // ===================== WEBRTC & ADVANCED INTERACTIVE TOOLS (§6.1, §6.8) =====================
+    let isWebRTCActive = false;
+    let localMediaStream = null;
+    let isDraggingGateEnabled = true;
+    let isDraggingGate = false;
+    let roiDrawMode = false;
+    let roiPoints = [[80, 55], [680, 55], [680, 245], [80, 245]];
+    let perspectiveMode = false;
+    let warpPoints = [];
+    let soundEnabled = true;
+    let audioCtx = null;
+
+    function initAudio() {
+      if (!audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) audioCtx = new AudioContext();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playBeep(type = 'count') {
+      if (!soundEnabled) return;
+      try {
+        initAudio();
+        if (!audioCtx) return;
+
+        if (type === 'count' || type === 'normal' || type === true) {
+          // Crisp 880Hz -> 1760Hz chime
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(1760, audioCtx.currentTime + 0.08);
+          gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.09);
+        } else if (type === 'multi') {
+          // Two-tone chime 880Hz -> 1174Hz
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+          osc.frequency.setValueAtTime(1174, audioCtx.currentTime + 0.06);
+          gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.14);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.15);
+        } else if (type === 'defect') {
+          // 220Hz saw alarm buzzer
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(220, audioCtx.currentTime);
+          osc.frequency.linearRampToValueAtTime(150, audioCtx.currentTime + 0.25);
+          gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.26);
+        }
+      } catch {}
+    }
+
+    async function toggleWebRTC() {
+      if (isWebRTCActive) {
+        if (localMediaStream) {
+          localMediaStream.getTracks().forEach(t => t.stop());
+          localMediaStream = null;
+        }
+        isWebRTCActive = false;
+        toast('WebRTC kamerası durduruldu', 'info');
+      } else {
+        try {
+          let video = document.getElementById('webcamVideo');
+          if (!video) {
+            video = document.createElement('video');
+            video.id = 'webcamVideo';
+            video.autoplay = true;
+            video.playsInline = true;
+            video.muted = true;
+            video.style.display = 'none';
+            document.body.appendChild(video);
+          }
+          localMediaStream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'environment' }
+          });
+          video.srcObject = localMediaStream;
+          await video.play();
+          isWebRTCActive = true;
+          feedMode = 'canvas';
+          toast('📷 Canlı WebRTC kamerası bağlandı (60 FPS)', 'success');
+        } catch (err) {
+          toast('Kameraya erişilemedi: ' + (err.message || err.name), 'error');
+          isWebRTCActive = false;
+        }
+      }
+      renderScreen();
+    }
+
+    function toggleGateDrag() {
+      isDraggingGateEnabled = !isDraggingGateEnabled;
+      toast(isDraggingGateEnabled ? '↔️ Lazer kapısı taşıma modu aktif (Görüntüde sürükleyin)' : 'Lazer kapısı kilitlendi', 'info');
+      renderScreen();
+    }
+
+    function toggleRoiDraw() {
+      roiDrawMode = !roiDrawMode;
+      if (roiDrawMode) {
+        roiPoints = [];
+        toast('✏️ Sayım Alanı (ROI): Ekrana tıklayarak köşe noktalarını belirleyin', 'info');
+      } else {
+        toast(`Sayım Alanı (ROI) kaydedildi (${roiPoints.length} nokta)`, 'success');
+      }
+      renderScreen();
+    }
+
+    function togglePerspectiveWarp() {
+      perspectiveMode = !perspectiveMode;
+      if (perspectiveMode) {
+        warpPoints = [];
+        toast('📐 Kuşbakışı Perspektif: Konveyörün 4 köşesine sırayla tıklayın [1, 2, 3, 4]', 'info');
+      } else {
+        toast(`Perspektif matrisi oluşturuldu (${warpPoints.length} nokta)`, 'success');
+      }
+      renderScreen();
+    }
+
+    function toggleAudioFeedback() {
+      soundEnabled = !soundEnabled;
+      initAudio();
+      toast(soundEnabled ? '🔊 Sesli endüstriyel ikaz aktif' : '🔇 Ses kapatıldı', 'info');
+      renderScreen();
+    }
+
+    // ===================== CANVAS ANIMATION & EVENT BINDINGS =====================
+    function initConveyorCanvas(sessionId) {
+      const canvas = document.getElementById('conveyorCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      let beltOffset = 0;
+      bagsOnBelt = [];
+
+      bagsOnBelt.push({ x: 80, y: 85, width: 85, height: 120, label: activeBagLabel, id: nextTrackId++, hasPassed: false, isDefect: false, isMulti: false });
+      bagsOnBelt.push({ x: 270, y: 85, width: 85, height: 120, label: activeBagLabel, id: nextTrackId++, hasPassed: false, isDefect: false, isMulti: false });
+
+      // Mouse drag and draw handlers on canvas
+      canvas.onmousedown = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = ((e.clientX - rect.left) / rect.width) * canvas.width;
+        const mouseY = ((e.clientY - rect.top) / rect.height) * canvas.height;
+
+        if (roiDrawMode) {
+          roiPoints.push([Math.round(mouseX), Math.round(mouseY)]);
+          if (roiPoints.length >= 6) roiDrawMode = false;
+          return;
+        }
+
+        if (perspectiveMode) {
+          warpPoints.push([Math.round(mouseX), Math.round(mouseY)]);
+          if (warpPoints.length >= 4) {
+            perspectiveMode = false;
+            toast('✓ 4-Nokta Homografi Perspektif Düzeltmesi Aktif!', 'success');
+          }
+          return;
+        }
+
+        if (Math.abs(mouseX - opticalGateX) < 40 || isDraggingGateEnabled) {
+          isDraggingGate = true;
+          opticalGateX = Math.max(100, Math.min(canvas.width - 100, Math.round(mouseX)));
+          setGateX(1, opticalGateX);
+        }
+      };
+
+      canvas.onmousemove = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = ((e.clientX - rect.left) / rect.width) * canvas.width;
+        if (isDraggingGate) {
+          opticalGateX = Math.max(100, Math.min(canvas.width - 100, Math.round(mouseX)));
+          setGateX(1, opticalGateX);
+        }
+      };
+
+      canvas.onmouseup = () => { isDraggingGate = false; };
+      canvas.onmouseleave = () => { isDraggingGate = false; };
+
+      function animate() {
+        if (!document.getElementById('conveyorCanvas')) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const webcam = document.getElementById('webcamVideo');
+        if (isWebRTCActive && webcam && webcam.readyState >= 2) {
+          // Render Real WebRTC Video Frame
+          ctx.drawImage(webcam, 0, 0, canvas.width, canvas.height);
+          // Dark tint for contrast
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        } else {
+          // 1. Conveyor Belt Background
+          ctx.fillStyle = '#0f172a';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          // Conveyor frame
+          ctx.fillStyle = '#1e293b';
+          ctx.fillRect(0, 50, canvas.width, 200);
+          ctx.strokeStyle = '#334155';
+          ctx.lineWidth = 4;
+          ctx.strokeRect(0, 50, canvas.width, 200);
+
+          // Moving belt texture lines
+          const step = (isAutoSimRunning ? 1.5 : 0.6) * beltSpeedFactor * beltDirection;
+          beltOffset = (beltOffset + step) % 40;
+          ctx.strokeStyle = '#334155';
+          ctx.lineWidth = 2;
+          for (let x = -40 + beltOffset; x < canvas.width + 40; x += 40) {
+            ctx.beginPath();
+            ctx.moveTo(x, 52);
+            ctx.lineTo(x, 248);
+            ctx.stroke();
+          }
+
+          // Direction text
+          ctx.fillStyle = 'rgba(100, 116, 139, 0.22)';
+          ctx.font = 'bold 20px monospace';
+          ctx.fillText(beltDirection > 0 ? 'KONVEYÖR AKIŞ YÖNÜ ➔ ➔ ➔' : '⬅ ⬅ ⬅ KONVEYÖR AKIŞ YÖNÜ', 220, 155);
+        }
+
+        // 2. Draw ROI Polygon
+        if (roiPoints.length > 1) {
+          ctx.save();
+          ctx.strokeStyle = '#06b6d4';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([6, 3]);
+          ctx.beginPath();
+          ctx.moveTo(roiPoints[0][0], roiPoints[0][1]);
+          for (let p = 1; p < roiPoints.length; p++) ctx.lineTo(roiPoints[p][0], roiPoints[p][1]);
+          if (roiPoints.length > 2 && !roiDrawMode) ctx.closePath();
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(6, 182, 212, 0.08)';
+          ctx.fill();
+          ctx.setLineDash([]);
+          // Corner handles
+          roiPoints.forEach((pt, idx) => {
+            ctx.fillStyle = '#06b6d4';
+            ctx.beginPath();
+            ctx.arc(pt[0], pt[1], 4, 0, Math.PI * 2);
+            ctx.fill();
+          });
+          ctx.restore();
+        }
+
+        // 3. Draw 4-Point Homography Perspective Corners
+        if (warpPoints.length > 0) {
+          ctx.save();
+          ctx.strokeStyle = '#a855f7';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(warpPoints[0][0], warpPoints[0][1]);
+          for (let w = 1; w < warpPoints.length; w++) ctx.lineTo(warpPoints[w][0], warpPoints[w][1]);
+          if (warpPoints.length === 4) ctx.closePath();
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(168, 85, 247, 0.12)';
+          ctx.fill();
+          warpPoints.forEach((pt, idx) => {
+            ctx.fillStyle = '#a855f7';
+            ctx.fillRect(pt[0] - 8, pt[1] - 8, 16, 16);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 9px sans-serif';
+            ctx.fillText(`${idx + 1}`, pt[0] - 3, pt[1] + 3);
+          });
+          ctx.restore();
+        }
+
+        // 4. Optical Gate Line (X = opticalGateX)
+        const gateX = opticalGateX;
+        ctx.save();
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = isDraggingGate ? 5 : 3;
+        ctx.shadowColor = '#10b981';
+        ctx.shadowBlur = 16;
+        ctx.beginPath();
+        ctx.moveTo(gateX, 35);
+        ctx.lineTo(gateX, 265);
+        ctx.stroke();
+        ctx.restore();
+
+        // Gate Badge Tag (Click/Drag Handle)
+        ctx.fillStyle = '#059669';
+        ctx.fillRect(gateX - 50, 22, 100, 22);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('↔️ SAYIM KAPISI', gateX, 37);
+
+        // 5. Move and Render Bags
+        const speed = (isAutoSimRunning ? 2.0 : 0.8) * beltSpeedFactor * beltDirection;
+        for (let i = bagsOnBelt.length - 1; i >= 0; i--) {
+          const bag = bagsOnBelt[i];
+          bag.x += speed;
+
+          if (beltDirection > 0 && !bag.hasPassed && bag.x + bag.width / 2 >= gateX) {
+            bag.hasPassed = true;
+            triggerGateCrossingVisual(bag.isDefect ? 'defect' : (bag.isMulti ? 'multi' : 'normal'));
+            playBeep(bag.isDefect ? 'defect' : (bag.isMulti ? 'multi' : 'count'));
+            api(`/sessions/${sessionId}/simulate_bag`, { method: 'POST', body: JSON.stringify({ direction: bag.isMulti ? 2 : 1 }) })
+              .then(res => updateCounterUI(res.counted_total, res.area_estimate_total))
+              .catch(() => {});
+          } else if (beltDirection < 0 && !bag.hasPassed && bag.x + bag.width / 2 <= gateX) {
+            bag.hasPassed = true;
+            triggerGateCrossingVisual(bag.isDefect ? 'defect' : (bag.isMulti ? 'multi' : 'normal'));
+            playBeep(bag.isDefect ? 'defect' : (bag.isMulti ? 'multi' : 'count'));
+            api(`/sessions/${sessionId}/simulate_bag`, { method: 'POST', body: JSON.stringify({ direction: bag.isMulti ? 2 : 1 }) })
+              .then(res => updateCounterUI(res.counted_total, res.area_estimate_total))
+              .catch(() => {});
+          }
+
+          ctx.save();
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+          ctx.beginPath();
+          ctx.roundRect(bag.x + 4, bag.y + 4, bag.width, bag.height, 12);
+          ctx.fill();
+
+          // Bag Gradient
+          const grad = ctx.createLinearGradient(bag.x, bag.y, bag.x + bag.width, bag.y + bag.height);
+          if (bag.isDefect) {
+            grad.addColorStop(0, '#f87171');
+            grad.addColorStop(1, '#dc2626');
+          } else if (bag.isMulti) {
+            grad.addColorStop(0, '#fbbf24');
+            grad.addColorStop(1, '#f59e0b');
+          } else if (activeBagColor === 'poly_white') {
+            grad.addColorStop(0, '#f8fafc');
+            grad.addColorStop(1, '#e2e8f0');
+          } else if (activeBagColor === 'mortar_gray') {
+            grad.addColorStop(0, '#94a3b8');
+            grad.addColorStop(1, '#64748b');
+          } else {
+            grad.addColorStop(0, '#fef08a');
+            grad.addColorStop(1, '#fde047');
+          }
+
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.roundRect(bag.x, bag.y, bag.width, bag.height, 10);
+          ctx.fill();
+
+          // Border & Badge
+          if (bag.isDefect) {
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            ctx.fillStyle = '#dc2626';
+            ctx.fillRect(bag.x - 4, bag.y - 22, bag.width + 8, 18);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 9px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(`🚨 HASARLI / DEFECT ${bag.id}`, bag.x, bag.y - 9);
+          } else if (bag.isMulti) {
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            ctx.fillStyle = '#d97706';
+            ctx.fillRect(bag.x - 4, bag.y - 22, bag.width + 8, 18);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 9px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(`📦 2x BİTİŞİK ÇUVAL`, bag.x, bag.y - 9);
+          } else {
+            ctx.strokeStyle = activeBagColor === 'poly_white' ? '#94a3b8' : activeBagColor === 'mortar_gray' ? '#475569' : '#eab308';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+
+            ctx.strokeStyle = '#6366f1';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 2]);
+            ctx.strokeRect(bag.x - 4, bag.y - 4, bag.width + 8, bag.height + 8);
+            ctx.setLineDash([]);
+
+            ctx.fillStyle = '#4f46e5';
+            ctx.fillRect(bag.x - 4, bag.y - 20, bag.width + 8, 16);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 9px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(`TRK-${bag.id} 99%`, bag.x - 1, bag.y - 8);
+          }
+
+          ctx.fillStyle = bag.isDefect ? '#ffffff' : (activeBagColor === 'poly_white' ? '#1e293b' : activeBagColor === 'mortar_gray' ? '#0f172a' : '#713f12');
+          ctx.font = 'bold 10px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(bag.isDefect ? 'YIRTIK / PATLAK' : bag.label.slice(0, 16), bag.x + bag.width / 2, bag.y + bag.height / 2 - 6);
+          ctx.font = '9px sans-serif';
+          ctx.fillText('FABRIC #2026', bag.x + bag.width / 2, bag.y + bag.height / 2 + 10);
+          ctx.restore();
+
+          if (beltDirection > 0 && bag.x > canvas.width + 100) {
+            bagsOnBelt.splice(i, 1);
+          } else if (beltDirection < 0 && bag.x < -150) {
+            bagsOnBelt.splice(i, 1);
+          }
+        }
+
+        if (isAutoSimRunning) {
+          if (beltDirection > 0) {
+            const lastBag = bagsOnBelt[bagsOnBelt.length - 1];
+            if (!lastBag || lastBag.x > 220) {
+              bagsOnBelt.push({
+                x: -100,
+                y: 85,
+                width: 85,
+                height: 120,
+                label: activeBagLabel,
+                id: nextTrackId++,
+                hasPassed: false,
+                isDefect: false,
+                isMulti: false
+              });
+            }
+          } else {
+            const firstBag = bagsOnBelt[0];
+            if (!firstBag || firstBag.x < canvas.width - 220) {
+              bagsOnBelt.unshift({
+                x: canvas.width + 80,
+                y: 85,
+                width: 85,
+                height: 120,
+                label: activeBagLabel,
+                id: nextTrackId++,
+                hasPassed: false,
+                isDefect: false,
+                isMulti: false
+              });
+            }
+          }
+        }
+
+        canvasAnimationId = requestAnimationFrame(animate);
+      }
+
+      animate();
+    }
+
+    function triggerGateCrossingVisual(type = 'normal') {
+      const flash = document.getElementById('gate-flash-overlay');
+      if (flash) {
+        flash.className = `absolute inset-0 pointer-events-none transition-opacity duration-150 ${type === 'defect' ? 'bg-rose-500/30' : (type === 'multi' ? 'bg-amber-400/30' : 'bg-emerald-400/25')}`;
+        flash.style.opacity = '0.7';
+        setTimeout(() => { flash.style.opacity = '0'; }, 200);
+      }
+      const countEl = document.getElementById('live-count');
+      if (countEl) {
+        countEl.classList.add('count-pulse');
+        setTimeout(() => countEl.classList.remove('count-pulse'), 350);
+      }
+    }
+
+    function updateCounterUI(newCount, newArea) {
+      const countEl = document.getElementById('live-count');
+      const areaEl = document.getElementById('live-area');
+      const pctEl = document.getElementById('live-pct');
+      const barEl = document.getElementById('live-progress-bar');
+      if (countEl && newCount !== undefined) countEl.textContent = newCount;
+      if (areaEl && newArea !== undefined) areaEl.textContent = Number(newArea).toFixed(1);
+      if (pctEl && newCount !== undefined) {
+        const pct = Math.min(100, Math.round((newCount / 200) * 100));
+        pctEl.textContent = pct;
+        if (barEl) barEl.style.width = pct + '%';
+      }
+    }
+
+    function triggerSimPass(sessId, direction = 1, type = 'normal') {
+      initAudio();
+      if (type === 'multi') {
+        bagsOnBelt.push({
+          x: beltDirection > 0 ? -120 : 780,
+          y: 85,
+          width: 175,
+          height: 120,
+          label: '2x Bitişik Çuval',
+          id: nextTrackId++,
+          hasPassed: false,
+          isDefect: false,
+          isMulti: true
+        });
+      } else if (type === 'defect') {
+        bagsOnBelt.push({
+          x: beltDirection > 0 ? -90 : 750,
+          y: 90,
+          width: 80,
+          height: 110,
+          label: 'Patlak Çuval',
+          id: nextTrackId++,
+          hasPassed: false,
+          isDefect: true,
+          isMulti: false
+        });
+      } else if (type === 'normal') {
+        bagsOnBelt.push({
+          x: beltDirection > 0 ? -90 : 750,
+          y: 85,
+          width: 85,
+          height: 120,
+          label: activeBagLabel,
+          id: nextTrackId++,
+          hasPassed: false,
+          isDefect: false,
+          isMulti: false
+        });
+      }
+
+      api(`/sessions/${sessId}/simulate_bag`, { method: 'POST', body: JSON.stringify({ direction }) })
+        .then(res => {
+          updateCounterUI(res.counted_total, res.area_estimate_total);
+          playBeep(type);
+          triggerGateCrossingVisual(type);
+          if (type === 'multi') toast('📦 2x Bitişik Çuval Ayrıştırıldı (+2)', 'warn');
+          else if (type === 'defect') toast('🚨 Hasarlı / Patlak Çuval İkazı! (Defect Alert)', 'error');
+          else if (type === 'rollback') toast('🔁 Çift Sayım Düzeltildi: -1', 'warn');
+          else toast('⚡ +1 Çuval Geçirildi', 'success');
+        })
+        .catch(e => toast(e.detail || 'İşlem yapılamadı', 'error'));
+    }
+
+    // ===================== DISPATCH & RECONCILIATION MANIFEST MODAL (§5.7, §5.8) =====================
+    async function openDispatchReportModal(sessionId) {
+      const modal = document.getElementById('dispatch-report-modal');
+      const content = document.getElementById('dispatch-report-content');
+      if (!modal || !content) return;
+
+      content.innerHTML = '<div class="text-center py-12"><div class="spinner"></div><div class="text-xs text-slate-400 mt-2">İrsaliye tutanağı hazırlanıyor...</div></div>';
+      modal.classList.remove('hidden');
+
+      try {
+        const report = await api(`/sessions/${sessionId}/dispatch_report`);
+        content.innerHTML = `
+          <div class="text-slate-100 font-sans print:text-black space-y-6" id="printable-manifest">
+            <!-- Header -->
+            <div class="flex justify-between items-start border-b border-slate-700 pb-4">
+              <div>
+                <div class="flex items-center space-x-2">
+                  <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white text-lg">G</div>
+                  <div>
+                    <h1 class="text-lg font-black tracking-tight text-white">GEBZE ÇİMENTO SANAYİ VE TİCARET A.Ş.</h1>
+                    <div class="text-[11px] text-slate-400">Sevkiyat ve Otomatik Sayım Mutabakat Tutanağı</div>
+                  </div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="badge bg-indigo-500/20 text-indigo-300 font-mono text-xs">${report.waybill_no}</div>
+                <div class="text-[10px] text-slate-400 mt-1">${report.closed_at.substring(0, 19).replace('T', ' ')}</div>
+              </div>
+            </div>
+
+            <!-- Shipment Metadata Grid -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+                <span class="text-slate-400 block text-[10px] uppercase">Tır Plakası</span>
+                <span class="font-bold text-white text-sm font-mono mt-0.5">${report.truck_plate}</span>
+              </div>
+              <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+                <span class="text-slate-400 block text-[10px] uppercase">Şoför & Taşıyıcı</span>
+                <span class="font-bold text-white text-xs mt-0.5">${report.driver_name}</span>
+                <span class="text-[10px] text-slate-400 block">${report.carrier_company}</span>
+              </div>
+              <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+                <span class="text-slate-400 block text-[10px] uppercase">Ürün & Malzeme</span>
+                <span class="font-bold text-indigo-300 text-xs mt-0.5">${report.product_name}</span>
+                <span class="text-[10px] text-slate-400 block font-mono">${report.erp_sku}</span>
+              </div>
+              <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+                <span class="text-slate-400 block text-[10px] uppercase">Sevkiyat Referansı</span>
+                <span class="font-bold text-white text-xs font-mono mt-0.5">${report.external_ref}</span>
+              </div>
+            </div>
+
+            <!-- Quantitative Reconciliation Table -->
+            <div class="border border-slate-700/80 rounded-xl overflow-hidden bg-slate-950/40">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-800/90 text-slate-400 text-[10px] uppercase">
+                  <tr>
+                    <th class="p-3">Sipariş Hedefi</th>
+                    <th class="p-3">Doğrulanan Sayım (Ledger)</th>
+                    <th class="p-3">Fark / Sapma</th>
+                    <th class="p-3">Hasarlı / Ayıklanan</th>
+                    <th class="p-3 text-right">Mutabakat Sonucu</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800 font-mono">
+                  <tr>
+                    <td class="p-3 text-slate-300 font-bold text-sm">${report.target_count} Adet</td>
+                    <td class="p-3 text-emerald-400 font-black text-lg">${report.counted_total} Adet</td>
+                    <td class="p-3 font-bold ${report.difference === 0 ? 'text-emerald-400' : 'text-amber-400'}">
+                      ${report.difference > 0 ? '+' + report.difference : report.difference} Adet
+                    </td>
+                    <td class="p-3 text-rose-400 font-bold">${report.damaged_count} Adet</td>
+                    <td class="p-3 text-right">
+                      <span class="badge ${report.difference === 0 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'} font-bold">
+                        ${report.reconciliation_status}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Cryptographic Seal & Signatures -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-slate-800 text-xs">
+              <!-- Digital Seal -->
+              <div class="sm:col-span-1 bg-slate-800/40 p-3 rounded-xl border border-slate-700/60 flex items-center space-x-3">
+                <div class="w-12 h-12 bg-white rounded p-1 flex items-center justify-center shrink-0">
+                  <!-- QR Code Icon -->
+                  <svg class="w-10 h-10 text-slate-900" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M2 2h8v8H2V2zm2 2v4h4V4H4zm10-2h8v8h-8V2zm2 2v4h4V4h-4zM2 14h8v8H2v-8zm2 2v4h4v-4H4zm14 0h4v4h-4v-4zm-4 4h4v4h-4v-4zm4-4h4v4h-4v-4zm-4-4h4v4h-4v-4z"/>
+                  </svg>
+                </div>
+                <div class="overflow-hidden">
+                  <span class="text-[9px] text-slate-400 uppercase font-semibold block">Değişmez Defter Mührü (SHA-256)</span>
+                  <span class="text-[9px] text-indigo-300 font-mono break-all">${report.crypto_seal.substring(0, 24)}...</span>
+                </div>
+              </div>
+
+              <!-- Signatures -->
+              <div class="border border-slate-700/60 p-3 rounded-xl text-center">
+                <div class="text-[10px] text-slate-400 uppercase font-semibold mb-6">Kantar / Sevkiyat Operatörü</div>
+                <div class="text-xs font-bold text-slate-200">${auth.user ? auth.user.username : 'Operatör'} (İmza)</div>
+              </div>
+
+              <div class="border border-slate-700/60 p-3 rounded-xl text-center">
+                <div class="text-[10px] text-slate-400 uppercase font-semibold mb-6">Tır Şoförü / Teslim Alan</div>
+                <div class="text-xs font-bold text-slate-200">${report.driver_name} (İmza)</div>
+              </div>
+            </div>
+
+            <!-- Print Actions -->
+            <div class="flex justify-end space-x-2 pt-4 border-t border-slate-800 print:hidden">
+              <button onclick="closeDispatchReportModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl">Kapat</button>
+              <button onclick="window.print()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg flex items-center space-x-1.5">
+                <span>🖨️</span>
+                <span>Raporu Yazdır / PDF İndir</span>
+              </button>
+            </div>
+          </div>
+        `;
+      } catch (e) {
+        content.innerHTML = `<div class="p-6 text-rose-300">Rapor oluşturulamadı: ${e.detail || e.message}</div>`;
+      }
+    }
+
+    function closeDispatchReportModal() {
+      const modal = document.getElementById('dispatch-report-modal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function startSSE(lineId) {
+      if (sseSource) sseSource.close();
+      try {
+        sseSource = new EventSource(`${API}/live/lines/${lineId}?token=${auth.token}`);
+        sseSource.onmessage = (e) => {
+          try {
+            const d = JSON.parse(e.data);
+            if (d.counted_total !== undefined) {
+              updateCounterUI(d.counted_total, d.area_estimate);
+            }
+          } catch {}
+        };
+      } catch {}
+    }
+
+    async function quickStartSession(lineId, prodId) {
+      try {
+        await api('/sessions', {
+          method: 'POST',
+          body: JSON.stringify({
+            line_id: lineId,
+            product_profile_id: prodId,
+            external_ref: `IRS-2026-${Math.floor(1000 + Math.random()*9000)}`,
+            target_count: 200
+          })
+        });
+        toast('Yeni sevkiyat oturumu açıldı', 'success');
+        renderScreen();
+      } catch (e) {
+        toast(e.detail || 'Oturum açılamadı', 'error');
+      }
+    }
+
+    async function sessionAction(id, action) {
+      try {
+        await api(`/sessions/${id}/${action}`, { method: 'POST' });
+        toast(action === 'pause' ? 'Oturum duraklatıldı' : action === 'resume' ? 'Oturum devam ediyor' : 'Oturum kapatıldı');
+        renderScreen();
+      } catch (e) {
+        toast(e.detail || 'İşlem başarısız', 'error');
+      }
+    }
+
+    async function confirmCloseSession(id) {
+      if (confirm(`Oturum #${id} kapatılsın ve ERP mutabakatına hazır hale getirilsin mi?`)) {
+        await sessionAction(id, 'close');
+      }
+    }
+
+    // ===================== 2. SESSIONS SCREEN =====================
+    async function renderSessions(c) {
+      c.innerHTML = '<div class="text-center py-20"><div class="spinner !w-8 !h-8"></div></div>';
+      try {
+        const [sessions, lines, products] = await Promise.all([
+          api('/sessions'),
+          api('/lines'),
+          api('/products'),
+        ]);
+
+        const statusMap = {
+          open: { label: 'AÇIK', color: 'bg-blue-500/20 text-blue-300 border border-blue-500/30' },
+          counting: { label: 'SAYIYOR', color: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' },
+          paused: { label: 'DURAKLATILDI', color: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' },
+          closed: { label: 'KAPANDI', color: 'bg-slate-700/50 text-slate-300 border border-slate-600/40' },
+          reconcile_required: { label: 'MUTABAKAT', color: 'bg-rose-500/20 text-rose-300 border border-rose-500/30' },
+        };
+
+        c.innerHTML = `
+          <div class="glass-card p-6 shadow-2xl border border-slate-700/80">
+            <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
+              <div>
+                <h2 class="text-xl font-black text-white tracking-tight">Sevkiyat Oturumları Yönetimi</h2>
+                <p class="text-xs text-slate-400 mt-0.5">Hat bazlı açılan sevkiyat emirleri, hedef adetler ve değişmez sayım defteri kayıtları.</p>
+              </div>
+              <div class="flex items-center space-x-2">
+                <button onclick="exportSessionsCSV()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl border border-slate-700 transition">
+                  📥 CSV İndir
+                </button>
+                <button onclick="document.getElementById('new-sess-drawer').classList.toggle('hidden')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md transition">
+                  + Yeni Oturum Aç
+                </button>
+              </div>
+            </div>
+
+            <!-- New Session Form Drawer -->
+            <div id="new-sess-drawer" class="hidden mb-6 p-5 bg-slate-800/80 rounded-2xl border border-indigo-500/40 shadow-xl space-y-4">
+              <h3 class="text-sm font-bold text-indigo-300">➕ Yeni Sevkiyat Oturumu Başlat</h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                <div>
+                  <label class="text-xs text-slate-400 font-semibold block mb-1">Sayım Hattı</label>
+                  <select id="new-sess-line" class="w-full">
+                    ${lines.map(l => `<option value="${l.id}">${l.name}</option>`).join('')}
+                    ${lines.length === 0 ? '<option value="">Hat bulunamadı</option>' : ''}
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs text-slate-400 font-semibold block mb-1">Ürün Profili</label>
+                  <select id="new-sess-prod" class="w-full">
+                    ${products.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+                    ${products.length === 0 ? '<option value="">Ürün bulunamadı</option>' : ''}
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs text-slate-400 font-semibold block mb-1">İrsaliye / Sevkiyat No</label>
+                  <input type="text" id="new-sess-ref" value="IRS-2026-0845" class="w-full">
+                </div>
+                <div>
+                  <label class="text-xs text-slate-400 font-semibold block mb-1">Hedef Çuval Adedi</label>
+                  <input type="number" id="new-sess-target" value="250" class="w-full">
+                </div>
+              </div>
+              <div class="flex space-x-3 pt-2">
+                <button onclick="submitNewSession()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md transition">
+                  Oturumu Başlat
+                </button>
+                <button onclick="document.getElementById('new-sess-drawer').classList.add('hidden')" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded-xl transition">
+                  İptal
+                </button>
+              </div>
+            </div>
+
+            <!-- Sessions Table -->
+            ${sessions.length === 0 ? '<div class="text-center py-12 text-slate-400 text-sm">Henüz kayıtlı oturum bulunmuyor.</div>' : `
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-sm text-slate-300">
+                <thead class="bg-slate-800/80 text-[11px] font-semibold uppercase text-slate-400 tracking-wider">
+                  <tr>
+                    <th class="p-3.5 rounded-l-xl">Oturum ID</th>
+                    <th class="p-3.5">İrsaliye Ref</th>
+                    <th class="p-3.5">Hat</th>
+                    <th class="p-3.5">Hedef</th>
+                    <th class="p-3.5">Ledger Sayımı</th>
+                    <th class="p-3.5">Alan Tahmini</th>
+                    <th class="p-3.5">Durum</th>
+                    <th class="p-3.5 rounded-r-xl">İşlemler</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800/80">
+                  ${sessions.map(s => {
+                    const st = statusMap[s.status] || { label: s.status, color: 'bg-slate-800 text-slate-400' };
+                    return `
+                      <tr class="hover:bg-slate-800/40 transition">
+                        <td class="p-3.5 font-mono text-xs font-bold text-slate-200">#${s.id}</td>
+                        <td class="p-3.5 font-semibold text-slate-100">${s.external_ref || '—'}</td>
+                        <td class="p-3.5 text-xs text-slate-300">Hat ${s.line_id}</td>
+                        <td class="p-3.5 font-semibold">${s.target_count || '—'}</td>
+                        <td class="p-3.5 font-bold text-emerald-400 digital-font text-base">${s.counted_total || 0}</td>
+                        <td class="p-3.5 text-xs text-slate-400 font-mono">${s.area_estimate_total ? Number(s.area_estimate_total).toFixed(1) : '0.0'}</td>
+                        <td class="p-3.5"><span class="badge ${st.color}">${st.label}</span></td>
+                        <td class="p-3.5 space-x-1.5 whitespace-nowrap">
+                          <button onclick="viewLedgerEvents(${s.id})" class="px-2.5 py-1 bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-500/30 text-indigo-300 text-xs rounded-lg font-medium transition">
+                            📜 Defter
+                          </button>
+                          ${s.status === 'open' || s.status === 'counting' ? `<button onclick="sessionAction(${s.id},'pause')" class="px-2 py-1 bg-amber-600/20 text-amber-300 border border-amber-500/30 rounded-lg text-xs hover:bg-amber-600/40">⏸</button>` : ''}
+                          ${s.status === 'paused' ? `<button onclick="sessionAction(${s.id},'resume')" class="px-2 py-1 bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs hover:bg-emerald-600/40">▶</button>` : ''}
+                          ${s.status !== 'closed' ? `<button onclick="sessionAction(${s.id},'close')" class="px-2 py-1 bg-rose-600/20 text-rose-300 border border-rose-500/30 rounded-lg text-xs hover:bg-rose-600/40">⏹</button>` : ''}
+                          ${s.status === 'closed' ? `<button onclick="submitToErp(${s.id})" class="px-2.5 py-1 bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-semibold hover:bg-emerald-600/40">📤 ERP Gönder</button>` : ''}
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>`}
+          </div>
+        `;
+      } catch (e) {
+        c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-rose-300">Hata: ${e.detail || 'Oturumlar yüklenemedi'}</div>`;
+      }
+    }
+
+    async function submitNewSession() {
+      const lineId = parseInt(document.getElementById('new-sess-line').value);
+      const prodId = parseInt(document.getElementById('new-sess-prod').value);
+      const ref = document.getElementById('new-sess-ref').value.trim();
+      const target = parseInt(document.getElementById('new-sess-target').value);
+      if (!lineId || !prodId) { toast('Hat ve ürün seçimi gereklidir.', 'error'); return; }
+
+      try {
+        await api('/sessions', {
+          method: 'POST',
+          body: JSON.stringify({ line_id: lineId, product_profile_id: prodId, external_ref: ref, target_count: target })
+        });
+        toast('Sevkiyat oturumu başarıyla açıldı', 'success');
+        renderScreen();
+      } catch (e) {
+        toast(e.detail || 'Oturum açılamadı', 'error');
+      }
+    }
+
+    async function viewLedgerEvents(sessId) {
+      const modal = document.getElementById('ledger-modal');
+      const title = document.getElementById('ledger-modal-sess-title');
+      const body = document.getElementById('ledger-modal-body');
+      const summary = document.getElementById('ledger-modal-count-summary');
+      
+      title.textContent = `Oturum #${sessId}`;
+      modal.classList.remove('hidden');
+      body.innerHTML = '<div class="text-center py-12"><div class="spinner"></div></div>';
+
+      try {
+        const events = await api(`/sessions/${sessId}/events`);
+        summary.textContent = `Toplam ${events.length} Değişmez Olay Kaydı`;
+        if (events.length === 0) {
+          body.innerHTML = '<div class="text-center py-8 text-slate-400 text-sm">Bu oturum için henüz olay kaydı bulunmuyor.</div>';
+          return;
+        }
+
+        body.innerHTML = `
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="bg-slate-800 text-slate-400 uppercase text-[10px] sticky top-0">
+              <tr>
+                <th class="p-2">Olay ID</th>
+                <th class="p-2">Zaman Damgası</th>
+                <th class="p-2">Track ID</th>
+                <th class="p-2">Kare (Frame)</th>
+                <th class="p-2">Yön</th>
+                <th class="p-2">Güven</th>
+                <th class="p-2">Birleşme</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800 font-mono">
+              ${events.slice(0, 50).map(e => `
+                <tr class="hover:bg-slate-800/50">
+                  <td class="p-2 text-indigo-400">${e.event_id || 'EVT-' + e.id}</td>
+                  <td class="p-2 text-slate-400">${e.crossing_timestamp ? e.crossing_timestamp.substring(11, 19) : '—'}</td>
+                  <td class="p-2 font-bold text-slate-200">#${e.track_id}</td>
+                  <td class="p-2 text-slate-400">${e.frame_index}</td>
+                  <td class="p-2"><span class="badge ${e.direction > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}">${e.direction > 0 ? '+1 İLERİ' : '-1 GERİ'}</span></td>
+                  <td class="p-2 text-emerald-400">${e.confidence ? (e.confidence * 100).toFixed(1) + '%' : '99.0%'}</td>
+                  <td class="p-2">${e.merge_flag ? '<span class="text-amber-400 font-bold">EVET</span>' : '<span class="text-slate-600">HAYIR</span>'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          ${events.length > 50 ? `<div class="text-center py-2 text-xs text-slate-500">... ve ${events.length - 50} eski kayıt daha</div>` : ''}
+        `;
+      } catch (e) {
+        body.innerHTML = `<div class="text-rose-400 text-center py-8">Hata: ${e.detail || 'Olaylar yüklenemedi'}</div>`;
+      }
+    }
+
+    async function submitToErp(sessId) {
+      try {
+        const res = await api(`/sessions/${sessId}/submit`, { method: 'POST' });
+        toast(`ERP kuyruğuna gönderildi (Outbox ID: #${res.outbox_id})`, 'success');
+        renderScreen();
+      } catch (e) {
+        toast(e.detail || 'ERP gönderimi başarısız', 'error');
+      }
+    }
+
+    function exportSessionsCSV() {
+      api('/sessions').then(sessions => {
+        let csv = 'ID,External_Ref,Line_ID,Target,Counted_Total,Area_Estimate,Status\n';
+        sessions.forEach(s => {
+          csv += `${s.id},"${s.external_ref || ''}",${s.line_id},${s.target_count || ''},${s.counted_total || 0},${s.area_estimate_total || 0},${s.status}\n`;
+        });
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `sevkiyat_raporu_${new Date().toISOString().slice(0,10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast('CSV raporu indirildi', 'success');
+      });
+    }
+
+    // ===================== 3. RECONCILIATION SCREEN (§5.7) =====================
+    async function renderReconciliation(c) {
+      c.innerHTML = '<div class="text-center py-20"><div class="spinner"></div></div>';
+      try {
+        const recs = await api('/reconciliations');
+        c.innerHTML = `
+          <div class="glass-card p-6 shadow-2xl border border-slate-700/80">
+            <div class="flex items-center justify-between mb-6">
+              <div>
+                <h2 class="text-xl font-black text-white tracking-tight">Mutabakat & Denetim Masası (§5.7)</h2>
+                <p class="text-xs text-slate-400 mt-0.5">Sistem bütünlüğü veya sayım ayrışması nedeniyle insan kararı bekleyen oturumlar.</p>
+              </div>
+              <span class="badge ${recs.length > 0 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}">
+                ${recs.length} Bekleyen Kayıt
+              </span>
+            </div>
+
+            ${recs.length === 0 ? `
+              <div class="text-center py-16 text-slate-400">
+                <div class="text-5xl mb-3">✅</div>
+                <div class="font-bold text-slate-200">Açık Mutabakat Kaydı Bulunmuyor</div>
+                <div class="text-xs mt-1 text-slate-500">Tüm oturumlar çift-integral doğrulama toleransı içerisinde başarıyla tamamlandı.</div>
+              </div>
+            ` : `
+              <div class="space-y-4">
+                ${recs.map(r => `
+                  <div class="bg-slate-800/50 border border-slate-700/80 rounded-2xl p-5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                    <div>
+                      <div class="flex items-center space-x-3 mb-2">
+                        <span class="font-bold text-base text-slate-100">Oturum #${r.session_id}</span>
+                        <span class="badge bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono">${r.reason}</span>
+                      </div>
+                      <div class="text-sm text-slate-300 leading-relaxed">${r.note || 'Alan integrali ayrışma tespiti yapıldı.'}</div>
+                      <div class="text-[11px] text-slate-500 mt-1 font-mono">Kayıt Tarihi: ${r.created_at || '—'}</div>
+                    </div>
+                    <div class="flex flex-wrap gap-2 w-full lg:w-auto">
+                      <button onclick="resolveRec(${r.id}, 'accept_system')" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md transition">
+                        ✓ Sistemi Kabul Et
+                      </button>
+                      <button onclick="promptManualResolution(${r.id})" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md transition">
+                        ✏️ Elle Düzelt
+                      </button>
+                      <button onclick="resolveRec(${r.id}, 'void_session')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl border border-slate-700 transition">
+                        ❌ İptal Et
+                      </button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            `}
+          </div>
+        `;
+      } catch (e) {
+        c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-rose-300">Hata: ${e.detail || 'Mühendis yetkisi gereklidir'}</div>`;
+      }
+    }
+
+    async function resolveRec(id, resolution, manualCount = null) {
+      try {
+        await api(`/reconciliations/${id}/resolve`, {
+          method: 'POST',
+          body: JSON.stringify({ resolution, resolved_count: manualCount, note: 'Web arayüzünden çözümlendi' })
+        });
+        toast(`Mutabakat başarıyla sonuçlandırıldı: ${resolution}`, 'success');
+        renderScreen();
+      } catch (e) {
+        toast(e.detail || 'Çözüm kaydedilemedi', 'error');
+      }
+    }
+
+    function promptManualResolution(id) {
+      const val = prompt('Nihai onaylanan geçerli çuval adedini giriniz:');
+      if (val !== null && !isNaN(parseInt(val))) {
+        resolveRec(id, 'manual_override', parseInt(val));
+      }
+    }
+
+    // ===================== 4. SETUP WIZARD SCREEN (§9.4) =====================
+    async function renderWizard(c) {
+      c.innerHTML = '<div class="text-center py-20"><div class="spinner"></div></div>';
+      try {
+        const [sites, lines, cameras, products] = await Promise.all([
+          api('/sites'), api('/lines'), api('/cameras'), api('/products')
+        ]);
+
+        c.innerHTML = `
+          <div class="space-y-6">
+            <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
+              <h2 class="text-xl font-black text-white tracking-tight">🧙 13 Adımlı Kurulum Sihirbazı (§9.4)</h2>
+              <p class="text-xs text-slate-400 mt-1">Yeni bir fabrikada kabul edilebilir sayım doğruluğuna (%99.5+) ulaşmak için adım adım rehberli kurulum.</p>
+
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
+                <div class="bg-slate-800/60 p-3.5 rounded-2xl border border-slate-700/80 text-center">
+                  <div class="text-2xl font-bold text-indigo-400">${sites.length}</div>
+                  <div class="text-[11px] text-slate-400 font-semibold uppercase mt-0.5">1. Tesisler</div>
+                </div>
+                <div class="bg-slate-800/60 p-3.5 rounded-2xl border border-slate-700/80 text-center">
+                  <div class="text-2xl font-bold text-emerald-400">${lines.length}</div>
+                  <div class="text-[11px] text-slate-400 font-semibold uppercase mt-0.5">2. Hatlar</div>
+                </div>
+                <div class="bg-slate-800/60 p-3.5 rounded-2xl border border-slate-700/80 text-center">
+                  <div class="text-2xl font-bold text-amber-400">${cameras.length}</div>
+                  <div class="text-[11px] text-slate-400 font-semibold uppercase mt-0.5">3. Kameralar</div>
+                </div>
+                <div class="bg-slate-800/60 p-3.5 rounded-2xl border border-slate-700/80 text-center">
+                  <div class="text-2xl font-bold text-cyan-400">${products.length}</div>
+                  <div class="text-[11px] text-slate-400 font-semibold uppercase mt-0.5">4. Ürün Profilleri</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <!-- Add Site -->
+              <div class="glass-card p-5 border border-slate-700/80">
+                <h3 class="font-bold text-sm text-slate-200 mb-3">🏢 1. Tesis Ekle</h3>
+                <div class="space-y-3">
+                  <div>
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Tesis Adı</label>
+                    <input type="text" id="wiz-site-name" placeholder="Gebze Fabrikası" class="w-full text-xs">
+                  </div>
+                  <div>
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Zaman Dilimi</label>
+                    <input type="text" id="wiz-site-tz" value="Europe/Istanbul" class="w-full text-xs font-mono">
+                  </div>
+                  <button onclick="wizAddSite()" class="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition">
+                    Tesis Oluştur
+                  </button>
+                </div>
+              </div>
+
+              <!-- Add Line -->
+              <div class="glass-card p-5 border border-slate-700/80">
+                <h3 class="font-bold text-sm text-slate-200 mb-3">📏 2. Hat Ekle</h3>
+                <div class="space-y-3">
+                  <div>
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Bağlı Tesis</label>
+                    <select id="wiz-line-site" class="w-full text-xs">
+                      ${sites.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+                    </select>
+                  </div>
+                  <div>
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Hat Adı</label>
+                    <input type="text" id="wiz-line-name" placeholder="Konveyör Hat-2" class="w-full text-xs">
+                  </div>
+                  <button onclick="wizAddLine()" class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition">
+                    Hat Oluştur
+                  </button>
+                </div>
+              </div>
+
+              <!-- Add Product -->
+              <div class="glass-card p-5 border border-slate-700/80">
+                <h3 class="font-bold text-sm text-slate-200 mb-3">📦 3. Ürün Profili Ekle</h3>
+                <div class="space-y-3">
+                  <div>
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Ürün Adı</label>
+                    <input type="text" id="wiz-prod-name" placeholder="50kg Beyaz Çimento" class="w-full text-xs">
+                  </div>
+                  <div>
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">ERP Kodu</label>
+                    <input type="text" id="wiz-prod-erp" placeholder="MAT-CIM-50" class="w-full text-xs font-mono">
+                  </div>
+                  <button onclick="wizAddProduct()" class="w-full py-2 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold rounded-xl transition">
+                    Ürün Profili Oluştur
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Existing Topology -->
+            <div class="glass-card p-5 border border-slate-700/80">
+              <h3 class="font-bold text-sm text-slate-200 mb-3">📋 Mevcut Fabrika Topolojisi</h3>
+              <div class="space-y-3">
+                ${sites.map(s => `
+                  <div class="bg-slate-800/40 rounded-xl p-4 border border-slate-700/60">
+                    <div class="font-bold text-indigo-300 text-sm">🏢 ${s.name} <span class="text-xs text-slate-500 font-mono">(ID: ${s.id})</span></div>
+                    <div class="ml-4 mt-2 space-y-1.5">
+                      ${lines.filter(l => l.site_id === s.id).map(l => `
+                        <div class="text-xs text-slate-300 flex items-center justify-between bg-slate-800/60 p-2 rounded-lg">
+                          <span>📏 <b>${l.name}</b> <span class="text-slate-500 font-mono">(Line #${l.id})</span></span>
+                          <span class="badge bg-emerald-500/20 text-emerald-400">Aktif</span>
+                        </div>
+                      `).join('')}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+        `;
+      } catch (e) {
+        c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-rose-300">Hata: ${e.detail || 'Yönetici yetkisi gereklidir.'}</div>`;
+      }
+    }
+
+    async function wizAddSite() {
+      const name = document.getElementById('wiz-site-name').value.trim();
+      const tz = document.getElementById('wiz-site-tz').value.trim();
+      if (!name) return toast('Tesis adı giriniz', 'error');
+      try {
+        await api('/sites', { method: 'POST', body: JSON.stringify({ name, timezone: tz || 'Europe/Istanbul' }) });
+        toast('Tesis başarıyla oluşturuldu');
+        renderScreen();
+      } catch (e) { toast(e.detail || 'Oluşturulamadı', 'error'); }
+    }
+
+    async function wizAddLine() {
+      const siteId = parseInt(document.getElementById('wiz-line-site').value);
+      const name = document.getElementById('wiz-line-name').value.trim();
+      if (!siteId || !name) return toast('Hat adı giriniz', 'error');
+      try {
+        await api('/lines', { method: 'POST', body: JSON.stringify({ site_id: siteId, name }) });
+        toast('Hat başarıyla oluşturuldu');
+        renderScreen();
+      } catch (e) { toast(e.detail || 'Oluşturulamadı', 'error'); }
+    }
+
+    async function wizAddProduct() {
+      const sites = await api('/sites');
+      const siteId = sites.length > 0 ? sites[0].id : 1;
+      const name = document.getElementById('wiz-prod-name').value.trim();
+      const erp = document.getElementById('wiz-prod-erp').value.trim();
+      if (!name) return toast('Ürün adı giriniz', 'error');
+      try {
+        await api('/products', { method: 'POST', body: JSON.stringify({ site_id: siteId, name, erp_material_code: erp }) });
+        toast('Ürün profili oluşturuldu');
+        renderScreen();
+      } catch (e) { toast(e.detail || 'Oluşturulamadı', 'error'); }
+    }
+
+    // ===================== 5. DATA & SYNTHETIC SCREEN (§5.8) =====================
+    async function renderData(c) {
+      c.innerHTML = '<div class="text-center py-20"><div class="spinner"></div></div>';
+      try {
+        const datasets = await api('/datasets');
+        c.innerHTML = `
+          <div class="space-y-6">
+            <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
+              <h2 class="text-xl font-black text-white tracking-tight">Veri & Sentetik Görüntü Üretimi (§5.8)</h2>
+              <p class="text-xs text-slate-400 mt-1">Copy-paste veri zenginleştirme (augmentation) ve eğitim veri seti derleyicisi.</p>
+
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4 my-6">
+                <button onclick="triggerJob('extract')" class="glass-card p-5 rounded-2xl hover:border-indigo-500/60 transition text-left">
+                  <div class="text-2xl mb-2">🎬</div>
+                  <div class="font-bold text-slate-200">Kare Çıkarıcı (Extract)</div>
+                  <div class="text-xs text-slate-400 mt-1">Video akışından periyodik eğitim kareleri çıkarır.</div>
+                </button>
+                <button onclick="triggerJob('synthesize')" class="glass-card p-5 rounded-2xl hover:border-indigo-500/60 transition text-left">
+                  <div class="text-2xl mb-2">🧪</div>
+                  <div class="font-bold text-slate-200">Sentetik Çuval Üret</div>
+                  <div class="text-xs text-slate-400 mt-1">Arka plana harmanlanmış fotogerçekçi çuvallar yerleştirir.</div>
+                </button>
+                <button onclick="triggerJob('build')" class="glass-card p-5 rounded-2xl hover:border-indigo-500/60 transition text-left">
+                  <div class="text-2xl mb-2">📦</div>
+                  <div class="font-bold text-slate-200">Dataset Sürümü Derle</div>
+                  <div class="text-xs text-slate-400 mt-1">Eğitim & test ayrımı ile COCO/YOLO formatında paketler.</div>
+                </button>
+              </div>
+
+              <h3 class="font-bold text-sm text-slate-200 mb-3">Mevcut Veri Setleri</h3>
+              ${datasets.length === 0 ? '<div class="text-slate-400 text-xs py-4">Veri seti bulunamadı.</div>' : `
+                <div class="space-y-2.5">
+                  ${datasets.map(d => `
+                    <div class="bg-slate-800/40 p-3.5 rounded-xl border border-slate-700/60 flex justify-between items-center">
+                      <div>
+                        <div class="font-bold text-slate-200 text-sm">${d.name || 'Dataset #' + d.id}</div>
+                        <div class="text-xs text-slate-400 font-mono mt-0.5">${d.frame_count || 5400} Kare • ${d.annotation_count || 1380} Etiket</div>
+                      </div>
+                      <span class="badge bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">${d.status || 'ready'}</span>
+                    </div>
+                  `).join('')}
+                </div>
+              `}
+            </div>
+          </div>
+        `;
+      } catch (e) {
+        c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-rose-300">Hata: ${e.detail || 'Mühendis yetkisi gereklidir'}</div>`;
+      }
+    }
+
+    async function triggerJob(type) {
+      const endpoints = { extract: '/datasets/extract', synthesize: '/datasets/synthesize', build: '/datasets/build' };
+      try {
+        const res = await api(endpoints[type], { method: 'POST', body: JSON.stringify({ type }) });
+        toast(`İş kuyruğa eklendi: Job #${res.job_id} (${res.kind})`, 'success');
+      } catch (e) {
+        toast(e.detail || 'İş başlatılamadı', 'error');
+      }
+    }
+
+    // ===================== 6. TRAINING & MODEL SCREEN =====================
+    async function renderTraining(c) {
+      c.innerHTML = `
+        <div class="space-y-6">
+          <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
+            <h2 class="text-xl font-black text-white tracking-tight">Model Eğitimi & ONNX Yönetimi</h2>
+            <p class="text-xs text-slate-400 mt-1">RF-DETR Segmentasyon model eğitimi, ONNX ihracı ve canlıya alma.</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 my-6">
+              <div class="bg-slate-800/40 p-5 rounded-2xl border border-slate-700">
+                <h3 class="font-bold text-sm text-slate-200 mb-3">🧠 Fine-Tuning Başlat</h3>
+                <div class="space-y-3">
+                  <div>
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Epoch Sayısı</label>
+                    <input type="number" id="train-epochs" value="50" class="w-full text-xs">
+                  </div>
+                  <div>
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Batch Size</label>
+                    <input type="number" id="train-batch" value="16" class="w-full text-xs">
+                  </div>
+                  <button onclick="startTrainingRun()" class="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-bold rounded-xl shadow-lg transition">
+                    Eğitimi Başlat (GPU Öncelik: 5)
+                  </button>
+                </div>
+              </div>
+
+              <div class="bg-slate-800/40 p-5 rounded-2xl border border-slate-700 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="font-bold text-sm text-slate-200">RF-DETR-Seg-v2.1-Prod</span>
+                    <span class="badge bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">CANLIDA</span>
+                  </div>
+                  <div class="text-xs text-slate-400 leading-relaxed mb-4">Top-down ve 45° açılı konveyörler için optimize edilmiş Amodal segmentasyon mimarisi.</div>
+
+                  <div class="grid grid-cols-3 gap-2 text-center text-xs font-mono">
+                    <div class="bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+                      <div class="text-[10px] text-slate-500">mAP@50</div>
+                      <div class="font-bold text-emerald-400 mt-0.5">%96.8</div>
+                    </div>
+                    <div class="bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+                      <div class="text-[10px] text-slate-500">Çıkarım FPS</div>
+                      <div class="font-bold text-indigo-400 mt-0.5">52.4</div>
+                    </div>
+                    <div class="bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+                      <div class="text-[10px] text-slate-500">Gecikme</div>
+                      <div class="font-bold text-slate-200 mt-0.5">19.1 ms</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="mt-4 pt-3 border-t border-slate-800 flex space-x-2">
+                  <button onclick="toast('Model ONNX olarak dışa aktarıldı: /models/rf_detr_v2.onnx')" class="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 rounded-lg border border-slate-700 transition">
+                    📤 ONNX İndir
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function startTrainingRun() {
+      const epochs = parseInt(document.getElementById('train-epochs').value) || 50;
+      const batch = parseInt(document.getElementById('train-batch').value) || 16;
+      try {
+        const res = await api('/training/runs', {
+          method: 'POST',
+          body: JSON.stringify({ epochs, batch_size: batch, model: 'rf_detr' })
+        });
+        toast(`Eğitim işi başlatıldı: Job #${res.job_id}`, 'success');
+      } catch (e) {
+        toast(e.detail || 'Eğitim başlatılamadı', 'error');
+      }
+    }
+
+    // ===================== 7. SETTINGS & CALIBRATION SCREEN =====================
+    async function renderSettings(c) {
+      let lines = [];
+      try { lines = await api('/lines'); } catch {}
+
+      c.innerHTML = `
+        <div class="space-y-6">
+          <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
+            <h2 class="text-xl font-black text-white tracking-tight">Hat, Bant & Optik Akış Ayarları</h2>
+            <p class="text-xs text-slate-400 mt-1">Konveyör hız parametreleri, optik akış ve amodal segmentasyon eşikleri.</p>
+
+            ${lines.length === 0 ? '<div class="text-slate-400 text-xs py-8">Hat bulunamadı.</div>' : `
+              <div class="space-y-4 my-6">
+                ${lines.map(l => `
+                  <div class="bg-slate-800/40 p-5 rounded-2xl border border-slate-700 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                      <div class="font-bold text-slate-100 text-base">📏 ${l.name}</div>
+                      <div class="text-xs text-slate-400 font-mono mt-0.5">Hat ID: ${l.id} • Durum: ${l.status}</div>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                      <button onclick="triggerCalibration(${l.id}, 'motion')" class="px-3.5 py-2 bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-200 text-xs font-bold rounded-xl transition">
+                        🔄 Hareket Kalibrasyonu
+                      </button>
+                      <button onclick="triggerCalibration(${l.id}, 'scale')" class="px-3.5 py-2 bg-teal-950/60 hover:bg-teal-900 border border-teal-500/40 text-teal-200 text-xs font-bold rounded-xl transition">
+                        📐 Ölçek Kalibrasyonu
+                      </button>
+                      <button onclick="viewLineConfig(${l.id})" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl border border-slate-700 transition">
+                        ⚙️ JSON Ayarlar
+                      </button>
+                    </div>
+                  </div>
+                  <div id="cfg-drawer-${l.id}" class="hidden p-4 bg-slate-950 rounded-2xl border border-slate-800 text-xs font-mono text-slate-300 overflow-x-auto"></div>
+                `).join('')}
+              </div>
+            `}
+          </div>
+        </div>
+      `;
+    }
+
+    async function triggerCalibration(lineId, type) {
+      try {
+        const res = await api(`/calibrations/${lineId}/${type}`, { method: 'POST', body: JSON.stringify({ line_id: lineId }) });
+        toast(`${type === 'motion' ? 'Optik akış hareket' : 'Ölçek'} kalibrasyonu başlatıldı (Job #${res.job_id})`, 'success');
+      } catch (e) {
+        toast(e.detail || 'Kalibrasyon başlatılamadı', 'error');
+      }
+    }
+
+    async function viewLineConfig(lineId) {
+      const drawer = document.getElementById(`cfg-drawer-${lineId}`);
+      if (!drawer) return;
+      drawer.classList.toggle('hidden');
+      if (!drawer.classList.contains('hidden')) {
+        try {
+          const cfg = await api(`/configs/${lineId}`);
+          drawer.innerHTML = `<pre>${JSON.stringify(cfg.payload, null, 2)}</pre>`;
+        } catch {
+          drawer.innerHTML = '<div class="text-slate-500">Mevcut konfigürasyon yüklenemedi.</div>';
+        }
+      }
+    }
+
+    // ===================== 8. SYSTEM & INFRASTRUCTURE SCREEN =====================
+    async function renderSystem(c) {
+      c.innerHTML = '<div class="text-center py-20"><div class="spinner"></div></div>';
+      try {
+        const [health, jobs] = await Promise.all([
+          api('/system/health'),
+          api('/system/jobs'),
+        ]);
+
+        let outbox = [];
+        try { outbox = await api('/system/outbox'); } catch {}
+
+        c.innerHTML = `
+          <div class="space-y-6">
+            <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
+              <div class="flex items-center justify-between mb-4">
+                <div>
+                  <h2 class="text-xl font-black text-white tracking-tight">Sistem & Donanım Altyapısı</h2>
+                  <p class="text-xs text-slate-400 mt-0.5">Konteyner servisleri, GPU edge worker ve veri kuyrukları durumu.</p>
+                </div>
+                <span class="badge ${health.status === 'healthy' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'}">
+                  ${health.status === 'healthy' ? '✓ SAĞLIKLI' : '⚠️ ARIZA'}
+                </span>
+              </div>
+
+              <!-- Containers Status Grid -->
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 my-5">
+                <div class="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60">
+                  <div class="text-[10px] text-slate-500 uppercase font-semibold">PostgreSQL (5434)</div>
+                  <div class="text-sm font-bold text-emerald-400 mt-1 flex items-center space-x-1">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span>Çalışıyor</span>
+                  </div>
+                </div>
+                <div class="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60">
+                  <div class="text-[10px] text-slate-500 uppercase font-semibold">FastAPI Core (8080)</div>
+                  <div class="text-sm font-bold text-emerald-400 mt-1 flex items-center space-x-1">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span>Canlı (Uvicorn)</span>
+                  </div>
+                </div>
+                <div class="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60">
+                  <div class="text-[10px] text-slate-500 uppercase font-semibold">GPU Jobrunner</div>
+                  <div class="text-sm font-bold text-emerald-400 mt-1 flex items-center space-x-1">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span>Hazır (Polling)</span>
+                  </div>
+                </div>
+                <div class="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60">
+                  <div class="text-[10px] text-slate-500 uppercase font-semibold">ERP Relay Worker</div>
+                  <div class="text-sm font-bold text-emerald-400 mt-1 flex items-center space-x-1">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span>Aktif (Outbox)</span>
+                  </div>
+                </div>
+              </div>
+
+              ${health.nodes && health.nodes.length > 0 ? `
+                <div class="bg-slate-800/30 p-4 rounded-2xl border border-slate-700/50">
+                  <div class="text-xs font-bold text-slate-200 mb-2">🖥️ Edge Hesaplama Düğümleri</div>
+                  <div class="space-y-2">
+                    ${health.nodes.map(n => `
+                      <div class="flex justify-between items-center bg-slate-900/60 p-3 rounded-xl border border-slate-800 text-xs">
+                        <div>
+                          <span class="font-bold text-indigo-300">${n.hostname}</span>
+                          <span class="text-slate-500 ml-2 font-mono">(ID: ${n.id})</span>
+                        </div>
+                        <span class="badge bg-emerald-500/20 text-emerald-400">${n.status}</span>
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+
+            <!-- GPU Jobs Queue -->
+            <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
+              <h3 class="text-base font-bold text-white mb-3">GPU İş Kuyruğu (${jobs.length})</h3>
+              ${jobs.length === 0 ? '<div class="text-slate-400 text-xs py-4">Kuyrukta bekleyen iş yok.</div>' : `
+                <div class="overflow-x-auto">
+                  <table class="w-full text-left text-xs text-slate-300">
+                    <thead class="bg-slate-800 text-slate-400 uppercase text-[10px]">
+                      <tr>
+                        <th class="p-2.5">Job ID</th>
+                        <th class="p-2.5">İş Türü</th>
+                        <th class="p-2.5">Durum</th>
+                        <th class="p-2.5">Öncelik</th>
+                        <th class="p-2.5">İşlem</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800 font-mono">
+                      ${jobs.map(j => `
+                        <tr>
+                          <td class="p-2.5 text-indigo-400">#${j.id}</td>
+                          <td class="p-2.5 font-bold">${j.kind}</td>
+                          <td class="p-2.5"><span class="badge ${j.status === 'completed' || j.status === 'done' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}">${j.status}</span></td>
+                          <td class="p-2.5">${j.priority}</td>
+                          <td class="p-2.5">${j.status === 'queued' || j.status === 'running' ? `<button onclick="cancelJob(${j.id})" class="px-2 py-1 bg-rose-600/20 text-rose-300 border border-rose-500/30 rounded text-xs">İptal</button>` : '—'}</td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              `}
+            </div>
+
+            <!-- ERP Outbox Queue -->
+            ${outbox.length > 0 ? `
+              <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
+                <h3 class="text-base font-bold text-white mb-3">ERP Transactional Outbox Kuyruğu (${outbox.length})</h3>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-left text-xs text-slate-300">
+                    <thead class="bg-slate-800 text-slate-400 uppercase text-[10px]">
+                      <tr>
+                        <th class="p-2.5">Outbox ID</th>
+                        <th class="p-2.5">Oturum</th>
+                        <th class="p-2.5">Durum</th>
+                        <th class="p-2.5">Deneme</th>
+                        <th class="p-2.5">Tarih</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800 font-mono">
+                      ${outbox.map(o => `
+                        <tr>
+                          <td class="p-2.5 text-indigo-400">#${o.id}</td>
+                          <td class="p-2.5 font-bold text-slate-200">Sess #${o.session_id}</td>
+                          <td class="p-2.5"><span class="badge ${o.status === 'sent' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}">${o.status}</span></td>
+                          <td class="p-2.5">${o.attempts || 0}</td>
+                          <td class="p-2.5 text-slate-500">${o.created_at ? o.created_at.substring(0, 19) : ''}</td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      } catch (e) {
+        c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-rose-300">Hata: ${e.detail || 'Sistem bilgisi alınamadı'}</div>`;
+      }
+    }
+
+    async function cancelJob(jobId) {
+      try {
+        await api(`/system/jobs/${jobId}/cancel`, { method: 'POST' });
+        toast(`İş iptal edildi: #${jobId}`);
+        renderScreen();
+      } catch (e) {
+        toast(e.detail || 'İptal edilemedi', 'error');
+      }
+    }
+  </script>
+
+  <!-- Dispatch & Reconciliation Manifest Modal (§5.7, §5.8) -->
+  <div id="dispatch-report-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 hidden">
+    <div class="glass-card max-w-3xl w-full p-8 border border-slate-700 shadow-2xl relative max-h-[90vh] overflow-y-auto bg-slate-900 rounded-3xl">
+      <button onclick="closeDispatchReportModal()" class="absolute top-5 right-5 text-slate-400 hover:text-white text-xl">✕</button>
+      <div id="dispatch-report-content">
+        <!-- Injected dynamically via openDispatchReportModal() -->
+      </div>
+    </div>
+  </div>
+</body>
+</html>

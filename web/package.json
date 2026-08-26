@@ -1,0 +1,16 @@
+{
+  "name": "fabric-bag-counter-web",
+  "version": "2.0.0",
+  "description": "Industrial Fabric Bag Counter & Dispatch Reconciliation SPA Dashboard",
+  "main": "index.html",
+  "scripts": {
+    "build": "python build.py"
+  },
+  "keywords": [
+    "industrial-vision",
+    "conveyor-counter",
+    "dispatch-reconciliation",
+    "rf-detr"
+  ],
+  "license": "UNLICENSED"
+}
