@@ -50,6 +50,13 @@
     .defect-row .desc { flex: 1; color: #cdd1d5; }
     .defect-row .who { color: #868d94; }
 
+    /* Left rail navigation (desktop): reuses the exact same tab buttons
+       renderNav() already generates for the mobile bar -- stacking them
+       full-width/left-aligned here is a pure CSS change, no JS/markup
+       duplication needed. */
+    #nav-menu-rail { display: flex; flex-direction: column; gap: 0.2rem; }
+    #nav-menu-rail button { width: 100%; text-align: left; white-space: normal; }
+
     /* Camera wall: one hero (the tile an operator actually watches) + a
        scrollable thumbnail rail (awareness, not scrutiny). Past ~4 equal
        tiles a flat grid either shrinks every feed to unreadable or pushes
@@ -80,48 +87,73 @@
 <body class="min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
 
   <!-- ===================== MAIN APP SHELL ===================== -->
-  <div id="app-shell" class="flex-1 flex flex-col min-h-screen">
-    <!-- Top Navigation Header -->
-    <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 md:px-6 py-3 sticky top-0 z-40 flex items-center justify-between shadow-xl">
-      <div class="flex items-center space-x-4 min-w-0 flex-1">
-        <div class="flex items-center space-x-2.5 cursor-pointer flex-shrink-0" onclick="setTab('live')">
-          <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center font-black text-white text-sm shadow-md shadow-indigo-500/20">CS</div>
-          <div>
+  <div id="app-shell" class="flex-1 flex min-h-screen">
+    <!-- Left Rail (desktop, lg and up): control-room style vertical
+         navigation, replacing the old horizontal top menu. Mobile keeps the
+         original top header + horizontal tab bar below (unchanged) since a
+         fixed side rail doesn't fit a narrow screen. -->
+    <aside class="hidden lg:flex lg:flex-col w-60 flex-shrink-0 bg-slate-900 border-r border-slate-800 h-screen sticky top-0 overflow-y-auto">
+      <div class="flex items-center space-x-2.5 cursor-pointer px-4 py-4 border-b border-slate-800" onclick="setTab('live')">
+        <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center font-black text-white text-sm shadow-md shadow-indigo-500/20 flex-shrink-0">CS</div>
+        <div class="min-w-0">
+          <div class="text-base font-extrabold tracking-tight text-white leading-tight">Sayım Sistemi</div>
+          <div class="text-[10px] text-slate-400 font-mono truncate" id="current-line-label-rail">Tesis ayarlanmadı</div>
+        </div>
+      </div>
+
+      <nav id="nav-menu-rail" class="flex-1 px-3 py-3 text-xs font-semibold"></nav>
+
+      <div class="border-t border-slate-800 p-3 space-y-2">
+        <div class="flex items-center justify-between gap-2">
+          <button onclick="toggleAudio()" id="audio-toggle-btn-rail" class="flex-1 p-2 bg-slate-800/80 hover:bg-slate-700 rounded-lg border border-slate-700 text-slate-300 text-xs flex items-center justify-center space-x-1.5 transition" title="Sayım ses efektini aç/kapat">
+            <span id="audio-icon-rail">🔊</span>
+            <span class="text-[11px]" id="audio-label-rail">Ses Açık</span>
+          </button>
+        </div>
+        <div class="flex items-center space-x-2 bg-slate-800/60 px-3 py-1.5 rounded-lg border border-slate-700/50">
+          <span id="health-dot-rail" class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span class="text-xs text-slate-300 font-medium" id="live-indicator-rail">Sistem Canlı</span>
+        </div>
+        <div id="user-box-rail" class="flex flex-col space-y-2"></div>
+      </div>
+    </aside>
+
+    <!-- Main column: mobile top bar + page content. On desktop the mobile
+         header is hidden and the rail above takes over navigation. -->
+    <div class="flex-1 flex flex-col min-w-0 min-h-screen">
+      <!-- Top Navigation Header (mobile / below-lg only) -->
+      <header class="lg:hidden bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-3 sticky top-0 z-40 flex items-center justify-between shadow-xl">
+        <div class="flex items-center space-x-2.5 cursor-pointer min-w-0" onclick="setTab('live')">
+          <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center font-black text-white text-sm shadow-md shadow-indigo-500/20 flex-shrink-0">CS</div>
+          <div class="min-w-0">
             <div class="text-base font-extrabold tracking-tight text-white leading-tight">Sayım Sistemi</div>
-            <div class="text-[10px] text-slate-400 font-mono" id="current-line-label">Tesis ayarlanmadı</div>
+            <div class="text-[10px] text-slate-400 font-mono truncate" id="current-line-label">Tesis ayarlanmadı</div>
           </div>
         </div>
 
-        <!-- Role Nav Menu: scrolls horizontally instead of pushing the right
-             controls (health, user, logout) off-screen when the tab set
-             plus those controls don't both fit at once. -->
-        <nav id="nav-menu" class="hidden lg:flex space-x-1 bg-slate-800/60 p-1 rounded-xl border border-slate-700/50 text-xs font-semibold min-w-0 overflow-x-auto"></nav>
-      </div>
+        <!-- Right Controls -->
+        <div class="flex items-center space-x-2 flex-shrink-0">
+          <button onclick="toggleAudio()" id="audio-toggle-btn" class="p-2 bg-slate-800/80 hover:bg-slate-700 rounded-lg border border-slate-700 text-slate-300 text-xs flex items-center space-x-1.5 transition" title="Sayım ses efektini aç/kapat">
+            <span id="audio-icon">🔊</span>
+            <span class="hidden sm:inline text-[11px]" id="audio-label">Ses Açık</span>
+          </button>
 
-      <!-- Right Controls -->
-      <div class="flex items-center space-x-2 md:space-x-3 flex-shrink-0">
-        <!-- Sound Toggle -->
-        <button onclick="toggleAudio()" id="audio-toggle-btn" class="p-2 bg-slate-800/80 hover:bg-slate-700 rounded-lg border border-slate-700 text-slate-300 text-xs flex items-center space-x-1.5 transition" title="Sayım ses efektini aç/kapat">
-          <span id="audio-icon">🔊</span>
-          <span class="hidden sm:inline text-[11px]" id="audio-label">Ses Açık</span>
-        </button>
+          <div class="flex items-center space-x-2 bg-slate-800/60 px-3 py-1.5 rounded-lg border border-slate-700/50">
+            <span id="health-dot" class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span class="text-xs text-slate-300 font-medium hidden sm:inline" id="live-indicator">Sistem Canlı</span>
+          </div>
 
-        <!-- Live Health Pulse -->
-        <div class="flex items-center space-x-2 bg-slate-800/60 px-3 py-1.5 rounded-lg border border-slate-700/50">
-          <span id="health-dot" class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span class="text-xs text-slate-300 font-medium hidden sm:inline" id="live-indicator">Sistem Canlı</span>
+          <!-- Authenticated User Box (populated by renderUserBox()) -->
+          <div id="user-box" class="border-l border-slate-700 pl-2 flex items-center space-x-2"></div>
         </div>
+      </header>
 
-        <!-- Authenticated User Box (populated by renderUserBox()) -->
-        <div id="user-box" class="border-l border-slate-700 pl-2 md:pl-3 flex items-center space-x-2"></div>
-      </div>
-    </header>
+      <!-- Mobile Navigation Bar -->
+      <div class="lg:hidden bg-slate-900 border-b border-slate-800 px-4 py-2 overflow-x-auto flex space-x-2 text-xs" id="mobile-nav-menu"></div>
 
-    <!-- Mobile Navigation Bar -->
-    <div class="lg:hidden bg-slate-900 border-b border-slate-800 px-4 py-2 overflow-x-auto flex space-x-2 text-xs" id="mobile-nav-menu"></div>
-
-    <!-- Main Dynamic Screen Viewport -->
-    <main id="app-container" class="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto"></main>
+      <!-- Main Dynamic Screen Viewport -->
+      <main id="app-container" class="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto"></main>
+    </div>
   </div>
 
   <!-- Event Ledger Detail Modal -->
@@ -291,19 +323,15 @@
 
     // ===================== AUTH & LOGIN =====================
     // Real authentication: the only way to become operator/engineer/admin is
-    // to submit real credentials to POST /auth/login. There is no client-side
-    // password map and no one-click role bypass. The "Demo Girişi" panel on
-    // the login screen only pre-fills the *username* field for known demo
-    // seed accounts (see packages/cs_storage/repositories/user_repo.py
-    // seed_default_users()) -- it never carries a password, so every login,
-    // demo or not, goes through the real form + real endpoint.
+    // to submit real credentials to POST /auth/login. There is no
+    // client-side password map and no one-click role bypass.
 
     function renderUserBox() {
+      const roleLabels = { operator: '👷 Operatör', engineer: '👨‍🔬 Mühendis', admin: '👑 Yönetici' };
+
       const el = document.getElementById('user-box');
-      if (!el) return;
-      if (auth.token) {
-        const roleLabels = { operator: '👷 Operatör', engineer: '👨‍🔬 Mühendis', admin: '👑 Yönetici' };
-        el.innerHTML = `
+      if (el) {
+        el.innerHTML = auth.token ? `
           <div class="hidden md:flex items-center space-x-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700 text-xs">
             <span class="font-bold text-slate-200">${escapeHtml(auth.username)}</span>
             <span class="badge bg-indigo-500/20 text-indigo-300 text-[10px]">${escapeHtml(roleLabels[auth.role] || auth.role)}</span>
@@ -311,9 +339,20 @@
           <button onclick="logout()" class="px-2.5 py-1.5 bg-slate-800 hover:bg-rose-900/40 text-xs font-semibold rounded-lg border border-slate-700 text-slate-300 hover:text-rose-300 transition">
             Çıkış
           </button>
-        `;
-      } else {
-        el.innerHTML = '';
+        ` : '';
+      }
+
+      const railEl = document.getElementById('user-box-rail');
+      if (railEl) {
+        railEl.innerHTML = auth.token ? `
+          <div class="flex items-center justify-between bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700 text-xs">
+            <span class="font-bold text-slate-200 truncate">${escapeHtml(auth.username)}</span>
+            <span class="badge bg-indigo-500/20 text-indigo-300 text-[10px] flex-shrink-0">${escapeHtml(roleLabels[auth.role] || auth.role)}</span>
+          </div>
+          <button onclick="logout()" class="w-full px-2.5 py-1.5 bg-slate-800 hover:bg-rose-900/40 text-xs font-semibold rounded-lg border border-slate-700 text-slate-300 hover:text-rose-300 transition">
+            Çıkış
+          </button>
+        ` : '';
       }
     }
 
@@ -448,7 +487,7 @@
     };
 
     function renderNav() {
-      const navEl = document.getElementById('nav-menu');
+      const navEl = document.getElementById('nav-menu-rail');
       const mobileNavEl = document.getElementById('mobile-nav-menu');
       if (!navEl || !mobileNavEl) return;
 
@@ -556,25 +595,28 @@
 
     // ===================== HEALTH CHECK =====================
     async function checkHealth() {
+      const ids = ['health-dot', 'health-dot-rail'];
+      const labelIds = ['live-indicator', 'live-indicator-rail'];
       try {
         await api('/system/health');
-        document.getElementById('health-dot').className = 'w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse';
-        document.getElementById('live-indicator').textContent = 'Sistem Canlı';
+        ids.forEach(id => { const el = document.getElementById(id); if (el) el.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse'; });
+        labelIds.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = 'Sistem Canlı'; });
       } catch {
-        document.getElementById('health-dot').className = 'w-2.5 h-2.5 rounded-full bg-rose-500';
-        document.getElementById('live-indicator').textContent = 'Bağlantı Yok';
+        ids.forEach(id => { const el = document.getElementById(id); if (el) el.className = 'w-2.5 h-2.5 rounded-full bg-rose-500'; });
+        labelIds.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = 'Bağlantı Yok'; });
       }
     }
     setInterval(() => { if (auth.token) checkHealth(); }, 12000);
 
     async function refreshFacilityLabel() {
-      const el = document.getElementById('current-line-label');
-      if (!el || !auth.token) return;
+      const els = [document.getElementById('current-line-label'), document.getElementById('current-line-label-rail')].filter(Boolean);
+      if (els.length === 0 || !auth.token) return;
       try {
         const sites = await api('/sites');
-        el.textContent = (sites && sites.length > 0) ? sites[0].name : 'Tesis ayarlanmadı';
+        const label = (sites && sites.length > 0) ? sites[0].name : 'Tesis ayarlanmadı';
+        els.forEach(el => { el.textContent = label; });
       } catch {
-        el.textContent = 'Tesis ayarlanmadı';
+        els.forEach(el => { el.textContent = 'Tesis ayarlanmadı'; });
       }
     }
 
@@ -1345,6 +1387,11 @@
       const label = document.getElementById('audio-label');
       if (icon) icon.textContent = soundEnabled ? '🔊' : '🔇';
       if (label) label.textContent = soundEnabled ? 'Ses Açık' : 'Sessiz';
+
+      const railIcon = document.getElementById('audio-icon-rail');
+      const railLabel = document.getElementById('audio-label-rail');
+      if (railIcon) railIcon.textContent = soundEnabled ? '🔊' : '🔇';
+      if (railLabel) railLabel.textContent = soundEnabled ? 'Ses Açık' : 'Sessiz';
 
       const liveBtn = document.getElementById('audio-toggle-btn-live');
       const liveIcon = document.getElementById('audio-icon-live');
