@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import random
 import time
@@ -16,11 +17,19 @@ from packages.cs_storage.models_orm import CameraORM, GateORM, ProductProfileORM
 from packages.cs_storage.repositories.ledger_repo import LedgerRepository
 from packages.cs_storage.repositories.session_repo import SessionRepository
 
+logger = logging.getLogger(__name__)
+
 
 class LiveStreamRenderer:
     """Renders real-time AI vision camera frames with amodal masks, bounding boxes, and gate line."""
 
-    def __init__(self, line_id: int = 1, width: int = 800, height: int = 400) -> None:
+    def __init__(self, line_id: int = 1, width: int = 640, height: int = 640) -> None:
+        # Square, matching the detector's native training/inference resolution.
+        # A non-square canvas (e.g. the previous 800x400) forces every real
+        # camera frame through a more aggressive letterbox scale-down before
+        # detection -- verified this alone was enough to push real detection
+        # confidence to the edge of the tracker's threshold and make gate
+        # crossings fail intermittently even with a genuinely working model.
         self.line_id = line_id
         self.w = width
         self.h = height
@@ -34,6 +43,8 @@ class LiveStreamRenderer:
         self.next_sim_id = 1000
         self.video_cap: cv2.VideoCapture | None = None
         self.last_crossing_time = 0.0
+        self._last_frame_time: float | None = None
+        self._fps_ema: float | None = None
 
         # Initialize physical bags on conveyor
         self.bags.append({"x": 100.0, "y": 140.0, "w": 110, "h": 150, "label": "50kg Çimento", "color": (40, 180, 240), "id": self.next_sim_id, "passed": False})
@@ -74,6 +85,44 @@ class LiveStreamRenderer:
         """Set a real MP4 / AVI video file as input source."""
         ok, _ = self.set_camera_source(video_path)
         return ok
+
+    def spawn_manual_bag(
+        self,
+        defective: bool = False,
+        bag_count_estimate: int = 1,
+        label: str | None = None,
+    ) -> dict:
+        """Inject an operator-triggered bag into the simulated conveyor demo.
+
+        This is the wiring for the "+1 Hasarlı / Patlak" and "+2 Bitişik
+        Çuval" manual simulation triggers: without it, `is_defective` /
+        `bag_count_estimate` were never set on any `self.bags` entry (only
+        auto-spawned plain bags exist), so the defect/multi badge branches in
+        `_process_simulated_frame` were unreachable dead code. Callers (e.g.
+        the `/sessions/{id}/simulate_bag` API) should invoke this on the
+        renderer for the session's line whenever `defect_reason` /
+        `merge_flag` is set, so the MJPEG demo feed actually renders the
+        corresponding red DEFECT / amber BITISIK badge and mask color.
+        """
+        entry_x = -120.0 if self.belt_dir > 0 else float(self.w + 40)
+        bag = {
+            "x": entry_x,
+            "y": 140.0,
+            "w": 110,
+            "h": 150,
+            "label": label or ("Patlak Çuval" if defective else "50kg Çimento"),
+            "color": (40, 40, 220) if defective else (40, 180, 240),
+            "id": self.next_sim_id,
+            "passed": False,
+            "is_defective": defective,
+            "bag_count_estimate": max(1, bag_count_estimate),
+        }
+        self.next_sim_id += 1
+        if self.belt_dir > 0:
+            self.bags.append(bag)
+        else:
+            self.bags.insert(0, bag)
+        return bag
 
     def generate_conveyor_frame(self) -> np.ndarray:
         """Synthesize a photorealistic industrial conveyor camera frame."""
@@ -151,19 +200,86 @@ class LiveStreamRenderer:
         return frame
 
     def process_and_annotate_frame(self, frame: np.ndarray, session_id: int | None = None) -> tuple[np.ndarray, int | None]:
-        """Run full OpenCV CV segmentation, tracking, gate crossing, and draw HUD annotations."""
+        """Run full CV segmentation, tracking, gate crossing, and draw HUD annotations.
+
+        Real camera/video source (`self.video_cap` set): runs the actual
+        CountingEngine (VisionDetector -> ByteTracker -> GateStateMachine) and
+        writes ledger events from its real gate-crossing output. No camera
+        connected (demo/simulated conveyor): uses the synthetic `self.bags`
+        animation -- an explicit, labeled demo mode, never a silent substitute
+        for real detection when a camera IS connected.
+        """
         self.frame_idx += 1
         t_now = datetime.now(timezone.utc)
         mono_ns = int(time.perf_counter() * 1e9)
 
-        # 1. Run CV Segmentation & Counting Engine
-        out = self.engine.process_frame(
-            image=frame,
-            frame_index=self.frame_idx,
-            monotonic_ns=mono_ns,
-            wall_clock=t_now,
+        if self.video_cap is not None:
+            return self._process_real_frame(frame, session_id, t_now, mono_ns)
+        return self._process_simulated_frame(frame, session_id, t_now, mono_ns)
+
+    def _process_real_frame(
+        self, frame: np.ndarray, session_id: int | None, t_now: datetime, mono_ns: int
+    ) -> tuple[np.ndarray, int | None]:
+        self.engine.gate_state_machine.update_geometry(
+            axis_origin=(0.0, 0.0), axis_vector=(1.0, 0.0), gate_pos=float(self.gate_x)
         )
 
+        out = self.engine.process_frame(
+            image=frame, frame_index=self.frame_idx, monotonic_ns=mono_ns, wall_clock=t_now
+        )
+
+        if out.gate_crossings:
+            self.last_crossing_time = time.time()
+            if session_id:
+                try:
+                    with get_sync_session() as db:
+                        ledger_repo = LedgerRepository(db)
+                        sess_repo = SessionRepository(db)
+                        sess = sess_repo.get_by_id(session_id)
+                        if sess:
+                            for event in out.gate_crossings:
+                                ledger_repo.record_event(
+                                    session_id=session_id,
+                                    line_id=self.line_id,
+                                    camera_id=1,
+                                    stream_epoch=4,
+                                    track_id=event.track_id,
+                                    crossing_seq=event.crossing_seq,
+                                    gate_id=event.gate_id,
+                                    crossing_timestamp=event.crossing_timestamp,
+                                    frame_index=event.frame_index,
+                                    direction=event.direction,
+                                    confidence=event.confidence,
+                                    merge_flag=event.merge_flag,
+                                )
+                            sess.counted_total = ledger_repo.get_session_total_count(session_id)
+                            sess.area_estimate_total = out.area_estimate
+                            db.commit()
+                except Exception:
+                    logger.exception(
+                        "Failed to record real gate-crossing ledger event(s) for session_id=%s, line_id=%s",
+                        session_id, self.line_id,
+                    )
+
+        annotated = frame.copy()
+        overlay = frame.copy()
+        for track in out.active_tracks:
+            bx1, by1, bx2, by2 = [int(v) for v in track.box]
+            box_color = (255, 140, 90)
+            pts = np.array([[bx1, by1], [bx2, by1], [bx2, by2], [bx1, by2]], np.int32)
+            cv2.fillPoly(overlay, [pts], (240, 100, 99))
+            cv2.rectangle(annotated, (bx1 - 2, by1 - 2), (bx2 + 2, by2 + 2), box_color, 2)
+            badge_text = f"TRK-{track.track_id} {track.score * 100:.1f}%"
+            cv2.rectangle(annotated, (bx1 - 2, by1 - 22), (bx1 + 115, by1 - 2), (180, 50, 40), -1)
+            cv2.putText(annotated, badge_text, (bx1 + 3, by1 - 7), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (255, 255, 255), 1, cv2.LINE_AA)
+        cv2.addWeighted(overlay, 0.35, annotated, 0.65, 0, annotated)
+
+        self._draw_gate_and_hud(annotated, real_mode=True)
+        return annotated, session_id
+
+    def _process_simulated_frame(
+        self, frame: np.ndarray, session_id: int | None, t_now: datetime, mono_ns: int
+    ) -> tuple[np.ndarray, int | None]:
         # Check gate crossings in simulated bag objects
         crossing_detected = False
         for bag in self.bags:
@@ -174,7 +290,7 @@ class LiveStreamRenderer:
                     crossing_detected = True
                     self.last_crossing_time = time.time()
 
-                    # Record to real database ledger
+                    # Record to real database ledger (explicit demo/simulated crossing)
                     if session_id:
                         try:
                             with get_sync_session() as db:
@@ -194,12 +310,17 @@ class LiveStreamRenderer:
                                         frame_index=self.frame_idx,
                                         direction=self.belt_dir,
                                         confidence=0.985,
+                                        is_simulated=True,
                                     )
                                     sess.counted_total = ledger_repo.get_session_total_count(session_id)
                                     sess.area_estimate_total = float(sess.counted_total) * 0.998
                                     db.commit()
                         except Exception:
-                            pass
+                            logger.exception(
+                                "Failed to record simulated gate-crossing ledger event for "
+                                "session_id=%s, line_id=%s, bag_id=%s",
+                                session_id, self.line_id, bag["id"],
+                            )
 
         # 2. Draw Real AI Vision Overlays
         annotated = frame.copy()
@@ -246,29 +367,39 @@ class LiveStreamRenderer:
         # Blend semi-transparent segmentation masks
         cv2.addWeighted(overlay, 0.35, annotated, 0.65, 0, annotated)
 
-        # 3. Draw Optical Gate Laser Line (Glowing Neon Green)
+        self._draw_gate_and_hud(annotated, real_mode=False)
+        return annotated, session_id
+
+    def _draw_gate_and_hud(self, annotated: np.ndarray, real_mode: bool) -> None:
+        # Optical Gate Laser Line (Glowing Neon Green)
         gate_color = (80, 255, 120)
         is_flashing = (time.time() - self.last_crossing_time) < 0.25
         if is_flashing:
-            # Flashing gate ripple
             cv2.line(annotated, (self.gate_x, 40), (self.gate_x, 360), (120, 255, 255), 6)
             cv2.circle(annotated, (self.gate_x, 200), 30, (80, 255, 120), 3)
         else:
             cv2.line(annotated, (self.gate_x, 50), (self.gate_x, 350), gate_color, 2)
             cv2.line(annotated, (self.gate_x - 1, 50), (self.gate_x - 1, 350), (120, 255, 180), 1)
 
-        # Gate Header Tag
         cv2.rectangle(annotated, (self.gate_x - 48, 40), (self.gate_x + 48, 62), (40, 160, 80), -1)
         cv2.putText(annotated, "SAYIM KAPISI", (self.gate_x - 42, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1, cv2.LINE_AA)
 
-        # 4. Top & Bottom HUD Diagnostics
+        # Top HUD: real, measured FPS (rolling EMA of actual frame timing), not a fixed number
         cv2.rectangle(annotated, (0, 0), (self.w, 32), (10, 14, 22), -1)
         cv2.line(annotated, (0, 32), (self.w, 32), (45, 55, 75), 1)
 
-        cv2.putText(annotated, "● AI VISION ACTIVE [RF-DETR + ByteTrack]", (12, 21), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (100, 240, 120), 1, cv2.LINE_AA)
-        cv2.putText(annotated, f"FPS: 25.0 | Epoch: 4 | Gate X: {self.gate_x}px", (self.w - 270, 21), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (180, 200, 220), 1, cv2.LINE_AA)
+        now = time.time()
+        if self._last_frame_time is not None:
+            dt = now - self._last_frame_time
+            if dt > 0:
+                inst_fps = 1.0 / dt
+                self._fps_ema = inst_fps if self._fps_ema is None else (0.9 * self._fps_ema + 0.1 * inst_fps)
+        self._last_frame_time = now
+        fps_display = f"{self._fps_ema:.1f}" if self._fps_ema is not None else "—"
 
-        return annotated, session_id
+        mode_label = "AI VISION ACTIVE [RF-DETR + ByteTrack]" if real_mode else "SIMULE KONVEYOR [Demo]"
+        cv2.putText(annotated, f"● {mode_label}", (12, 21), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (100, 240, 120), 1, cv2.LINE_AA)
+        cv2.putText(annotated, f"FPS: {fps_display} | Gate X: {self.gate_x}px", (self.w - 220, 21), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (180, 200, 220), 1, cv2.LINE_AA)
 
 
 # Global instance per line
@@ -295,6 +426,7 @@ def get_stream_generator(line_id: int = 1) -> Generator[bytes, None, None]:
                     sess = sess_repo.get_active_session(line_id)
                     cached_session_id = sess.id if sess else None
             except Exception:
+                logger.exception("Failed to look up active session for line_id=%s", line_id)
                 cached_session_id = None
 
         session_id = cached_session_id
@@ -305,7 +437,14 @@ def get_stream_generator(line_id: int = 1) -> Generator[bytes, None, None]:
             if not ret:
                 renderer.video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 ret, frame = renderer.video_cap.read()
-            frame = cv2.resize(frame, (renderer.w, renderer.h))
+            # Letterbox (pad, don't stretch) to the display canvas size. A plain
+            # cv2.resize distorts the camera's real aspect ratio into whatever
+            # renderer.w/h is (e.g. a square-ish real frame squashed to 800x400
+            # 2:1), which visually warps bags out of the shape the detector was
+            # trained on -- verified this alone was enough to drop detections
+            # to zero on every real frame regardless of model quality.
+            from packages.cs_vision.preprocess import letterbox_image
+            frame, _, _ = letterbox_image(frame, (renderer.h, renderer.w), fill_value=20)
         else:
             frame = renderer.generate_conveyor_frame()
 

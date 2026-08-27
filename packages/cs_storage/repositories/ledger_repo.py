@@ -34,6 +34,8 @@ class LedgerRepository:
         deployment_bundle_id: int = 1,
         evidence_ref: str | None = None,
         event_id: str | None = None,
+        defect_reason: str | None = None,
+        is_simulated: bool = False,
     ) -> tuple[CountEventORM | None, bool]:
         """Record a crossing event in the ledger.
         
@@ -58,6 +60,8 @@ class LedgerRepository:
             merge_flag=merge_flag,
             deployment_bundle_id=deployment_bundle_id,
             evidence_ref=evidence_ref,
+            defect_reason=defect_reason,
+            is_simulated=is_simulated,
         )
         try:
             self.db.add(event)
@@ -103,6 +107,14 @@ class LedgerRepository:
             .limit(limit)
             .offset(offset)
         )
+        return self.db.execute(stmt).scalars().all()
+
+    def get_defect_events(self, line_id: int | None = None, limit: int = 200) -> Sequence[CountEventORM]:
+        """Audit log of counted bags later excluded as defective (§ post-gate exclusion)."""
+        stmt = select(CountEventORM).where(CountEventORM.defect_reason.isnot(None))
+        if line_id is not None:
+            stmt = stmt.where(CountEventORM.line_id == line_id)
+        stmt = stmt.order_by(CountEventORM.crossing_timestamp.desc()).limit(limit)
         return self.db.execute(stmt).scalars().all()
 
     def get_merge_count(self, session_id: int) -> int:

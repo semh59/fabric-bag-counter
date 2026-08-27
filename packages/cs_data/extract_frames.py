@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Generator
 import numpy as np
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 
 def extract_video_frames(
@@ -45,8 +48,11 @@ def extract_video_frames(
             frame_idx += 1
         container.close()
         return extracted
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "PyAV frame extraction failed for %s (%s); falling back to OpenCV.",
+            video_path, exc,
+        )
 
     # Fallback to OpenCV if av failed or not installed
     try:
@@ -72,6 +78,13 @@ def extract_video_frames(
             frame_idx += 1
         cap.release()
         return extracted
-    except Exception:
-        # Synthetic mock generator if video file is dummy/test
+    except Exception as exc:
+        # Neither PyAV nor OpenCV could decode this video (missing/corrupt
+        # file, unsupported codec, or unavailable dependency). Log it instead
+        # of silently swallowing the error, and return whatever frames (if
+        # any) were extracted before the failure.
+        logger.warning(
+            "OpenCV frame extraction failed for %s (%s); returning %d frame(s) extracted so far.",
+            video_path, exc, len(extracted),
+        )
         return extracted

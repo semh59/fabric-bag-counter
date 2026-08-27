@@ -1,0 +1,158 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap">
+  <style>
+    :root {
+      --bg-0: #0a0e17; --bg-1: #0f1524; --surface-1: #10182b; --surface-2: #161f36; --surface-3: #1c2740;
+      --border-1: #212e4a; --border-2: #2c3b5c;
+      --ink-0: #f4f6fb; --ink-1: #c7cfe0; --ink-2: #8994b3; --ink-3: #5c6789;
+      --indigo: #6366f1; --indigo-soft: rgba(99,102,241,0.14);
+      --emerald: #10b981; --emerald-soft: rgba(16,185,129,0.14);
+      --amber: #f59e0b; --amber-soft: rgba(245,158,11,0.14);
+      --slate-soft: rgba(148,163,184,0.14);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg-0); color: var(--ink-0); font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-feature-settings: "tnum" 1; }
+    button { font-family: inherit; cursor: pointer; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+  </style>
+</helmet>
+
+<div style="min-height:100vh; display:flex; flex-direction:column;">
+  <header style="height:60px; flex-shrink:0; background:var(--bg-1); border-bottom:1px solid var(--border-1); display:flex; align-items:center; justify-content:space-between; padding:0 20px;">
+    <div style="display:flex; align-items:center; gap:20px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:32px; height:32px; border-radius:8px; background:var(--indigo); display:flex; align-items:center; justify-content:center;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="1.5"></rect><path d="M8 8V6a4 4 0 0 1 8 0v2"></path></svg>
+        </div>
+        <div>
+          <div style="font-size:13.5px; font-weight:700; letter-spacing:-0.01em; line-height:1.1;">Çuval Sayım <span style="color:var(--indigo); font-weight:600; font-size:10.5px;">v2.1</span></div>
+          <div style="font-size:10px; color:var(--ink-3); font-family:'IBM Plex Mono',monospace; line-height:1.3;">Gebze Çimento &amp; Yapı Kimyasalları</div>
+        </div>
+      </div>
+      <nav style="display:flex; align-items:center; gap:1px; background:var(--surface-1); border:1px solid var(--border-1); border-radius:10px; padding:3px;">
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Canlı Sayım</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Oturumlar</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Mutabakat</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Kamera &amp; Model Kurulumu</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Fabrika Kurulumu</div>
+        <div style="padding:5px 10px; border-radius:7px; background:var(--indigo); color:white; font-size:10.5px; font-weight:600; white-space:nowrap;">Veri &amp; Model</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Hat Envanteri</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Sistem</div>
+      </nav>
+    </div>
+    <div style="display:flex; align-items:center; gap:2px; background:var(--surface-1); border:1px solid var(--border-1); border-radius:9px; padding:3px;">
+      <div style="padding:5px 11px; border-radius:6px; color:var(--ink-3); font-size:11px; font-weight:600;">Operatör</div>
+      <div style="padding:5px 11px; border-radius:6px; background:var(--surface-3); color:var(--ink-0); font-size:11px; font-weight:600;">Mühendis</div>
+      <div style="padding:5px 11px; border-radius:6px; color:var(--ink-3); font-size:11px; font-weight:600;">Yönetici</div>
+    </div>
+  </header>
+
+  <main style="flex:1; padding:22px 24px 32px; max-width:1440px; width:100%; margin:0 auto;">
+    <div style="background:var(--surface-1); border:1px solid var(--border-1); border-radius:14px; padding:22px;">
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:20px; flex-wrap:wrap;">
+        <div>
+          <div style="font-size:16px; font-weight:700; letter-spacing:-0.01em;">Model Kayıt Defteri</div>
+          <div style="font-size:11.5px; color:var(--ink-3); margin-top:3px;">RF-DETR Seg model sürümleri — taslak → gölge → üretim yaşam döngüsü</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; padding:8px 14px; background:var(--indigo-soft); border-radius:9px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a5b4fc" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+          <span style="font-size:11px; color:#c7d2fe;">Yeni ince ayar, canlı kamera verisiyle <b>Kamera &amp; Model Kurulumu</b> akışından başlatılır</span>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <sc-for list="{{models}}" as="m" hint-placeholder-count="4">
+          <div style="display:flex; align-items:center; gap:18px; padding:16px; background:var(--surface-2); border:1px solid {{m.rowBorder}}; border-radius:12px; flex-wrap:wrap;">
+            <div style="min-width:170px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="mono" style="font-size:13px; font-weight:700; color:var(--ink-0);">{{m.name}}</span>
+              </div>
+              <span style="display:inline-block; margin-top:6px; font-size:9.5px; font-weight:700; padding:3px 8px; border-radius:99px; background:{{m.stageBg}}; color:{{m.stageFg}};">{{m.stageLabel}}</span>
+            </div>
+
+            <div style="display:flex; gap:20px; flex:1;">
+              <div><div style="font-size:9px; color:var(--ink-3); font-weight:600;">mAP@50</div><div class="mono" style="font-size:14px; font-weight:700;">{{m.map}}</div></div>
+              <div><div style="font-size:9px; color:var(--ink-3); font-weight:600;">FPS</div><div class="mono" style="font-size:14px; font-weight:700;">{{m.fps}}</div></div>
+              <div><div style="font-size:9px; color:var(--ink-3); font-weight:600;">GECİKME</div><div class="mono" style="font-size:14px; font-weight:700;">{{m.latency}}</div></div>
+              <div><div style="font-size:9px; color:var(--ink-3); font-weight:600;">EĞİTİM VERİSİ</div><div class="mono" style="font-size:14px; font-weight:700;">{{m.dataMix}}</div></div>
+            </div>
+
+            <div style="display:flex; gap:8px;">
+              <sc-if value="{{m.canPromote}}" hint-placeholder-val="{{false}}">
+                <button onclick="{{m.onPromote}}" style="padding:7px 13px; border-radius:8px; border:none; background:var(--indigo); color:white; font-size:11px; font-weight:700;">{{m.promoteLabel}}</button>
+              </sc-if>
+              <sc-if value="{{m.canRollback}}" hint-placeholder-val="{{false}}">
+                <button onclick="{{m.onRollback}}" style="padding:7px 13px; border-radius:8px; border:1px solid var(--border-2); background:transparent; color:var(--ink-2); font-size:11px; font-weight:600;">Geri Al</button>
+              </sc-if>
+              <button style="padding:7px 13px; border-radius:8px; border:1px solid var(--border-2); background:transparent; color:var(--ink-2); font-size:11px; font-weight:600;">ONNX İndir</button>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      stages: { v3: 'shadow', v21: 'active', v20: 'retired' },
+    };
+  }
+
+  promote(key, nextStage) {
+    this.setState((s) => {
+      const stages = { ...s.stages };
+      if (nextStage === 'active') {
+        Object.keys(stages).forEach((k) => { if (stages[k] === 'active') stages[k] = 'retired'; });
+      }
+      stages[key] = nextStage;
+      return { stages };
+    });
+  }
+
+  renderVals() {
+    const s = this.state;
+    const base = [
+      { key: 'v3', name: 'rfdetr_seg_v3', map: '%97.1', fps: '54.0', latency: '18.2 ms', dataMix: 'gerçek + sentetik' },
+      { key: 'v21', name: 'rfdetr_seg_v2.1', map: '%96.8', fps: '52.4', latency: '19.1 ms', dataMix: 'sentetik' },
+      { key: 'v20', name: 'rfdetr_seg_v2.0', map: '%94.2', fps: '51.9', latency: '19.4 ms', dataMix: 'sentetik' },
+    ];
+    const stageMeta = {
+      draft: { label: 'TASLAK', bg: 'var(--slate-soft)', fg: 'var(--ink-2)', border: 'var(--border-1)' },
+      shadow: { label: 'GÖLGE MOD', bg: 'var(--amber-soft)', fg: '#fbbf24', border: 'var(--amber)' },
+      active: { label: 'ÜRETİMDE', bg: 'var(--emerald-soft)', fg: '#6ee7b7', border: 'var(--emerald)' },
+      retired: { label: 'EMEKLİ', bg: 'var(--slate-soft)', fg: 'var(--ink-3)', border: 'var(--border-1)' },
+    };
+
+    const models = base.map((m) => {
+      const stage = s.stages[m.key];
+      const sm = stageMeta[stage];
+      return {
+        name: m.name, map: m.map, fps: m.fps, latency: m.latency, dataMix: m.dataMix,
+        stageLabel: sm.label, stageBg: sm.bg, stageFg: sm.fg, rowBorder: sm.border,
+        canPromote: stage === 'shadow',
+        promoteLabel: 'Üretime Al',
+        onPromote: () => this.promote(m.key, 'active'),
+        canRollback: stage === 'active',
+        onRollback: () => this.promote(m.key, 'shadow'),
+      };
+    });
+
+    return { models };
+  }
+}
+</script>
+</body>
+</html>

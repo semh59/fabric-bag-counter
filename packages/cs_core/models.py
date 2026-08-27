@@ -116,12 +116,23 @@ class GpuSharingMode(str, Enum):
     ALWAYS = "always"
 
 
+class SourceDriverKind(str, Enum):
+    """Video capture driver kinds, matching the modules under drivers/ that
+    implement the VideoSource protocol (see
+    packages/cs_core/interfaces/video_source.py)."""
+    RTSP = "rtsp"          # drivers/video_rtsp
+    FILE = "file"          # drivers/video_file
+
+
 # ---------------------------------------------------------------------------
 # Pydantic Domain Schemas
 # ---------------------------------------------------------------------------
 
 class SiteBase(BaseModel):
     name: str
+    # NOTE: "Europe/Istanbul" / "tr_TR" are this deployment's site defaults
+    # (this codebase targets a Turkish industrial site), not universal
+    # defaults -- a multi-region deployment must set these explicitly per site.
     timezone: str = "Europe/Istanbul"
     locale: str = "tr_TR"
 
@@ -157,7 +168,7 @@ class Line(LineBase):
 class CameraBase(BaseModel):
     line_id: int
     node_id: int
-    source_driver: str = "rtsp"  # e.g., rtsp, file
+    source_driver: SourceDriverKind = SourceDriverKind.RTSP
     source_config: dict[str, Any] = Field(default_factory=dict)
     role: CameraRole = CameraRole.COUNTING
     enabled: bool = True

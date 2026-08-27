@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 import numpy as np
 from packages.cs_core.frame import Frame
 from packages.cs_counting.engine import CountingEngine
-from services.transport.shared_memory import SharedMemoryTransport
+from packages.cs_core.transport import SharedMemoryTransport
 
 
 def benchmark_pipeline(num_cameras: int = 2, frames_per_camera: int = 100) -> dict[str, float]:

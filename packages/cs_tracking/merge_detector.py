@@ -113,18 +113,22 @@ class MergeDetector:
         if is_merged:
             if marks_inside >= 2:
                 estimated_count = marks_inside
-            elif self.mean_bag_gate_area_px and self.mean_bag_gate_area_px > 0:
+            else:
+                # self.mean_bag_gate_area_px is guaranteed not None here: this
+                # method returns early above whenever scale calibration is
+                # inactive or the mean area is None, and a valid calibration
+                # mean area is always a positive pixel count -- so the old
+                # "no calibration" else-branch below this block was dead code.
                 area_ratio = mask_area / self.mean_bag_gate_area_px
                 if area_ratio >= 3.4:
                     estimated_count = max(4, int(round(area_ratio / 0.85)))
                 elif area_ratio >= 2.4:
                     estimated_count = 3
-                elif area_ratio >= self.merge_area_ratio:
-                    estimated_count = 2
                 else:
+                    # Covers both the "just over merge_area_ratio" case and
+                    # any other merged case not caught above -- both map to
+                    # the same 2-bag estimate.
                     estimated_count = 2
-            else:
-                estimated_count = 2
 
             cx = (box[0] + box[2]) / 2.0
             cy = (box[1] + box[3]) / 2.0

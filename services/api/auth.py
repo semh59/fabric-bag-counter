@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 import jwt
@@ -17,8 +18,25 @@ from packages.cs_storage.repositories.user_repo import UserRepository
 
 logger = logging.getLogger(__name__)
 
-# Secret key and algorithm for cryptographically signed JWT tokens
-SECRET_KEY = os.getenv("SECRET_KEY", "cuval_secret_production_key_2026")
+# Secret key and algorithm for cryptographically signed JWT tokens.
+# If SECRET_KEY is not set in the environment, generate a random one at
+# process startup rather than falling back to a hardcoded, production-looking
+# default. This is stable for the lifetime of this process (so tests and a
+# single running server behave consistently), but ephemeral: existing
+# sessions/tokens are invalidated on every restart unless a real SECRET_KEY is
+# configured. That tradeoff is intentional -- a hardcoded fallback secret is a
+# far worse security posture than forcing re-login after a restart.
+_env_secret = os.getenv("SECRET_KEY")
+if _env_secret:
+    SECRET_KEY = _env_secret
+else:
+    SECRET_KEY = secrets.token_hex(32)
+    logger.warning(
+        "[Auth] SECRET_KEY is not set in the environment! Generated a random, "
+        "ephemeral secret key for this process. ALL existing JWT sessions will "
+        "be invalidated on the next restart. Set the SECRET_KEY environment "
+        "variable for a stable production deployment."
+    )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))  # 24 hours
 

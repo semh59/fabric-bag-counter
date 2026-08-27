@@ -1,0 +1,198 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap">
+  <style>
+    :root {
+      --bg-0: #0a0e17; --bg-1: #0f1524; --surface-1: #10182b; --surface-2: #161f36; --surface-3: #1c2740;
+      --border-1: #212e4a; --border-2: #2c3b5c;
+      --ink-0: #f4f6fb; --ink-1: #c7cfe0; --ink-2: #8994b3; --ink-3: #5c6789;
+      --indigo: #6366f1; --indigo-soft: rgba(99,102,241,0.14);
+      --emerald: #10b981; --emerald-soft: rgba(16,185,129,0.14);
+      --amber: #f59e0b; --amber-soft: rgba(245,158,11,0.14);
+      --purple: #8b5cf6; --purple-soft: rgba(139,92,246,0.14);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg-0); color: var(--ink-0); font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-feature-settings: "tnum" 1; }
+    button { font-family: inherit; cursor: pointer; }
+    table { border-collapse: collapse; width: 100%; }
+    th { text-align: left; font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-3); padding: 10px 14px; border-bottom: 1px solid var(--border-1); }
+    td { padding: 11px 14px; font-size: 12px; color: var(--ink-1); border-bottom: 1px solid var(--border-1); }
+    tr:hover td { background: var(--surface-2); }
+    @keyframes fadeUp { from { opacity:0; transform: translateY(6px);} to { opacity:1; transform: translateY(0);} }
+    .fade-up { animation: fadeUp 0.2s ease-out; }
+    @keyframes livePulse { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
+    .pulse-dot { animation: livePulse 1.6s ease-in-out infinite; }
+  </style>
+</helmet>
+
+<div style="min-height:100vh; display:flex; flex-direction:column;">
+  <header style="height:60px; flex-shrink:0; background:var(--bg-1); border-bottom:1px solid var(--border-1); display:flex; align-items:center; justify-content:space-between; padding:0 20px;">
+    <div style="display:flex; align-items:center; gap:20px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:32px; height:32px; border-radius:8px; background:var(--indigo); display:flex; align-items:center; justify-content:center;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="1.5"></rect><path d="M8 8V6a4 4 0 0 1 8 0v2"></path></svg>
+        </div>
+        <div>
+          <div style="font-size:13.5px; font-weight:700; letter-spacing:-0.01em; line-height:1.1;">Çuval Sayım <span style="color:var(--indigo); font-weight:600; font-size:10.5px;">v2.1</span></div>
+          <div style="font-size:10px; color:var(--ink-3); font-family:'IBM Plex Mono',monospace; line-height:1.3;">Gebze Çimento &amp; Yapı Kimyasalları</div>
+        </div>
+      </div>
+      <nav style="display:flex; align-items:center; gap:1px; background:var(--surface-1); border:1px solid var(--border-1); border-radius:10px; padding:3px;">
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Canlı Sayım</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Oturumlar</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Mutabakat</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Kamera &amp; Model Kurulumu</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Fabrika Kurulumu</div>
+        <div style="padding:5px 10px; border-radius:7px; background:var(--indigo); color:white; font-size:10.5px; font-weight:600; white-space:nowrap;">Veri &amp; Model</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Hat Envanteri</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Sistem</div>
+      </nav>
+    </div>
+    <div style="display:flex; align-items:center; gap:2px; background:var(--surface-1); border:1px solid var(--border-1); border-radius:9px; padding:3px;">
+      <div style="padding:5px 11px; border-radius:6px; color:var(--ink-3); font-size:11px; font-weight:600;">Operatör</div>
+      <div style="padding:5px 11px; border-radius:6px; background:var(--surface-3); color:var(--ink-0); font-size:11px; font-weight:600;">Mühendis</div>
+      <div style="padding:5px 11px; border-radius:6px; color:var(--ink-3); font-size:11px; font-weight:600;">Yönetici</div>
+    </div>
+  </header>
+
+  <main style="flex:1; padding:22px 24px 32px; max-width:1440px; width:100%; margin:0 auto; display:flex; flex-direction:column; gap:18px;">
+
+    <div style="background:var(--surface-1); border:1px solid var(--border-1); border-radius:14px; padding:22px;">
+      <div style="font-size:16px; font-weight:700; letter-spacing:-0.01em; margin-bottom:2px;">Veri &amp; Sentetik Üretim</div>
+      <div style="font-size:11.5px; color:var(--ink-3); margin-bottom:18px;">Eğitim veri seti hattı: kare çıkarma, sentetik zenginleştirme, zor kare madenciliği ve sürüm derleme.</div>
+
+      <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px;">
+        <sc-for list="{{jobCards}}" as="jc" hint-placeholder-count="4">
+          <button onclick="{{jc.onRun}}" style="text-align:left; padding:16px; border-radius:11px; border:1px solid var(--border-1); background:var(--surface-2); display:flex; flex-direction:column; gap:10px;">
+            <div style="width:32px; height:32px; border-radius:8px; background:{{jc.iconBg}}; display:flex; align-items:center; justify-content:center; color:{{jc.iconFg}};">
+              <sc-if value="{{jc.isExtract}}" hint-placeholder-val="{{true}}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="14" height="11" rx="2"></rect><path d="M22 6.5l-6 4 6 4v-8z"></path></svg></sc-if>
+              <sc-if value="{{jc.isSynth}}" hint-placeholder-val="{{false}}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v4M15 3v4M9 21v-4M15 21v-4M3 9h4M3 15h4M21 9h-4M21 15h-4"></path><rect x="7" y="7" width="10" height="10" rx="2"></rect></svg></sc-if>
+              <sc-if value="{{jc.isMine}}" hint-placeholder-val="{{false}}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line><path d="M11 8v3l2 2"></path></svg></sc-if>
+              <sc-if value="{{jc.isBuild}}" hint-placeholder-val="{{false}}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg></sc-if>
+            </div>
+            <div style="font-size:12px; font-weight:700; color:var(--ink-0);">{{jc.title}}</div>
+            <div style="font-size:10.5px; color:var(--ink-3); line-height:1.4;">{{jc.desc}}</div>
+          </button>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1.2fr 1fr; gap:18px; align-items:start;">
+      <div style="background:var(--surface-1); border:1px solid var(--border-1); border-radius:14px; padding:20px;">
+        <div style="font-size:12.5px; font-weight:700; margin-bottom:12px;">İş Kuyruğu</div>
+        <div style="overflow-x-auto">
+          <table>
+            <thead><tr><th>İş</th><th>Tür</th><th>Durum</th><th>İlerleme</th></tr></thead>
+            <tbody>
+              <sc-for list="{{jobs}}" as="j" hint-placeholder-count="3">
+                <tr>
+                  <td class="mono" style="font-weight:700; color:var(--ink-0);">#{{j.id}}</td>
+                  <td>{{j.kind}}</td>
+                  <td><span style="font-size:9.5px; font-weight:700; padding:3px 8px; border-radius:99px; background:{{j.badgeBg}}; color:{{j.badgeFg}};">{{j.badgeLabel}}</span></td>
+                  <td style="width:140px;">
+                    <div style="height:5px; background:var(--surface-3); border-radius:99px; overflow:hidden;"><div style="height:100%; background:{{j.barColor}}; width:{{j.pct}}%; transition:width .15s linear;"></div></div>
+                  </td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style="background:var(--surface-1); border:1px solid var(--border-1); border-radius:14px; padding:20px;">
+        <div style="font-size:12.5px; font-weight:700; margin-bottom:12px;">Veri Setleri</div>
+        <div style="display:flex; flex-direction:column; gap:9px;">
+          <sc-for list="{{datasets}}" as="d" hint-placeholder-count="3">
+            <div style="display:flex; align-items:center; gap:10px; padding:11px; background:var(--surface-2); border:1px solid var(--border-1); border-radius:9px;">
+              <div style="flex:1; min-width:0;">
+                <div style="font-size:11.5px; font-weight:700; color:var(--ink-0);">{{d.name}}</div>
+                <div class="mono" style="font-size:10px; color:var(--ink-3); margin-top:2px;">{{d.frames}} kare · {{d.annotations}} etiket · {{d.format}}</div>
+              </div>
+              <span style="font-size:9px; font-weight:700; padding:3px 7px; border-radius:6px; background:var(--emerald-soft); color:#6ee7b7; flex-shrink:0;">{{d.status}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      jobs: [
+        { id: 512, kind: 'build_dataset', status: 'completed', pct: 100 },
+        { id: 511, kind: 'synthesize', status: 'completed', pct: 100 },
+      ],
+      nextId: 513,
+    };
+    this._timers = [];
+  }
+  componentWillUnmount() { this._timers.forEach(clearInterval); }
+
+  runJob(kind) {
+    const id = this.state.nextId;
+    this.setState((s) => ({ jobs: [{ id, kind, status: 'queued', pct: 0 }, ...s.jobs], nextId: s.nextId + 1 }));
+    const startT = setTimeout(() => {
+      this.setState((s) => ({ jobs: s.jobs.map((j) => j.id === id ? { ...j, status: 'running' } : j) }));
+      const iv = setInterval(() => {
+        this.setState((s) => {
+          const jobs = s.jobs.map((j) => {
+            if (j.id !== id) return j;
+            const next = Math.min(100, j.pct + 14);
+            return { ...j, pct: next, status: next >= 100 ? 'completed' : 'running' };
+          });
+          if (jobs.find((j) => j.id === id).pct >= 100) clearInterval(iv);
+          return { jobs };
+        });
+      }, 220);
+      this._timers.push(iv);
+    }, 500);
+    this._timers.push(startT);
+  }
+
+  renderVals() {
+    const cardMeta = [
+      { key: 'extract_frames', flag: 'isExtract', title: 'Kare Çıkarıcı', desc: 'Video akışından periyodik eğitim kareleri çıkarır.', bg: 'var(--indigo-soft)', fg: '#a5b4fc' },
+      { key: 'synthesize', flag: 'isSynth', title: 'Sentetik Çuval Üret', desc: 'Arka plana harmanlanmış fotogerçekçi sahneler üretir.', bg: 'var(--purple-soft)', fg: '#c4b5fd' },
+      { key: 'mine_hard_frames', flag: 'isMine', title: 'Zor Kare Madenciliği', desc: 'Düşük güven / örtüşme olan kareleri insan onayına önceliklendirir.', bg: 'var(--amber-soft)', fg: '#fbbf24' },
+      { key: 'build_dataset', flag: 'isBuild', title: 'Dataset Sürümü Derle', desc: 'Eğitim/test ayrımı ile COCO formatında paketler.', bg: 'var(--emerald-soft)', fg: '#6ee7b7' },
+    ];
+    const jobCards = cardMeta.map((m) => ({
+      title: m.title, desc: m.desc, iconBg: m.bg, iconFg: m.fg,
+      isExtract: m.flag === 'isExtract', isSynth: m.flag === 'isSynth', isMine: m.flag === 'isMine', isBuild: m.flag === 'isBuild',
+      onRun: () => this.runJob(m.key),
+    }));
+
+    const badgeFor = (status) => {
+      if (status === 'completed') return { label: 'TAMAMLANDI', bg: 'var(--emerald-soft)', fg: '#6ee7b7', bar: 'var(--emerald)' };
+      if (status === 'running') return { label: 'ÇALIŞIYOR', bg: 'var(--indigo-soft)', fg: '#a5b4fc', bar: 'var(--indigo)' };
+      return { label: 'KUYRUKTA', bg: 'var(--surface-3)', fg: 'var(--ink-2)', bar: 'var(--ink-3)' };
+    };
+    const jobs = this.state.jobs.map((j) => {
+      const b = badgeFor(j.status);
+      return { id: j.id, kind: j.kind, pct: j.pct, badgeLabel: b.label, badgeBg: b.bg, badgeFg: b.fg, barColor: b.bar };
+    });
+
+    const datasets = [
+      { name: 'cuval_v4_gebze', frames: '5,400', annotations: '1,380', format: 'COCO', status: 'HAZIR' },
+      { name: 'cuval_v3_zor_kareler', frames: '820', annotations: '410', format: 'COCO', status: 'HAZIR' },
+      { name: 'cuval_v2_baseline', frames: '3,120', annotations: '3,120', format: 'YOLO', status: 'ARŞİV' },
+    ];
+
+    return { jobCards, jobs, datasets };
+  }
+}
+</script>
+</body>
+</html>

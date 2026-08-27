@@ -5,6 +5,17 @@ from __future__ import annotations
 from typing import Sequence
 import numpy as np
 
+# Normalizes belt_speed_px_per_frame (pixels/frame) down to a "per-100px-of-
+# travel" unit before scaling accumulated mask area. This keeps the area
+# integral's magnitude stable across different calibrated belt speeds --
+# without it, a faster belt would inflate accumulated_area purely from
+# larger belt_speed values, independent of how much bag area actually
+# passed the gate. 100.0 is an arbitrary but fixed reference scale (not a
+# physical unit), chosen so belt speeds in the tens-of-px/frame range used
+# throughout this codebase produce a per-frame area contribution close to
+# the raw frame_area itself.
+SPEED_NORMALIZATION_DIVISOR = 100.0
+
 
 class AreaIntegralCounter:
     """Independent second count estimator integrating mask areas over the gate region.
@@ -54,8 +65,8 @@ class AreaIntegralCounter:
             # Area flux = (instantaneous_area / nominal_bag_length_px) * belt_speed
             # Alternatively, area integral scaled by frame sampling speed
             speed = max(1.0, belt_speed_px_per_frame)
-            # Area slice normalized per frame
-            self.accumulated_area += frame_area * (speed / 100.0)
+            # Area slice normalized per frame (see SPEED_NORMALIZATION_DIVISOR)
+            self.accumulated_area += frame_area * (speed / SPEED_NORMALIZATION_DIVISOR)
             self.observed_frames_with_bag += 1
 
         return self.get_estimate()

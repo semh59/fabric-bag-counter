@@ -1,0 +1,27 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1440, "h": 960 },
+    { "file": "Sessions.dc.html", "x": 1560, "y": 0, "w": 1440, "h": 820 },
+    { "file": "Reconciliation.dc.html", "x": 3120, "y": 0, "w": 1440, "h": 760 },
+
+    { "file": "Setup.dc.html", "x": 0, "y": 1120, "w": 1440, "h": 820 },
+    { "file": "Wizard.dc.html", "x": 1560, "y": 1120, "w": 1440, "h": 760 },
+    { "file": "Data.dc.html", "x": 3120, "y": 1120, "w": 1440, "h": 700 },
+
+    { "file": "ModelRegistry.dc.html", "x": 0, "y": 2100, "w": 1440, "h": 620 },
+    { "file": "LineInventory.dc.html", "x": 1560, "y": 2100, "w": 1440, "h": 640 },
+    { "file": "System.dc.html", "x": 3120, "y": 2100, "w": 1440, "h": 700 }
+  ],
+  "annotations": [
+    { "id": "note-live", "x": 0, "y": -100, "w": 320, "text": "Canlı Sayım — operatör komuta ekranı" },
+    { "id": "note-sessions", "x": 1560, "y": -100, "w": 320, "text": "Oturumlar — sevkiyat ve defter yönetimi" },
+    { "id": "note-recon", "x": 3120, "y": -100, "w": 320, "text": "Mutabakat — denetim ve ayrışma çözümü" },
+    { "id": "note-setup", "x": 0, "y": 1020, "w": 480, "text": "Kamera Bağla → Kalibre Et → Ürün Profili → Gerçek Veriyle İnce Ayar: dağınık ayarlar/eğitim sekmeleri yerine tek akış." },
+    { "id": "note-wizard", "x": 1560, "y": 1020, "w": 320, "text": "Fabrika Kurulumu — tesis/hat/ürün topolojisi" },
+    { "id": "note-data", "x": 3120, "y": 1020, "w": 320, "text": "Veri & Sentetik — iş kuyruğu ve dataset kayıtları" },
+    { "id": "note-model", "x": 0, "y": 2000, "w": 380, "text": "Model Kayıt Defteri — taslak/gölge/üretim yaşam döngüsü" },
+    { "id": "note-lines", "x": 1560, "y": 2000, "w": 320, "text": "Hat Envanteri — filo genelinde kalibrasyon durumu" },
+    { "id": "note-system", "x": 3120, "y": 2000, "w": 320, "text": "Sistem — altyapı sağlığı ve iş kuyrukları" }
+  ],
+  "launch": { "view": "canvas" }
+}

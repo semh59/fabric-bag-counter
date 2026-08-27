@@ -12,6 +12,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     SmallInteger,
     String,
@@ -168,7 +169,15 @@ class TrainingRunORM(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     dataset_version_id: Mapped[int] = mapped_column(Integer, ForeignKey("dataset_version.id", ondelete="CASCADE"), nullable=False)
-    base_model_version_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Nullable: a base ("from scratch") training run has no prior model version to reference.
+    # use_alter=True: this FK and ModelVersionORM.training_run_id form a genuine
+    # cycle between the two tables, so DDL must create/drop it via a separate
+    # ALTER TABLE rather than inline (which SQLAlchemy can't topologically sort).
+    base_model_version_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("model_version.id", ondelete="SET NULL", use_alter=True, name="fk_training_run_base_model_version"),
+        nullable=True,
+    )
     run_kind: Mapped[str] = mapped_column(String(32), default="base")  # base | site_adaptation
     hyperparams: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     status: Mapped[str] = mapped_column(String(32), default="queued")
@@ -178,7 +187,14 @@ class TrainingRunORM(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     dataset_version = relationship("DatasetVersionORM", back_populates="training_runs")
-    model_versions = relationship("ModelVersionORM", back_populates="training_run")
+    # Two distinct FK paths now link training_run <-> model_version (the run's own
+    # produced versions, via ModelVersionORM.training_run_id; and the base model
+    # this run started from, via base_model_version_id) -- both relationships must
+    # pin their foreign_keys explicitly or SQLAlchemy can't tell them apart.
+    model_versions = relationship(
+        "ModelVersionORM", back_populates="training_run", foreign_keys="ModelVersionORM.training_run_id"
+    )
+    base_model_version = relationship("ModelVersionORM", foreign_keys=[base_model_version_id])
 
 
 class ModelVersionORM(Base):
@@ -192,7 +208,9 @@ class ModelVersionORM(Base):
     stage: Mapped[str] = mapped_column(String(32), default="draft")  # draft | shadow | active | retired
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
-    training_run = relationship("TrainingRunORM", back_populates="model_versions")
+    training_run = relationship(
+        "TrainingRunORM", back_populates="model_versions", foreign_keys=[training_run_id]
+    )
     bundles = relationship("DeploymentBundleORM", back_populates="model_version")
 
 
@@ -234,7 +252,9 @@ class SessionORM(Base):
     __tablename__ = "session"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    line_id: Mapped[int] = mapped_column(Integer, ForeignKey("line.id", ondelete="CASCADE"), nullable=False)
+    # Indexed: get_active_session()/list_sessions() filter/order on line_id on every
+    # session lookup and every poll of the current line status.
+    line_id: Mapped[int] = mapped_column(Integer, ForeignKey("line.id", ondelete="CASCADE"), nullable=False, index=True)
     product_profile_id: Mapped[int] = mapped_column(Integer, ForeignKey("product_profile.id"), nullable=False)
     external_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
     target_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -245,6 +265,9 @@ class SessionORM(Base):
     counted_total: Mapped[int] = mapped_column(Integer, default=0)
     area_estimate_total: Mapped[float] = mapped_column(Float, default=0.0)
     discrepancy_flag: Mapped[bool] = mapped_column(Boolean, default=False)
+    vehicle_plate: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    driver_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    carrier_company: Mapped[str | None] = mapped_column(String(255), nullable=True)
     reconciliation_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("reconciliation.id", use_alter=True, name="fk_session_reconciliation"), nullable=True
     )
@@ -262,18 +285,30 @@ class CountEventORM(Base):
 
     event_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     session_id: Mapped[int] = mapped_column(Integer, ForeignKey("session.id", ondelete="CASCADE"), nullable=False)
-    line_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    camera_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    line_id: Mapped[int] = mapped_column(Integer, ForeignKey("line.id"), nullable=False)
+    camera_id: Mapped[int] = mapped_column(Integer, ForeignKey("camera.id"), nullable=False)
     stream_epoch: Mapped[int] = mapped_column(BigInteger, nullable=False)
     track_id: Mapped[int] = mapped_column(Integer, nullable=False)
     crossing_seq: Mapped[int] = mapped_column(Integer, nullable=False)  # Track-specific monotonic crossing seq (§5.5)
-    gate_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    gate_id: Mapped[int] = mapped_column(Integer, ForeignKey("gate.id"), nullable=False)
     crossing_timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     frame_index: Mapped[int] = mapped_column(BigInteger, nullable=False)
     direction: Mapped[int] = mapped_column(SmallInteger, nullable=False)  # +1 forward, -1 backward
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     merge_flag: Mapped[bool] = mapped_column(Boolean, default=False)
-    deployment_bundle_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    # Set when this event is a defect exclusion (a bag already counted at the
+    # gate is later pulled -- e.g. found torn while loading) rather than a
+    # normal crossing or a plain miscount rollback. Distinguishes "we removed
+    # a damaged bag" from "we corrected a double-count" in the audit trail.
+    defect_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # True only for events generated by the demo/simulated conveyor path
+    # (LiveStreamRenderer's synthetic self.bags animation, or the
+    # /sessions/{id}/simulate_bag operator control), never for a genuine
+    # gate crossing produced by the real CountingEngine pipeline. Lets
+    # downstream consumers (ledger views, reconciliation, exports) tell real
+    # counted bags apart from demo/test traffic that shares the same ledger.
+    is_simulated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deployment_bundle_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("deployment_bundle.id"), nullable=False)
     evidence_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -308,7 +343,8 @@ class JobORM(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     kind: Mapped[str] = mapped_column(String(64), nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    status: Mapped[str] = mapped_column(String(32), default="queued")  # queued | running | completed | failed | cancelled
+    # Indexed: acquire_next_job()/list_jobs() filter on status on every poll of the queue.
+    status: Mapped[str] = mapped_column(String(32), default="queued", index=True)  # queued | running | completed | failed | cancelled
     priority: Mapped[int] = mapped_column(Integer, default=0)
     requires_gpu: Mapped[bool] = mapped_column(Boolean, default=False)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
@@ -336,6 +372,12 @@ class OutboxORM(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     session = relationship("SessionORM", back_populates="outbox_entries")
+
+    __table_args__ = (
+        # fetch_pending_entries()/claim step filters on status + next_attempt_at on every
+        # dispatcher poll; composite index matches that WHERE clause directly.
+        Index("ix_outbox_status_next_attempt_at", "status", "next_attempt_at"),
+    )
 
 
 class UserAccountORM(Base):

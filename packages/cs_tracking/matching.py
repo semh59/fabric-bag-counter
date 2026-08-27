@@ -27,6 +27,10 @@ def compute_cost_matrix(
     """
     n_tracks = len(tracks)
     n_dets = len(detections)
+    # Default to maximum cost (1.0 = "no match") for every (track, detection)
+    # pair. This is the safe starting assumption before any pair is actually
+    # scored below, and it is also what a missing mask degrades to (see
+    # mask_cost below) rather than an unfilled/undefined value.
     cost_matrix = np.ones((n_tracks, n_dets), dtype=np.float32)
 
     if n_tracks == 0 or n_dets == 0:
@@ -45,6 +49,17 @@ def compute_cost_matrix(
             )
 
             # 1. Mask IoU cost
+            #
+            # When either side has no mask (e.g. the fallback bbox-only
+            # detector path, or a brand-new track not yet assigned a mask),
+            # we cannot measure IoU at all -- there is no "unknown" value in
+            # a cost matrix, so this deliberately assumes the worst case
+            # (iou=0.0 -> mask_cost=1.0) rather than silently guessing a
+            # good match. Since w_mask=0.70 dominates the weighting below,
+            # association in that situation is effectively driven almost
+            # entirely by centroid distance alone (the w_dist=0.30 term),
+            # not truly disabled -- just heavily penalized versus a real
+            # mask-IoU match.
             if track_mask is not None and det_mask is not None:
                 iou = compute_mask_iou(track_mask, det_mask)
             else:

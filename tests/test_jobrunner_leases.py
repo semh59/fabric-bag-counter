@@ -1,5 +1,6 @@
 """Unit tests for Job queue leasing, heartbeat, and expired lease recovery (§5.8)."""
 
+import threading
 from datetime import datetime, timedelta, timezone
 from packages.cs_storage.db import get_sync_session, init_db_sync
 from packages.cs_storage.models_orm import JobORM
@@ -50,3 +51,53 @@ def test_expired_lease_reclaim():
         reclaimed_job = repo.get_job(leased.id)
         assert reclaimed_job.status == "queued"
         assert reclaimed_job.attempts == 1
+
+
+def test_concurrent_acquire_next_job_never_double_acquires():
+    """acquire_next_job() must be atomic: with N workers racing for 1 job,
+    exactly one worker acquires it and every other worker gets None.
+
+    A naive "SELECT candidate then UPDATE it" implementation is vulnerable to
+    two threads both selecting the same queued row before either commits its
+    UPDATE, so both "acquire" the same job. This drives many concurrent
+    threads (real OS threads, each with its own DB session/connection -- not
+    just sequential calls) at a single queued job and asserts the winner set
+    has size exactly 1.
+    """
+    init_db_sync()
+    with get_sync_session() as db:
+        repo = JobRepository(db)
+        job = repo.submit_job(kind="synthesize", payload={"count": 1}, priority=1)
+        job_id = job.id
+
+    winners: list[int] = []
+    errors: list[Exception] = []
+    lock = threading.Lock()
+    n_workers = 12
+
+    def worker() -> None:
+        try:
+            with get_sync_session() as db:
+                repo = JobRepository(db)
+                acquired = repo.acquire_next_job(lease_seconds=60)
+                if acquired is not None:
+                    with lock:
+                        winners.append(acquired.id)
+        except Exception as exc:  # pragma: no cover - surfaced via assertion below
+            with lock:
+                errors.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(n_workers)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, f"acquire_next_job raised under concurrency: {errors}"
+    assert winners == [job_id], f"expected exactly one winner ({job_id}), got {winners}"
+
+    with get_sync_session() as db:
+        repo = JobRepository(db)
+        final = repo.get_job(job_id)
+        assert final.status == "running"
+        assert final.attempts == 1

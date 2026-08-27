@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any, Sequence
-from sqlalchemy import or_, select
+from sqlalchemy import case, or_, select, update
 from sqlalchemy.orm import Session
 from packages.cs_storage.models_orm import JobORM
+from packages.cs_storage.repositories._dialect import is_postgres
 
 
 class JobRepository:
@@ -44,31 +45,59 @@ class JobRepository:
         lease_seconds: int = 60,
         gpu_available: bool = True,
     ) -> JobORM | None:
-        """Atomically acquire the next queued job with a lease."""
+        """Atomically acquire the next queued job with a lease.
+
+        The naive "SELECT candidate, then UPDATE it" approach used previously
+        is not atomic: two workers can both SELECT the same queued job before
+        either commits its UPDATE, and both then "acquire" it. This is fixed
+        with a single conditional UPDATE whose WHERE clause re-checks
+        status == 'queued' at write time, so only the worker whose UPDATE
+        actually lands first can flip the row -- the second worker's UPDATE
+        matches zero rows and acquire_next_job() correctly returns None for it.
+
+        - PostgreSQL: the candidate id is chosen via a `SELECT ... FOR UPDATE
+          SKIP LOCKED` subquery, so concurrent callers don't even block on
+          each other trying for different rows -- each just skips whatever
+          another transaction currently has locked and picks its own
+          candidate.
+        - SQLite (dev/tests): `FOR UPDATE SKIP LOCKED` is Postgres-only syntax
+          and SQLite has no row-level locking at all, so the subquery is left
+          bare. Atomicity there instead comes from SQLite only ever running
+          one writer at a time -- the single UPDATE statement (candidate
+          selection + status re-check) is still one atomic operation from the
+          database's point of view.
+        """
         # First, recover any expired leases
         self.reclaim_expired_leases()
 
-        stmt = select(JobORM).where(JobORM.status == "queued")
-        if not gpu_available:
-            stmt = stmt.where(JobORM.requires_gpu == False)  # noqa: E712
-
-        stmt = stmt.order_by(JobORM.priority.desc(), JobORM.created_at.asc())
-        job = self.db.execute(stmt).scalars().first()
-
-        if job is None:
-            return None
-
         now = datetime.now(timezone.utc)
-        job.status = "running"
-        job.attempts += 1
-        job.lease_until = now + timedelta(seconds=lease_seconds)
-        job.heartbeat_at = now
-        if job.started_at is None:
-            job.started_at = now
+        lease_until = now + timedelta(seconds=lease_seconds)
 
+        candidate = select(JobORM.id).where(JobORM.status == "queued")
+        if not gpu_available:
+            candidate = candidate.where(JobORM.requires_gpu == False)  # noqa: E712
+        candidate = candidate.order_by(JobORM.priority.desc(), JobORM.created_at.asc()).limit(1)
+        if is_postgres(self.db):
+            candidate = candidate.with_for_update(skip_locked=True)
+
+        claim_stmt = (
+            update(JobORM)
+            .where(JobORM.id == candidate.scalar_subquery(), JobORM.status == "queued")
+            .values(
+                status="running",
+                attempts=JobORM.attempts + 1,
+                lease_until=lease_until,
+                heartbeat_at=now,
+                started_at=case((JobORM.started_at.is_(None), now), else_=JobORM.started_at),
+            )
+            .returning(JobORM.id)
+        )
+        claimed_id = self.db.execute(claim_stmt).scalars().first()
         self.db.commit()
-        self.db.refresh(job)
-        return job
+
+        if claimed_id is None:
+            return None
+        return self.get_job(claimed_id)
 
     def heartbeat(self, job_id: int, extension_seconds: int = 60) -> bool:
         """Extend lease and update heartbeat timestamp."""

@@ -6,7 +6,6 @@ import csv
 import os
 from datetime import datetime
 from packages.cs_core.interfaces.erp_adapter import (
-    ErpAdapter,
     ErpResult,
     ErpStatus,
     ErpStatusState,

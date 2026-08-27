@@ -81,21 +81,25 @@ class ErpRelayWorker:
                 return False
 
     def run_step(self) -> int:
-        """Poll and process pending outbox entries."""
+        """Poll and process pending outbox entries.
+
+        Uses claim_pending_entries() rather than fetch_pending_entries() +
+        a per-entry mark_in_progress() loop: the latter reads candidates and
+        claims them in two separate steps, so a second ErpRelayWorker process
+        polling concurrently could read and dispatch the same outbox entries
+        before either claim lands -- a duplicate ERP submission. The atomic
+        claim closes that window (see OutboxRepository.claim_pending_entries).
+        """
         with get_sync_session() as db:
             outbox_repo = OutboxRepository(db)
-            pending = outbox_repo.fetch_pending_entries(limit=5)
-            if not pending:
+            claimed = outbox_repo.claim_pending_entries(limit=5)
+            if not claimed:
                 return 0
 
-            entries_to_process = list(pending)
+            entries_to_process = list(claimed)
 
         processed = 0
         for entry in entries_to_process:
-            with get_sync_session() as db:
-                outbox_repo = OutboxRepository(db)
-                outbox_repo.mark_in_progress(entry.id)
-
             success = self.process_entry(entry)
             if success:
                 processed += 1

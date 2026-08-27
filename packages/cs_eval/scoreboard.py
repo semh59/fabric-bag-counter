@@ -7,6 +7,14 @@ from packages.cs_eval.metrics import EvaluationMetrics
 
 def generate_scoreboard_text(metrics: EvaluationMetrics, title: str = "Replay Evaluation Scoreboard") -> str:
     """Generate a clean ASCII scoreboard table for CI regression gates."""
+    # ledger_area_mean_delta is None when no session in the run had a
+    # genuinely calibrated area estimate available -- render that plainly
+    # instead of crashing on `None:.2f` or silently showing a fake 0.00.
+    area_delta_text = (
+        f"{metrics.ledger_area_mean_delta:.2f} bags"
+        if metrics.ledger_area_mean_delta is not None
+        else "N/A (uncalibrated)"
+    )
     lines = [
         f"==================================================================",
         f"                  {title.upper()}",
@@ -21,7 +29,7 @@ def generate_scoreboard_text(metrics: EvaluationMetrics, title: str = "Replay Ev
         f"  Merge Undercount Rate    : {metrics.merge_caused_undercount_rate:.2%}",
         f"  ID Switches              : {metrics.id_switches}",
         f"  Track Fragmentations     : {metrics.track_fragmentations}",
-        f"  Ledger vs Area Delta     : {metrics.ledger_area_mean_delta:.2f} bags",
+        f"  Ledger vs Area Delta     : {area_delta_text}",
         f"  Dropped Frame Rate       : {metrics.dropped_frame_rate:.3%}",
         f"==================================================================",
     ]

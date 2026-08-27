@@ -31,15 +31,20 @@ class ReconciliationRepository:
             opened_at=datetime.now(timezone.utc),
         )
         self.db.add(rec)
-        self.db.commit()
-        self.db.refresh(rec)
+        # flush (not commit): assigns rec.id within the *same* transaction as
+        # the session update below, so both writes land in one commit. Two
+        # separate commits here previously meant a crash/process kill between
+        # them could leave a reconciliation row created but the session still
+        # pointing nowhere at it (or vice versa) -- an inconsistent pair.
+        self.db.flush()
 
         session = self.db.execute(select(SessionORM).where(SessionORM.id == session_id)).scalar_one_or_none()
         if session:
             session.reconciliation_id = rec.id
             session.status = "reconcile_required"
-            self.db.commit()
 
+        self.db.commit()
+        self.db.refresh(rec)
         return rec
 
     def resolve_reconciliation(

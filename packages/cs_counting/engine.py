@@ -28,6 +28,7 @@ class FrameProcessingOutput:
     area_estimate: float
     discrepancy_flag: bool = False
     merge_events_in_frame: int = 0
+    merge_extra_bags_in_frame: int = 0
 
 
 class CountingEngine:
@@ -75,6 +76,7 @@ class CountingEngine:
         # 2. Merge Detection & Hypothesis analysis
         enriched_detections: list[dict[str, Any]] = []
         merge_count = 0
+        merge_extra_bags = 0
 
         for bag in detection_result.bag_bodies:
             box = bag["box"]
@@ -98,6 +100,13 @@ class CountingEngine:
                         "mask": mask,
                         "is_latent": True,
                     })
+                # This single detection just became len(centroid_seeds) latent
+                # detections; every seed beyond the first is a bag that would
+                # have been silently absorbed into one blob without merge
+                # splitting. Track that real count so evaluation code (see
+                # packages/cs_eval/replay_engine.py) can report a genuine
+                # merge-caused-undercount signal instead of always 0.
+                merge_extra_bags += max(0, len(hypothesis.centroid_seeds) - 1)
             else:
                 enriched_detections.append(bag)
 
@@ -138,4 +147,5 @@ class CountingEngine:
             area_estimate=area_estimate,
             discrepancy_flag=has_discrepancy,
             merge_events_in_frame=merge_count,
+            merge_extra_bags_in_frame=merge_extra_bags,
         )

@@ -3,27 +3,24 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime, timezone
 from typing import Annotated, Any
 import os
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, WebSocket, WebSocketDisconnect, status
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, WebSocket, WebSocketDisconnect, status
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from packages.cs_core.models import (
-    CalibrationStage,
     CameraRole,
-    GpuSharingMode,
-    JobKind,
     ModelStage,
-    ReconciliationReason,
     ReconciliationResolution,
     SessionStatus,
-    TrainingRunKind,
     UserRole,
 )
 from packages.cs_storage.db import get_sync_session
+from packages.cs_storage.errors import ActiveSessionConflictError
 from packages.cs_storage.models_orm import (
     CameraORM,
     ConfigVersionORM,
@@ -54,6 +51,7 @@ from packages.cs_storage.repositories.user_repo import UserRepository
 from services.api.auth import CurrentUser, create_access_token, get_current_user, require_role
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +93,9 @@ class CreateSessionRequest(BaseModel):
     product_profile_id: int
     external_ref: str | None = None
     target_count: int | None = None
+    vehicle_plate: str | None = None
+    driver_name: str | None = None
+    carrier_company: str | None = None
 
 
 class ResolveReconciliationRequest(BaseModel):
@@ -130,7 +131,6 @@ def login(req: LoginRequest, response: Response):
     """Authenticate user and issue cryptographically signed JWT session token / cookie (§8.1)."""
     with get_sync_session() as db:
         user_repo = UserRepository(db)
-        user_repo.seed_default_users()
         user = user_repo.authenticate(req.username, req.password)
         if not user:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
@@ -181,9 +181,9 @@ def register_user(req: RegisterUserRequest):
 # ---------------------------------------------------------------------------
 
 @router.get("/sites")
-def list_sites(user: Annotated[CurrentUser, Depends(get_current_user)]):
+def list_sites(user: Annotated[CurrentUser, Depends(get_current_user)], limit: int = 100, offset: int = 0):
     with get_sync_session() as db:
-        return db.query(SiteORM).all()
+        return db.query(SiteORM).order_by(SiteORM.id).offset(offset).limit(limit).all()
 
 
 @router.post("/sites", dependencies=[Depends(require_role(UserRole.ADMIN))])
@@ -197,9 +197,9 @@ def create_site(req: CreateSiteRequest):
 
 
 @router.get("/lines")
-def list_lines(user: Annotated[CurrentUser, Depends(get_current_user)]):
+def list_lines(user: Annotated[CurrentUser, Depends(get_current_user)], limit: int = 100, offset: int = 0):
     with get_sync_session() as db:
-        return db.query(LineORM).all()
+        return db.query(LineORM).order_by(LineORM.id).offset(offset).limit(limit).all()
 
 
 @router.post("/lines", dependencies=[Depends(require_role(UserRole.ADMIN))])
@@ -212,10 +212,37 @@ def create_line(req: CreateLineRequest):
         return line
 
 
-@router.get("/cameras")
-def list_cameras(user: Annotated[CurrentUser, Depends(get_current_user)]):
+class CreateNodeRequest(BaseModel):
+    site_id: int
+    hostname: str
+
+
+@router.get("/nodes")
+def list_nodes(user: Annotated[CurrentUser, Depends(get_current_user)], site_id: int | None = None, limit: int = 100, offset: int = 0):
     with get_sync_session() as db:
-        return db.query(CameraORM).all()
+        q = db.query(NodeORM)
+        if site_id is not None:
+            q = q.filter(NodeORM.site_id == site_id)
+        return q.order_by(NodeORM.id).offset(offset).limit(limit).all()
+
+
+@router.post("/nodes", dependencies=[Depends(require_role(UserRole.ADMIN))])
+def create_node(req: CreateNodeRequest):
+    with get_sync_session() as db:
+        node = NodeORM(site_id=req.site_id, hostname=req.hostname)
+        db.add(node)
+        db.commit()
+        db.refresh(node)
+        return node
+
+
+@router.get("/cameras")
+def list_cameras(user: Annotated[CurrentUser, Depends(get_current_user)], line_id: int | None = None, limit: int = 100, offset: int = 0):
+    with get_sync_session() as db:
+        q = db.query(CameraORM)
+        if line_id is not None:
+            q = q.filter(CameraORM.line_id == line_id)
+        return q.order_by(CameraORM.id).offset(offset).limit(limit).all()
 
 
 @router.post("/cameras", dependencies=[Depends(require_role(UserRole.ADMIN))])
@@ -236,12 +263,81 @@ def create_camera(req: CreateCameraRequest):
 
 @router.post("/cameras/{cam_id}/test", dependencies=[Depends(require_role(UserRole.ADMIN))])
 def test_camera_connection(cam_id: int):
-    """Test connection reachability for camera source driver."""
+    """Test connection reachability for camera source driver by actually opening it."""
+    import cv2
+    from packages.cs_core.camera_source import resolve_camera_source
+
     with get_sync_session() as db:
         cam = db.query(CameraORM).filter(CameraORM.id == cam_id).first()
         if not cam:
             raise HTTPException(status_code=404, detail="Camera not found")
-        return {"status": "ok", "connected": True, "camera_id": cam_id}
+        source_config = cam.source_config or {}
+
+    source = resolve_camera_source(cam.source_driver, source_config)
+
+    if source == "" or source is None:
+        return {
+            "status": "error",
+            "connected": False,
+            "camera_id": cam_id,
+            "message": f"No usable source configured for driver '{cam.source_driver}' (source_config={source_config}).",
+        }
+
+    cap = cv2.VideoCapture(source)
+    try:
+        connected = cap.isOpened()
+        message = (
+            f"Kamera akışı başarıyla bağlandı: {source}"
+            if connected
+            else f"Kamera akışına bağlanılamadı: {source}"
+        )
+    finally:
+        cap.release()
+
+    return {"status": "ok" if connected else "error", "connected": connected, "camera_id": cam_id, "message": message}
+
+
+class SetCameraFeedSourceRequest(BaseModel):
+    source_config: dict[str, Any] = Field(default_factory=dict)
+    source_driver: str | None = None
+
+
+@router.post("/cameras/{cam_id}/source", dependencies=[Depends(require_role(UserRole.ADMIN))])
+def set_camera_feed_source(cam_id: int, req: SetCameraFeedSourceRequest):
+    """Persist a non-counting camera's connection info and (re)connect its live feed.
+
+    The line's counting camera is configured through
+    POST /lines/{line_id}/camera_source instead, since that source also
+    feeds the real detection/tracking pipeline -- this route is for the
+    other cameras on a line (damage inspection, pallet station, yard, ...),
+    which only need a real live picture, not detection.
+    """
+    from packages.cs_core.camera_source import resolve_camera_source
+    from packages.cs_counting.camera_feed import reconnect_camera_feed
+
+    with get_sync_session() as db:
+        cam = db.query(CameraORM).filter(CameraORM.id == cam_id).first()
+        if not cam:
+            raise HTTPException(status_code=404, detail="Camera not found")
+        cam.source_config = req.source_config
+        if req.source_driver:
+            cam.source_driver = req.source_driver
+        db.commit()
+        source_driver, source_config = cam.source_driver, cam.source_config
+
+    source = resolve_camera_source(source_driver, source_config)
+    connected, message = reconnect_camera_feed(cam_id, source)
+    return {"status": "ok" if connected else "error", "connected": connected, "camera_id": cam_id, "message": message}
+
+
+@router.get("/cameras/{cam_id}/stream")
+def stream_camera_feed_mjpeg(cam_id: int):
+    """Real live MJPEG feed for a single non-counting camera (no detection overlay)."""
+    from packages.cs_counting.camera_feed import get_camera_stream_generator
+    return StreamingResponse(
+        get_camera_stream_generator(cam_id),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+    )
 
 
 class CreateProductRequest(BaseModel):
@@ -277,10 +373,23 @@ def create_product(req: CreateProductRequest):
 # ---------------------------------------------------------------------------
 
 @router.get("/live/lines/{line_id}")
-async def stream_live_counts(line_id: int, user: Annotated[CurrentUser, Depends(get_current_user)]):
+async def stream_live_counts(line_id: int, request: Request, user: Annotated[CurrentUser, Depends(get_current_user)]):
     """Server-Sent Events (SSE) stream for live counter, active session, and health (§9.6)."""
+    # Lazy import (mirrors the other stream_renderer call sites in this module)
+    # to avoid pulling in cv2 at API module import time. Used to surface the
+    # renderer's real rolling FPS estimate (_fps_ema) on the live stream
+    # rather than a hardcoded frontend number.
+    from packages.cs_counting.stream_renderer import _renderers
+
     async def event_generator():
         while True:
+            if await request.is_disconnected():
+                logger.info(f"[SSE] Client disconnected from line {line_id} live stream; stopping.")
+                break
+
+            renderer = _renderers.get(line_id)
+            fps_json = f"{renderer._fps_ema:.1f}" if (renderer is not None and renderer._fps_ema is not None) else "null"
+
             with get_sync_session() as db:
                 session_repo = SessionRepository(db)
                 ledger_repo = LedgerRepository(db)
@@ -291,10 +400,11 @@ async def stream_live_counts(line_id: int, user: Annotated[CurrentUser, Depends(
                     data = (
                         f'{{"line_id": {line_id}, "session_id": {active_session.id}, '
                         f'"counted_total": {net_count}, "area_estimate": {active_session.area_estimate_total:.1f}, '
-                        f'"status": "{active_session.status}", "discrepancy": {str(active_session.discrepancy_flag).lower()}}}'
+                        f'"status": "{active_session.status}", "discrepancy": {str(active_session.discrepancy_flag).lower()}, '
+                        f'"fps": {fps_json}}}'
                     )
                 else:
-                    data = f'{{"line_id": {line_id}, "session_id": null, "counted_total": 0, "status": "idle"}}'
+                    data = f'{{"line_id": {line_id}, "session_id": null, "counted_total": 0, "status": "idle", "fps": {fps_json}}}'
 
             yield f"data: {data}\n\n"
             await asyncio.sleep(0.5)
@@ -318,9 +428,13 @@ async def upload_line_video(line_id: int, file: UploadFile = File(...)):
     from packages.cs_counting.stream_renderer import _renderers, LiveStreamRenderer
     os.makedirs("./data/videos", exist_ok=True)
     video_path = f"./data/videos/line_{line_id}_{file.filename}"
-    with open(video_path, "wb") as f:
-        content = await file.read()
-        f.write(content)
+    content = await file.read()
+
+    def _write_file() -> None:
+        with open(video_path, "wb") as f:
+            f.write(content)
+
+    await asyncio.to_thread(_write_file)
 
     if line_id not in _renderers:
         _renderers[line_id] = LiveStreamRenderer(line_id=line_id)
@@ -350,12 +464,18 @@ def set_line_camera_source(line_id: int, req: SetCameraSourceRequest, user: Anno
 def open_session(req: CreateSessionRequest, user: Annotated[CurrentUser, Depends(get_current_user)]):
     with get_sync_session() as db:
         session_repo = SessionRepository(db)
-        sess = session_repo.create_session(
-            line_id=req.line_id,
-            product_profile_id=req.product_profile_id,
-            external_ref=req.external_ref,
-            target_count=req.target_count,
-        )
+        try:
+            sess = session_repo.create_session(
+                line_id=req.line_id,
+                product_profile_id=req.product_profile_id,
+                external_ref=req.external_ref,
+                target_count=req.target_count,
+                vehicle_plate=req.vehicle_plate,
+                driver_name=req.driver_name,
+                carrier_company=req.carrier_company,
+            )
+        except ActiveSessionConflictError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
         return {"id": sess.id, "status": sess.status, "line_id": sess.line_id, "external_ref": sess.external_ref}
 
 
@@ -432,20 +552,21 @@ class QuickLineSettingsRequest(BaseModel):
 @router.post("/lines/{line_id}/quick_settings")
 def update_quick_line_settings(line_id: int, req: QuickLineSettingsRequest, user: Annotated[CurrentUser, Depends(get_current_user)] = None):
     with get_sync_session() as db:
-        line = db.query(LineORM).filter(LineORM.id == line_id).first() or db.query(LineORM).first()
-        if line:
-            line_id = line.id
-            calib_repo = CalibrationRepository(db)
-            if req.belt_speed is not None or req.belt_direction is not None:
-                speed = req.belt_speed if req.belt_speed is not None else 6.5
-                direction = req.belt_direction if req.belt_direction is not None else [1.0, 0.0]
-                calib_repo.create_motion_calibration(line_id=line_id, belt_speed_px_per_frame=speed, belt_direction_vector=direction)
+        line = db.query(LineORM).filter(LineORM.id == line_id).first()
+        if not line:
+            raise HTTPException(status_code=404, detail="Line not found")
 
-            if req.rtsp_url:
-                cam = db.query(CameraORM).filter(CameraORM.line_id == line_id).first()
-                if cam:
-                    cam.source_config = {"rtsp_url": req.rtsp_url}
-                    db.commit()
+        calib_repo = CalibrationRepository(db)
+        if req.belt_speed is not None or req.belt_direction is not None:
+            speed = req.belt_speed if req.belt_speed is not None else 6.5
+            direction = req.belt_direction if req.belt_direction is not None else [1.0, 0.0]
+            calib_repo.create_motion_calibration(line_id=line_id, belt_speed_px_per_frame=speed, belt_direction_vector=direction)
+
+        if req.rtsp_url:
+            cam = db.query(CameraORM).filter(CameraORM.line_id == line_id).first()
+            if cam:
+                cam.source_config = {"rtsp_url": req.rtsp_url}
+                db.commit()
 
         from packages.cs_counting.stream_renderer import _renderers
         if line_id in _renderers:
@@ -477,6 +598,14 @@ def get_session_ledger_events(sess_id: int, user: Annotated[CurrentUser, Depends
         return ledger_repo.get_session_events(sess_id)
 
 
+@router.get("/lines/{line_id}/defects")
+def get_line_defect_events(line_id: int, user: Annotated[CurrentUser, Depends(get_current_user)] = None):
+    """Audit log of counted bags later excluded as defective (post-gate removal, §5.5)."""
+    with get_sync_session() as db:
+        ledger_repo = LedgerRepository(db)
+        return ledger_repo.get_defect_events(line_id=line_id)
+
+
 @router.get("/sessions/{sess_id}/dispatch_report")
 def get_session_dispatch_report(sess_id: int, user: Annotated[CurrentUser, Depends(get_current_user)] = None):
     """Generate official Dispatch & Reconciliation Manifest with cryptographic seal (§5.7, §5.8)."""
@@ -489,35 +618,56 @@ def get_session_dispatch_report(sess_id: int, user: Annotated[CurrentUser, Depen
 
         events = ledger_repo.get_session_events(sess_id)
         prod = db.query(ProductProfileORM).filter(ProductProfileORM.id == sess.product_profile_id).first()
-        prod_name = prod.name if prod else "50kg Standart Çimento"
-        erp_sku = prod.erp_material_code if (prod and prod.erp_material_code) else "SKU-CIM-50K"
+        prod_name = prod.name if prod else None
+        erp_sku = prod.erp_material_code if (prod and prod.erp_material_code) else None
+
+        line = db.query(LineORM).filter(LineORM.id == sess.line_id).first()
+        site = db.query(SiteORM).filter(SiteORM.id == line.site_id).first() if line else None
 
         counted = sess.counted_total or 0
-        target = sess.target_count or 100
-        diff = counted - target
-        damaged_count = sum(1 for e in events if getattr(e, "confidence", 1.0) < 0.85)
+        target = sess.target_count
+        diff = (counted - target) if target is not None else None
+        # Real defect count from the ledger's own defect_reason field (§5.5 post-gate
+        # exclusion), not a confidence-threshold heuristic.
+        damaged_count = sum(1 for e in events if getattr(e, "defect_reason", None))
+        simulated_count = sum(1 for e in events if getattr(e, "is_simulated", False))
 
         import hashlib
+        import hmac
+        from services.api.auth import SECRET_KEY
         data_str = f"SESS:{sess.id}|REF:{sess.external_ref}|COUNT:{counted}|PROD:{erp_sku}|TS:{datetime.now(timezone.utc).isoformat()}"
-        crypto_seal = hashlib.sha256(data_str.encode()).hexdigest().upper()
+        crypto_seal = hmac.new(SECRET_KEY.encode(), data_str.encode(), hashlib.sha256).hexdigest().upper()
 
         return {
             "session_id": sess.id,
-            "external_ref": sess.external_ref or f"IRS-2026-{sess.id:04d}",
-            "waybill_no": f"WB-TR-{sess.id * 1042:07d}",
-            "truck_plate": "34 KTR 5508",
-            "driver_name": "Ahmet Yılmaz",
-            "carrier_company": "Marmara Lojistik A.Ş.",
+            # No fabricated fallback reference -- None when the session was
+            # never given one, rather than a fake-but-plausible-looking
+            # document number.
+            "external_ref": sess.external_ref,
+            # No real waybill/dispatch-note field is tracked on SessionORM yet;
+            # omit rather than fabricate a document number.
+            "waybill_no": None,
+            "site_name": site.name if site else None,
+            "line_name": line.name if line else None,
+            "truck_plate": sess.vehicle_plate,
+            "driver_name": sess.driver_name,
+            "carrier_company": sess.carrier_company,
             "product_name": prod_name,
             "erp_sku": erp_sku,
             "target_count": target,
             "counted_total": counted,
             "difference": diff,
             "status": sess.status,
-            "reconciliation_status": "TAM MUTABAKAT" if diff == 0 else ("FAZLA SEVKİYAT" if diff > 0 else "EKSİK SEVKİYAT"),
+            "reconciliation_status": (
+                None if diff is None
+                else "TAM MUTABAKAT" if diff == 0
+                else "FAZLA SEVKİYAT" if diff > 0
+                else "EKSİK SEVKİYAT"
+            ),
             "damaged_count": damaged_count,
-            "started_at": sess.opened_at.isoformat() if sess.opened_at else datetime.now(timezone.utc).isoformat(),
-            "closed_at": sess.closed_at.isoformat() if sess.closed_at else datetime.now(timezone.utc).isoformat(),
+            "simulated_count": simulated_count,
+            "started_at": sess.opened_at.isoformat() if sess.opened_at else None,
+            "closed_at": sess.closed_at.isoformat() if sess.closed_at else None,
             "crypto_seal": crypto_seal,
             "event_count": len(events),
         }
@@ -555,10 +705,14 @@ def submit_session_to_erp(sess_id: int, user: Annotated[CurrentUser, Depends(get
 # ---------------------------------------------------------------------------
 
 @router.get("/reconciliations", dependencies=[Depends(require_role(UserRole.ENGINEER))])
-def list_reconciliations():
+def list_reconciliations(limit: int = 100, offset: int = 0):
     with get_sync_session() as db:
         rec_repo = ReconciliationRepository(db)
-        return rec_repo.list_open_reconciliations()
+        # ReconciliationRepository.list_open_reconciliations() has no limit/offset
+        # of its own (out of scope here to change cs_storage repositories), so
+        # pagination is applied to its already-ordered result.
+        results = rec_repo.list_open_reconciliations()
+        return results[offset : offset + limit]
 
 
 @router.post("/reconciliations/{rec_id}/resolve", dependencies=[Depends(require_role(UserRole.ENGINEER))])
@@ -606,9 +760,9 @@ def start_build_dataset_job(payload: dict[str, Any]):
 
 
 @router.get("/datasets", dependencies=[Depends(require_role(UserRole.ENGINEER))])
-def list_datasets():
+def list_datasets(limit: int = 100, offset: int = 0):
     with get_sync_session() as db:
-        return db.query(DatasetVersionORM).all()
+        return db.query(DatasetVersionORM).order_by(DatasetVersionORM.id.desc()).offset(offset).limit(limit).all()
 
 
 @router.post("/training/runs", dependencies=[Depends(require_role(UserRole.ENGINEER))], status_code=202)
@@ -619,11 +773,62 @@ def start_training_job(payload: dict[str, Any]):
         return SubmitJobResponse(job_id=job.id, kind=job.kind)
 
 
+@router.get("/models", dependencies=[Depends(require_role(UserRole.ENGINEER))])
+def list_models(limit: int = 100, offset: int = 0):
+    with get_sync_session() as db:
+        return (
+            db.query(ModelVersionORM)
+            .order_by(ModelVersionORM.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+
+
+@router.get("/models/{model_id}/download", dependencies=[Depends(require_role(UserRole.ENGINEER))])
+def download_model_onnx(model_id: int):
+    """Stream the real exported ONNX artifact for a trained model version from disk (§8.2)."""
+    with get_sync_session() as db:
+        mv = db.query(ModelVersionORM).filter(ModelVersionORM.id == model_id).first()
+        if not mv:
+            raise HTTPException(status_code=404, detail="Model version not found")
+        onnx_path = mv.onnx_path
+        if not onnx_path or not os.path.isfile(onnx_path):
+            raise HTTPException(status_code=404, detail=f"ONNX artifact not found on disk: {onnx_path}")
+        filename = os.path.basename(onnx_path) or f"model_{model_id}.onnx"
+        return FileResponse(onnx_path, media_type="application/octet-stream", filename=filename)
+
+
+@router.post("/datasets/mine_hard_frames", dependencies=[Depends(require_role(UserRole.ENGINEER))], status_code=202)
+def start_mine_hard_frames_job(payload: dict[str, Any]):
+    with get_sync_session() as db:
+        job_repo = JobRepository(db)
+        job = job_repo.submit_job(kind="mine_hard_frames", payload=payload)
+        return SubmitJobResponse(job_id=job.id, kind=job.kind)
+
+
 @router.post("/models/{model_id}/export", dependencies=[Depends(require_role(UserRole.ENGINEER))], status_code=202)
 def start_export_job(model_id: int, payload: dict[str, Any]):
+    """Retrain + export a new model version, recorded as lineage of `model_id`.
+
+    There is no persisted PyTorch checkpoint per historical ModelVersion (only
+    the final ONNX artifact + eval_scores are kept), so this is NOT a cheap
+    re-serialization of the existing `model_id` -- it re-runs real training and
+    registers a brand new ModelVersion, with `model_id` referenced as lineage
+    via TrainingRunORM.base_model_version_id on the resulting job's result.
+    """
     with get_sync_session() as db:
         job_repo = JobRepository(db)
         job = job_repo.submit_job(kind="export_onnx", payload={**payload, "model_id": model_id})
+        return SubmitJobResponse(job_id=job.id, kind=job.kind)
+
+
+@router.post("/replay/runs", dependencies=[Depends(require_role(UserRole.ENGINEER))], status_code=202)
+def start_replay_job(payload: dict[str, Any]):
+    """Run the offline replay evaluation suite (accuracy/latency regression) as a background job."""
+    with get_sync_session() as db:
+        job_repo = JobRepository(db)
+        job = job_repo.submit_job(kind="replay", payload=payload)
         return SubmitJobResponse(job_id=job.id, kind=job.kind)
 
 
@@ -706,10 +911,14 @@ def get_system_health(user: Annotated[CurrentUser, Depends(get_current_user)]):
 
 
 @router.get("/system/jobs")
-def list_system_jobs(user: Annotated[CurrentUser, Depends(get_current_user)]):
+def list_system_jobs(user: Annotated[CurrentUser, Depends(get_current_user)], limit: int = 50, offset: int = 0):
     with get_sync_session() as db:
         job_repo = JobRepository(db)
-        return job_repo.list_jobs()
+        # JobRepository.list_jobs() only takes a limit (no offset); out of scope
+        # here to add offset support to cs_storage repositories, so fetch enough
+        # rows and slice the already created_at-desc ordered result.
+        jobs = job_repo.list_jobs(limit=offset + limit)
+        return jobs[offset : offset + limit]
 
 
 @router.get("/system/outbox", dependencies=[Depends(require_role(UserRole.ENGINEER))])
@@ -733,9 +942,10 @@ class SimulateBagRequest(BaseModel):
     confidence: float = 0.99
     merge_flag: bool = False
     track_id: int | None = None
+    defect_reason: str | None = None
 
 
-@router.post("/sessions/{sess_id}/simulate_bag")
+@router.post("/sessions/{sess_id}/simulate_bag", dependencies=[Depends(require_role(UserRole.OPERATOR, UserRole.ENGINEER))])
 def simulate_bag_crossing(sess_id: int, req: SimulateBagRequest = SimulateBagRequest(), user: Annotated[CurrentUser, Depends(get_current_user)] = None):
     """Simulate a physical conveyor bag passing the optical gate and update immutable ledger."""
     with get_sync_session() as db:
@@ -778,6 +988,8 @@ def simulate_bag_crossing(sess_id: int, req: SimulateBagRequest = SimulateBagReq
             merge_flag=req.merge_flag,
             deployment_bundle_id=bundle_id,
             evidence_ref=f"/evidence/frames/sess_{sess.id}_trk_{track_id}.jpg",
+            defect_reason=req.defect_reason,
+            is_simulated=True,
         )
 
         net_count = ledger_repo.get_session_total_count(sess.id)
@@ -786,6 +998,20 @@ def simulate_bag_crossing(sess_id: int, req: SimulateBagRequest = SimulateBagReq
         sess.area_estimate_total = max(0.0, float(sess.area_estimate_total or 0.0) + area_delta)
         db.commit()
         db.refresh(sess)
+
+        # Also reflect this manual "+1 Hasarlı" / "+2 Bitişik" trigger on the
+        # live MJPEG demo feed (if a renderer for this line is running), so
+        # the defect/multi badges in LiveStreamRenderer._process_simulated_frame
+        # actually render instead of being permanently dead code.
+        if req.defect_reason or req.merge_flag:
+            from packages.cs_counting.stream_renderer import _renderers
+            renderer = _renderers.get(sess.line_id)
+            if renderer is not None:
+                renderer.spawn_manual_bag(
+                    defective=bool(req.defect_reason),
+                    bag_count_estimate=2 if req.merge_flag else 1,
+                    label=req.defect_reason,
+                )
 
         return {
             "status": "ok",
@@ -796,12 +1022,4 @@ def simulate_bag_crossing(sess_id: int, req: SimulateBagRequest = SimulateBagReq
             "direction": req.direction,
         }
 
-
-@router.post("/system/seed_demo")
-def trigger_demo_seed():
-    """Reset and re-populate full demo database (§9.2)."""
-    from packages.cs_storage.demo_seeder import seed_demo_data
-    with get_sync_session() as db:
-        seed_demo_data(db, force_reset=True)
-    return {"status": "ok", "message": "Demo veri seti başarıyla yüklendi."}
 

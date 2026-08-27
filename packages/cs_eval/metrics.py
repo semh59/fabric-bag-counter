@@ -19,7 +19,11 @@ class EvaluationMetrics:
     id_switches: int
     track_fragmentations: int
     systematic_bias: float  # (predicted - gt) / gt
-    ledger_area_mean_delta: float
+    # None when no session in this run had a genuinely calibrated area
+    # estimate available (see AreaIntegralCounter.is_scale_calibrated /
+    # ReplayEngine._calibrate_area_counter) -- reporting 0.0 in that case
+    # would misleadingly look like a measured "perfect" delta.
+    ledger_area_mean_delta: float | None
     dropped_frame_rate: float
     session_level_details: list[dict[str, Any]] = field(default_factory=list)
 
@@ -27,7 +31,7 @@ class EvaluationMetrics:
 def compute_counting_metrics(
     ground_truth_counts: list[int],
     predicted_counts: list[int],
-    area_estimates: list[float] | None = None,
+    area_estimates: list[float | None] | None = None,
     merge_caused_fn_counts: list[int] | None = None,
     id_switches_list: list[int] | None = None,
     track_frags_list: list[int] | None = None,
@@ -48,7 +52,7 @@ def compute_counting_metrics(
             id_switches=0,
             track_fragmentations=0,
             systematic_bias=0.0,
-            ledger_area_mean_delta=0.0,
+            ledger_area_mean_delta=None,
             dropped_frame_rate=0.0,
         )
 
@@ -76,12 +80,23 @@ def compute_counting_metrics(
 
     systematic_bias = float(tot_pred - tot_gt) / float(tot_gt) if tot_gt > 0 else 0.0
 
-    # Ledger vs Area delta
+    # Ledger vs Area delta -- only over sessions that actually had a
+    # genuinely calibrated area estimate (area_estimates[i] is not None).
+    # Prior to the AreaIntegralCounter calibration fix, this silently
+    # treated an uncalibrated (always-0.0) area estimate as a real
+    # measurement, which reduced to just mean(predicted_counts) -- a
+    # plausible-looking but meaningless number. None entries are now
+    # excluded rather than treated as 0.0, and if nothing was calibrated at
+    # all, the metric itself is None (unmeasured) instead of a fake 0.0/mean.
     if area_estimates:
-        deltas = [abs(pred - area) for pred, area in zip(predicted_counts, area_estimates)]
-        ledger_area_delta = float(sum(deltas)) / float(n_sessions)
+        measured_deltas = [
+            abs(pred - area)
+            for pred, area in zip(predicted_counts, area_estimates)
+            if area is not None
+        ]
+        ledger_area_delta = float(sum(measured_deltas)) / float(len(measured_deltas)) if measured_deltas else None
     else:
-        ledger_area_delta = 0.0
+        ledger_area_delta = None
 
     drop_rate = float(dropped_frames) / float(total_frames) if total_frames > 0 else 0.0
 
@@ -89,7 +104,7 @@ def compute_counting_metrics(
     for i in range(n_sessions):
         gt = ground_truth_counts[i]
         pred = predicted_counts[i]
-        area = area_estimates[i] if area_estimates else 0.0
+        area = area_estimates[i] if area_estimates else None
         session_details.append({
             "session_index": i,
             "ground_truth": gt,

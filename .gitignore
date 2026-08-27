@@ -55,6 +55,11 @@ Thumbs.db
 # Web dashboard build tooling (downloaded standalone Tailwind CLI binary)
 web/.bin/
 
+# Real bag photos / factory QA documents dropped into the repo for real-data
+# fine-tuning (see docs/annotation_guide.md §4) -- large binary assets, never
+# committed to git history.
+/EĞİTİM/
+
 # Heavy Runtime Artifacts / Local Video storage
 data/videos/*.mp4
 data/videos/*.avi

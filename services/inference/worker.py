@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import time
 from typing import Any
-import numpy as np
 from packages.cs_core.frame import Frame
 from packages.cs_counting.engine import CountingEngine
 from packages.cs_storage.db import get_sync_session
@@ -68,8 +67,17 @@ class InferenceWorker:
                 # 2. Retrieve image array from shared memory
                 img_data = self.transport.get_image_data(frame.shm_name)
                 if img_data is None:
-                    # Synthetic dummy frame if not present in SHM buffer
-                    img_data = np.zeros(frame.shape, dtype=np.uint8)
+                    # No pixel data available for this frame (never written, or the
+                    # ring already evicted/released its shared memory block before we
+                    # got to it). Never substitute a fabricated black frame here --
+                    # that would silently run detection on fake data. Skip this frame
+                    # but still release its slot and keep processing the rest.
+                    logger.warning(
+                        f"[Inference] No shared-memory image data for camera {frame.camera_id} "
+                        f"frame_index={frame.frame_index} shm_name={frame.shm_name!r}. Skipping frame."
+                    )
+                    self.transport.release(frame)
+                    continue
 
                 # 3. Process frame through CountingEngine
                 output = self.engine.process_frame(

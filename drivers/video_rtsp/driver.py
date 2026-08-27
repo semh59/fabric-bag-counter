@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime, timezone
 from typing import Any
-import numpy as np
 from packages.cs_core.frame import Frame
+from packages.cs_core.interfaces.frame_transport import FrameTransport
 from packages.cs_core.interfaces.video_source import VideoSource
+
+logger = logging.getLogger(__name__)
 
 
 class RtspVideoSource:
@@ -30,10 +33,14 @@ class RtspVideoSource:
             import cv2
             self.cap = cv2.VideoCapture(self.rtsp_url)
             self._is_connected = bool(self.cap.isOpened())
-        except Exception:
+            if not self._is_connected:
+                logger.error(f"[RtspVideoSource] Failed to open RTSP stream: {self.rtsp_url!r}")
+        except Exception as e:
+            logger.error(f"[RtspVideoSource] Exception while opening RTSP stream {self.rtsp_url!r}: {e}")
+            self.cap = None
             self._is_connected = False
 
-    def read(self) -> Frame | None:
+    def read(self, transport: FrameTransport) -> Frame | None:
         if not self._is_connected or self.cap is None:
             return None
 
@@ -45,14 +52,19 @@ class RtspVideoSource:
         self.frame_counter += 1
         mono_ns = time.monotonic_ns()
         wall = datetime.now(timezone.utc)
+        camera_id = self.config.get("camera_id", 1)
+        shm_name = f"shm_cam_{camera_id}_slot_{self.frame_counter % 8}"
+
+        # Write decoded pixel data into shared memory before publishing metadata.
+        transport.write_image_data(shm_name, img)
 
         return Frame(
-            camera_id=self.config.get("camera_id", 1),
+            camera_id=camera_id,
             stream_epoch=self.epoch,
             frame_index=self.frame_counter,
             monotonic_ns=mono_ns,
             wall_clock=wall,
-            shm_name=f"shm_cam_{self.config.get('camera_id', 1)}_slot_{self.frame_counter % 8}",
+            shm_name=shm_name,
             shape=img.shape,
             dtype=str(img.dtype),
         )

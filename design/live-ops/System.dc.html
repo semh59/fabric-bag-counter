@@ -1,0 +1,189 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap">
+  <style>
+    :root {
+      --bg-0: #0a0e17; --bg-1: #0f1524; --surface-1: #10182b; --surface-2: #161f36; --surface-3: #1c2740;
+      --border-1: #212e4a; --border-2: #2c3b5c;
+      --ink-0: #f4f6fb; --ink-1: #c7cfe0; --ink-2: #8994b3; --ink-3: #5c6789;
+      --indigo: #6366f1; --indigo-soft: rgba(99,102,241,0.14);
+      --emerald: #10b981; --emerald-soft: rgba(16,185,129,0.14);
+      --amber: #f59e0b; --amber-soft: rgba(245,158,11,0.14);
+      --rose: #f43f5e; --rose-soft: rgba(244,63,94,0.14);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg-0); color: var(--ink-0); font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-feature-settings: "tnum" 1; }
+    button { font-family: inherit; cursor: pointer; }
+    table { border-collapse: collapse; width: 100%; }
+    th { text-align: left; font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-3); padding: 9px 12px; border-bottom: 1px solid var(--border-1); }
+    td { padding: 10px 12px; font-size: 12px; color: var(--ink-1); border-bottom: 1px solid var(--border-1); }
+    tr:hover td { background: var(--surface-2); }
+    @keyframes livePulse { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
+    .pulse-dot { animation: livePulse 1.6s ease-in-out infinite; }
+  </style>
+</helmet>
+
+<div style="min-height:100vh; display:flex; flex-direction:column;">
+  <header style="height:60px; flex-shrink:0; background:var(--bg-1); border-bottom:1px solid var(--border-1); display:flex; align-items:center; justify-content:space-between; padding:0 20px;">
+    <div style="display:flex; align-items:center; gap:20px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:32px; height:32px; border-radius:8px; background:var(--indigo); display:flex; align-items:center; justify-content:center;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="1.5"></rect><path d="M8 8V6a4 4 0 0 1 8 0v2"></path></svg>
+        </div>
+        <div>
+          <div style="font-size:13.5px; font-weight:700; letter-spacing:-0.01em; line-height:1.1;">Çuval Sayım <span style="color:var(--indigo); font-weight:600; font-size:10.5px;">v2.1</span></div>
+          <div style="font-size:10px; color:var(--ink-3); font-family:'IBM Plex Mono',monospace; line-height:1.3;">Gebze Çimento &amp; Yapı Kimyasalları</div>
+        </div>
+      </div>
+      <nav style="display:flex; align-items:center; gap:1px; background:var(--surface-1); border:1px solid var(--border-1); border-radius:10px; padding:3px;">
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Canlı Sayım</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Oturumlar</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Mutabakat</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Kamera &amp; Model Kurulumu</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Fabrika Kurulumu</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Veri &amp; Model</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Hat Envanteri</div>
+        <div style="padding:5px 10px; border-radius:7px; background:var(--indigo); color:white; font-size:10.5px; font-weight:600; white-space:nowrap;">Sistem</div>
+      </nav>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <div style="display:flex; align-items:center; gap:7px; background:var(--surface-1); border:1px solid var(--border-1); border-radius:9px; padding:6px 11px;">
+        <span style="width:7px; height:7px; border-radius:50%; background:var(--emerald);" class="pulse-dot"></span>
+        <span style="font-size:11px; color:var(--ink-1); font-weight:600;">Tüm Sistemler Sağlıklı</span>
+      </div>
+    </div>
+  </header>
+
+  <main style="flex:1; padding:22px 24px 32px; max-width:1440px; width:100%; margin:0 auto; display:flex; flex-direction:column; gap:18px;">
+
+    <div style="background:var(--surface-1); border:1px solid var(--border-1); border-radius:14px; padding:22px;">
+      <div style="font-size:16px; font-weight:700; letter-spacing:-0.01em; margin-bottom:16px;">Sistem &amp; Donanım Altyapısı</div>
+      <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px;">
+        <sc-for list="{{services}}" as="svc" hint-placeholder-count="4">
+          <div style="padding:14px; background:var(--surface-2); border:1px solid var(--border-1); border-radius:11px;">
+            <div style="font-size:9.5px; color:var(--ink-3); font-weight:700; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:8px;">{{svc.label}}</div>
+            <div style="display:flex; align-items:center; gap:7px;">
+              <span style="width:7px; height:7px; border-radius:50%; background:var(--emerald);" class="pulse-dot"></span>
+              <span style="font-size:12.5px; font-weight:700; color:var(--ink-0);">{{svc.status}}</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px; align-items:start;">
+      <div style="background:var(--surface-1); border:1px solid var(--border-1); border-radius:14px; padding:20px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+          <span style="font-size:12.5px; font-weight:700;">GPU İş Kuyruğu</span>
+          <span class="mono" style="font-size:10.5px; color:var(--ink-3);">{{jobCount}} iş</span>
+        </div>
+        <table>
+          <thead><tr><th>İş</th><th>Tür</th><th>Durum</th><th>Öncelik</th><th></th></tr></thead>
+          <tbody>
+            <sc-for list="{{jobs}}" as="j" hint-placeholder-count="4">
+              <tr>
+                <td class="mono" style="font-weight:700; color:var(--ink-0);">#{{j.id}}</td>
+                <td class="mono" style="font-size:11px;">{{j.kind}}</td>
+                <td><span style="font-size:9px; font-weight:700; padding:3px 7px; border-radius:99px; background:{{j.badgeBg}}; color:{{j.badgeFg}};">{{j.badgeLabel}}</span></td>
+                <td class="mono">{{j.priority}}</td>
+                <td>
+                  <sc-if value="{{j.cancellable}}" hint-placeholder-val="{{false}}">
+                    <button onclick="{{j.onCancel}}" style="padding:4px 9px; border-radius:6px; border:1px solid var(--rose); background:var(--rose-soft); color:#fb7185; font-size:10px; font-weight:700;">İptal</button>
+                  </sc-if>
+                </td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="background:var(--surface-1); border:1px solid var(--border-1); border-radius:14px; padding:20px;">
+        <div style="font-size:12.5px; font-weight:700; margin-bottom:12px;">ERP Transactional Outbox</div>
+        <table>
+          <thead><tr><th>Outbox</th><th>Oturum</th><th>Durum</th><th>Deneme</th></tr></thead>
+          <tbody>
+            <sc-for list="{{outbox}}" as="o" hint-placeholder-count="3">
+              <tr>
+                <td class="mono" style="font-weight:700; color:var(--ink-0);">#{{o.id}}</td>
+                <td>Oturum #{{o.sessionId}}</td>
+                <td><span style="font-size:9px; font-weight:700; padding:3px 7px; border-radius:99px; background:{{o.badgeBg}}; color:{{o.badgeFg}};">{{o.badgeLabel}}</span></td>
+                <td class="mono">{{o.attempts}}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      jobs: [
+        { id: 601, kind: 'calibrate_scale', status: 'running', priority: 5 },
+        { id: 600, kind: 'extract_frames', status: 'queued', priority: 3 },
+        { id: 598, kind: 'train', status: 'completed', priority: 5 },
+        { id: 597, kind: 'evaluate', status: 'completed', priority: 2 },
+      ],
+    };
+  }
+
+  cancelJob(id) {
+    this.setState((s) => ({ jobs: s.jobs.map((j) => j.id === id ? { ...j, status: 'cancelled' } : j) }));
+  }
+
+  renderVals() {
+    const services = [
+      { label: 'PostgreSQL (5434)', status: 'Çalışıyor' },
+      { label: 'FastAPI Core (8080)', status: 'Canlı' },
+      { label: 'GPU Jobrunner', status: 'Hazır' },
+      { label: 'ERP Relay Worker', status: 'Aktif' },
+    ];
+
+    const jobBadge = {
+      running: { label: 'ÇALIŞIYOR', bg: 'var(--indigo-soft)', fg: '#a5b4fc' },
+      queued: { label: 'KUYRUKTA', bg: 'var(--surface-3)', fg: 'var(--ink-2)' },
+      completed: { label: 'TAMAMLANDI', bg: 'var(--emerald-soft)', fg: '#6ee7b7' },
+      cancelled: { label: 'İPTAL EDİLDİ', bg: 'var(--rose-soft)', fg: '#fb7185' },
+    };
+    const jobs = this.state.jobs.map((j) => {
+      const b = jobBadge[j.status];
+      return {
+        id: j.id, kind: j.kind, priority: j.priority,
+        badgeLabel: b.label, badgeBg: b.bg, badgeFg: b.fg,
+        cancellable: j.status === 'queued' || j.status === 'running',
+        onCancel: () => this.cancelJob(j.id),
+      };
+    });
+
+    const outboxBadge = {
+      sent: { label: 'GÖNDERİLDİ', bg: 'var(--emerald-soft)', fg: '#6ee7b7' },
+      pending: { label: 'BEKLEMEDE', bg: 'var(--amber-soft)', fg: '#fbbf24' },
+    };
+    const outboxBase = [
+      { id: 88, sessionId: 344, status: 'sent', attempts: 1 },
+      { id: 87, sessionId: 340, status: 'sent', attempts: 1 },
+      { id: 86, sessionId: 338, status: 'pending', attempts: 2 },
+    ];
+    const outbox = outboxBase.map((o) => {
+      const b = outboxBadge[o.status];
+      return { id: o.id, sessionId: o.sessionId, attempts: o.attempts, badgeLabel: b.label, badgeBg: b.bg, badgeFg: b.fg };
+    });
+
+    return { services, jobs, jobCount: jobs.length, outbox };
+  }
+}
+</script>
+</body>
+</html>

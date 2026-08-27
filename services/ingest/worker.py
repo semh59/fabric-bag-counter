@@ -58,13 +58,14 @@ class IngestWorker:
                 with get_sync_session() as db:
                     epoch_repo = CameraEpochRepository(db)
                     self.current_epoch = epoch_repo.increment_and_get_epoch(self.camera_id)
-            except Exception:
+            except Exception as e:
+                logger.exception(f"[Ingest Cam {self.camera_id}] Failed to get persistent epoch on reconnect: {e}")
                 self.current_epoch += 1
 
             self.driver.open(self.config, epoch=self.current_epoch)
             return False
 
-        frame = self.driver.read()
+        frame = self.driver.read(self.transport)
         if frame is None:
             return False
 

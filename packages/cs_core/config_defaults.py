@@ -46,6 +46,30 @@ SCHEMA_V2_DEFAULTS: dict[str, Any] = {
 }
 
 
+class UnknownSchemaVersionError(ValueError):
+    """Raised when a payload declares a schema version newer than this build understands."""
+
+
+def _deep_merge(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge `overrides` onto `base` at every nesting level.
+
+    Any key present in both where both values are dicts is merged
+    recursively (not just shallowly replaced); any other key is simply
+    overridden by `overrides`'s value, including when the types differ
+    (e.g. overriding a dict default with a non-dict payload value, or vice
+    versa) -- in that case the override wins outright, matching how a
+    config payload is expected to take precedence over defaults.
+    """
+    merged = dict(base)
+    for key, value in overrides.items():
+        existing = merged.get(key)
+        if isinstance(value, dict) and isinstance(existing, dict):
+            merged[key] = _deep_merge(existing, value)
+        else:
+            merged[key] = value
+    return merged
+
+
 def get_config_with_defaults(
     payload: dict[str, Any] | None,
     schema_version: int = CURRENT_PAYLOAD_SCHEMA_VERSION,
@@ -53,18 +77,17 @@ def get_config_with_defaults(
     """Merge raw config payload with documented schema defaults to guarantee backward compatibility."""
     if schema_version <= 1:
         base = dict(SCHEMA_V1_DEFAULTS)
-    else:
+    elif schema_version == 2:
         base = dict(SCHEMA_V2_DEFAULTS)
+    else:
+        raise UnknownSchemaVersionError(
+            f"Unrecognized payload_schema_version={schema_version!r}; this build only knows "
+            f"schema versions up to {CURRENT_PAYLOAD_SCHEMA_VERSION}. Refusing to guess at "
+            "defaults for a newer/unknown schema -- upgrade cs_core or pin an older "
+            "payload_schema_version."
+        )
 
     if not payload:
         return base
 
-    # Recursive merge for nested dicts
-    merged = dict(base)
-    for key, value in payload.items():
-        if isinstance(value, dict) and isinstance(merged.get(key), dict):
-            merged[key] = {**merged[key], **value}
-        else:
-            merged[key] = value
-
-    return merged
+    return _deep_merge(base, payload)

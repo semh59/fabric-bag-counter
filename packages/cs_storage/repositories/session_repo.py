@@ -6,7 +6,9 @@ from datetime import datetime, timezone
 from typing import Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from packages.cs_storage.errors import ActiveSessionConflictError
 from packages.cs_storage.models_orm import SessionORM
+from packages.cs_storage.repositories._dialect import is_postgres
 from packages.cs_storage.repositories.ledger_repo import LedgerRepository
 
 
@@ -23,8 +25,28 @@ class SessionRepository:
         product_profile_id: int,
         external_ref: str | None = None,
         target_count: int | None = None,
+        vehicle_plate: str | None = None,
+        driver_name: str | None = None,
+        carrier_company: str | None = None,
     ) -> SessionORM:
-        """Create and open a new counting session."""
+        """Create and open a new counting session.
+
+        Raises:
+            ActiveSessionConflictError: if the target line already has a
+            non-terminal (open/counting/paused/degraded) session. A line's
+            ledger and area-estimate reconciliation assume a single active
+            session, so a second concurrent one would corrupt counting.
+            Note: this check-then-insert has an inherent race window between
+            processes without a DB-level uniqueness guarantee (there is no
+            existing row to lock via `with_for_update()` before the insert
+            happens) -- it is a best-effort guard, not a hard database
+            constraint, but it closes the common case of a double-click or a
+            retried request racing itself.
+        """
+        existing = self.get_active_session(line_id, for_update=True)
+        if existing is not None:
+            raise ActiveSessionConflictError(line_id=line_id, existing_session_id=existing.id)
+
         session = SessionORM(
             line_id=line_id,
             product_profile_id=product_profile_id,
@@ -35,25 +57,47 @@ class SessionRepository:
             counted_total=0,
             area_estimate_total=0.0,
             discrepancy_flag=False,
+            vehicle_plate=vehicle_plate,
+            driver_name=driver_name,
+            carrier_company=carrier_company,
         )
         self.db.add(session)
         self.db.commit()
         self.db.refresh(session)
         return session
 
-    def get_by_id(self, session_id: int) -> SessionORM | None:
-        """Fetch session by ID."""
-        return self.db.execute(
-            select(SessionORM).where(SessionORM.id == session_id)
-        ).scalar_one_or_none()
+    def get_by_id(self, session_id: int, for_update: bool = False) -> SessionORM | None:
+        """Fetch session by ID.
 
-    def get_active_session(self, line_id: int) -> SessionORM | None:
-        """Fetch current non-closed session for a line."""
+        for_update: lock the row (`SELECT ... FOR UPDATE`) so a concurrent
+        reader blocks until this transaction commits/rolls back. Only takes
+        effect on PostgreSQL (see packages.cs_storage.repositories._dialect) --
+        SQLite has no row-level locking and the test suite runs on SQLite, so
+        this is a no-op there and callers must not rely on it for isolation
+        in tests.
+        """
+        stmt = select(SessionORM).where(SessionORM.id == session_id)
+        if for_update and is_postgres(self.db):
+            stmt = stmt.with_for_update()
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def get_active_session(self, line_id: int, for_update: bool = False) -> SessionORM | None:
+        """Fetch current non-closed session for a line.
+
+        Uses order_by(...).first() rather than scalar_one_or_none(): the
+        latter raises if more than one row matches, which would turn a data
+        integrity bug (two active sessions somehow existing) into a hard
+        crash on every subsequent read of this line. Ordering by most recent
+        and taking the first is defense-in-depth -- it degrades gracefully
+        and still returns the session callers almost certainly mean.
+        """
         stmt = select(SessionORM).where(
             SessionORM.line_id == line_id,
             SessionORM.status.in_(["open", "counting", "paused", "degraded"])
         ).order_by(SessionORM.opened_at.desc())
-        return self.db.execute(stmt).scalar_one_or_none()
+        if for_update and is_postgres(self.db):
+            stmt = stmt.with_for_update()
+        return self.db.execute(stmt).scalars().first()
 
     def list_sessions(self, line_id: int | None = None, limit: int = 50, offset: int = 0) -> Sequence[SessionORM]:
         """List sessions with pagination."""
@@ -65,7 +109,7 @@ class SessionRepository:
 
     def update_status(self, session_id: int, status: str) -> SessionORM | None:
         """Update lifecycle status of a session."""
-        session = self.get_by_id(session_id)
+        session = self.get_by_id(session_id, for_update=True)
         if session is not None:
             session.status = status
             self.db.commit()
@@ -74,14 +118,14 @@ class SessionRepository:
 
     def update_area_estimate(self, session_id: int, area_estimate: float) -> None:
         """Update live running area-based count estimate."""
-        session = self.get_by_id(session_id)
+        session = self.get_by_id(session_id, for_update=True)
         if session:
             session.area_estimate_total = area_estimate
             self.db.commit()
 
     def flag_discrepancy(self, session_id: int, area_estimate: float) -> SessionORM | None:
         """Mark session with discrepancy flag and change status to reconcile_required."""
-        session = self.get_by_id(session_id)
+        session = self.get_by_id(session_id, for_update=True)
         if session:
             session.discrepancy_flag = True
             session.area_estimate_total = area_estimate
@@ -92,7 +136,7 @@ class SessionRepository:
 
     def pause_session(self, session_id: int) -> SessionORM | None:
         """Pause counting on an open or counting session."""
-        session = self.get_by_id(session_id)
+        session = self.get_by_id(session_id, for_update=True)
         if session and session.status in ["open", "counting"]:
             session.status = "paused"
             self.db.commit()
@@ -101,7 +145,7 @@ class SessionRepository:
 
     def resume_session(self, session_id: int) -> SessionORM | None:
         """Resume counting on a paused session."""
-        session = self.get_by_id(session_id)
+        session = self.get_by_id(session_id, for_update=True)
         if session and session.status == "paused":
             session.status = "counting"
             self.db.commit()
@@ -110,7 +154,7 @@ class SessionRepository:
 
     def mark_degraded(self, session_id: int) -> SessionORM | None:
         """Mark session as degraded due to camera drops or observation loss."""
-        session = self.get_by_id(session_id)
+        session = self.get_by_id(session_id, for_update=True)
         if session and session.status in ["open", "counting"]:
             session.status = "degraded"
             self.db.commit()
@@ -119,7 +163,7 @@ class SessionRepository:
 
     def close_session(self, session_id: int) -> SessionORM | None:
         """Close and lock session, deriving the final counted_total from the ledger (§5.5)."""
-        session = self.get_by_id(session_id)
+        session = self.get_by_id(session_id, for_update=True)
         if not session:
             return None
 

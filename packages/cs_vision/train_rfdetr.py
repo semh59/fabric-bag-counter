@@ -41,6 +41,19 @@ def anchor_grid(num_x: int = 10, num_y_positions: tuple[float, float] = (270.0, 
 
     Shared by the model (query positions), the synthetic dataset builder, and
     the real/CVAT dataset builder so all three agree on the same 20 anchors.
+
+    IMPORTANT -- camera-framing assumption: the default coordinates
+    (x in [70, 570], y in {270.0, 370.0}, all in 640x640 CANVAS_SIZE pixel
+    space) are NOT a generic prior -- they hard-code where THIS deployment's
+    camera physically frames the conveyor belt's region of interest (a
+    roughly horizontal band across the middle of the canvas, matching this
+    line's mounting height/angle and belt width). NUM_QUERIES=20 is likewise
+    tied to this exact 10x2 layout (see RFDETRSeg.forward, which reshapes
+    query outputs assuming this grid). A real deployment on a different
+    camera/line -- different mounting height, angle, belt width, or ROI
+    framing -- MUST recalibrate this grid (and retrain) to that camera's
+    actual belt geometry; reusing these fixed coordinates unchanged will
+    silently point every anchor at the wrong part of the frame.
     """
     grid_x = np.linspace(70, 570, num_x)
     anchors = [[x, y] for y in num_y_positions for x in grid_x]
@@ -213,7 +226,10 @@ class RFDETRSegNet(nn.Module):
             nn.ReLU(inplace=True),
         )
 
-        # 10 horizontal x 2 vertical anchors focused directly along conveyor belt
+        # 10 horizontal x 2 vertical anchors focused directly along conveyor belt.
+        # See anchor_grid()'s docstring: this grid assumes THIS deployment's
+        # camera framing -- a different camera/line geometry requires
+        # recalibrating anchor_grid() (and retraining) to that ROI.
         self.register_buffer("anchors", torch.tensor(anchor_grid(), dtype=torch.float32))
 
         # Prediction heads directly driven by local visual patch features
@@ -253,7 +269,12 @@ class RFDETRSegNet(nn.Module):
         c3 = self.conv3(c2)
         c4 = self.conv4(c3)  # [B, 128, 40, 40] (P5 spatial feature map)
 
-        # Sample local patch features at anchor locations
+        # Sample local patch features at anchor locations. The /320.0 - 1.0
+        # normalization maps CANVAS_SIZE (640x640) pixel coordinates to
+        # grid_sample's [-1, 1] space -- this, like the anchor coordinates
+        # themselves, is tied to this deployment's fixed camera framing (see
+        # anchor_grid() docstring) and CANVAS_SIZE; both must be revisited
+        # together for a different camera/canvas geometry.
         norm_anchors = (self.anchors / 320.0) - 1.0  # [20, 2] in [-1, 1]
         grid = norm_anchors.view(1, 1, self.num_queries, 2).expand(b, -1, -1, -1)
         sampled = (

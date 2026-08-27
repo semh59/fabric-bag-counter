@@ -8,21 +8,39 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+import logging
+import secrets
+
 from packages.cs_storage.db import get_sync_session, init_db_sync
-from packages.cs_storage.demo_seeder import seed_demo_data
 from packages.cs_storage.repositories.user_repo import UserRepository
 from services.api.routes import router
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialize DB tables synchronously
     init_db_sync()
-    # Seed default roles and demo dataset
+    # Real first-run bootstrap: if this is a brand-new database with no
+    # accounts at all, create exactly one real admin account with a securely
+    # random password (never a guessable default), and print it to the log
+    # exactly once. No demo/company/session data is ever seeded here -- a
+    # fresh deployment starts genuinely empty and is populated for real
+    # through the Fabrika Kurulumu (setup) flow once that first admin logs in.
     with get_sync_session() as db:
         user_repo = UserRepository(db)
-        user_repo.seed_default_users()
-        seed_demo_data(db, force_reset=False)
+        if user_repo.count_users() == 0:
+            bootstrap_password = secrets.token_urlsafe(12)
+            user_repo.create_user("admin", bootstrap_password, "admin")
+            logger.warning(
+                "=" * 70 + "\n"
+                "  ILK KURULUM: yonetici hesabi olusturuldu.\n"
+                "  Kullanici adi: admin\n"
+                f"  Parola:        {bootstrap_password}\n"
+                "  Bu parola sadece bu kez gosterilir -- giris yaptiktan sonra\n"
+                "  degistirin (Ayarlar > Sifre Degistir).\n" + "=" * 70
+            )
     yield
 
 
@@ -33,10 +51,21 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware for local frontend development
+# CORS middleware: explicit origin allowlist (env-var configurable), since
+# allow_origins=["*"] combined with allow_credentials=True is rejected by
+# browsers anyway and is an insecure combination to request. Default covers
+# where the bundled web UI (served by this same app, see web_dist_path below)
+# and the Vite dev server run.
+_default_cors_origins = "http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173,http://127.0.0.1:5173"
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("CORS_ALLOWED_ORIGINS", _default_cors_origins).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

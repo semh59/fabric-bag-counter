@@ -9,8 +9,14 @@ from __future__ import annotations
 import math
 from typing import Any
 import numpy as np
+from packages.cs_core.geometry import compute_box_iou
 from packages.cs_tracking.matching import associate_detections_to_tracks
 from packages.cs_tracking.motion import BeltMotionModel
+
+# Minimum box-IoU between a just-lost track's (predicted) box and a
+# brand-new track's starting box, within the SAME update() call, for that
+# coincidence to be counted as a likely ID switch (see Step 6/7 below).
+ID_SWITCH_IOU_THRESHOLD = 0.3
 
 
 class BagTrack:
@@ -107,7 +113,12 @@ class ConveyorByteTracker:
 
     def __init__(
         self,
-        high_score_threshold: float = 0.45,
+        # Must be <= VisionDetector's own conf_threshold (default 0.40): anything
+        # the detector already filtered out never reaches this tracker, so a
+        # higher bar here (previously 0.45) silently blocked every detection
+        # from ever starting a new track -- no track meant no gate crossing was
+        # ever possible, regardless of camera, motion, or anything downstream.
+        high_score_threshold: float = 0.40,
         low_score_threshold: float = 0.15,
         match_cost_threshold: float = 0.70,
         max_time_lost: int = 30,
@@ -122,6 +133,13 @@ class ConveyorByteTracker:
         self.tracked_tracks: list[BagTrack] = []
         self.lost_tracks: list[BagTrack] = []
         self.frame_count = 0
+
+        # Real, observed tracking-quality counters (not estimates): incremented
+        # directly from genuine state transitions below, so downstream
+        # evaluation code (packages/cs_eval/replay_engine.py) can report real
+        # id-switch / fragmentation metrics instead of hardcoded zeros.
+        self.fragmentation_count: int = 0
+        self.id_switch_count: int = 0
 
     def update(
         self,
@@ -182,6 +200,10 @@ class ConveyorByteTracker:
 
         # Step 6: Transition unmatched tracks to lost
         unmatched_active_tracks = [remaining_active_tracks[i] for i in u_track_b]
+        # Snapshot each just-lost track's predicted box *before* it is marked
+        # lost, so Step 7 can check whether a brand-new track starts right on
+        # top of one of them -- a real, geometry-derived id-switch signal.
+        lost_this_frame_boxes = [(t.track_id, list(t.box)) for t in unmatched_active_tracks]
         for t in unmatched_active_tracks:
             t.mark_lost()
             self.lost_tracks.append(t)
@@ -197,9 +219,25 @@ class ConveyorByteTracker:
                 mask=det.get("mask"),
                 is_latent=det.get("is_latent", False),
             )
+            # ID-switch heuristic: a track was JUST marked lost this same
+            # update() call, and this brand-new track's starting box
+            # substantially overlaps where that lost track was predicted to
+            # be. The association step (cost_threshold gate) evidently
+            # rejected the match, but the geometry says it plausibly IS the
+            # same physical bag getting a new identity -- i.e. a real
+            # id switch, not a fabricated count.
+            for _lost_tid, lost_box in lost_this_frame_boxes:
+                if compute_box_iou(new_track.box, lost_box) > ID_SWITCH_IOU_THRESHOLD:
+                    self.id_switch_count += 1
+                    break
             self.tracked_tracks.append(new_track)
 
-        # Step 8: Prune lost tracks older than max_time_lost
+        # Step 8: Prune lost tracks older than max_time_lost. A pruned track's
+        # identity is gone for good -- if the same physical bag reappears
+        # later it will be assigned a brand-new track_id -- so each prune is
+        # a genuine track fragmentation event.
+        newly_pruned = [t for t in self.lost_tracks if t.time_since_update > self.max_time_lost]
+        self.fragmentation_count += len(newly_pruned)
         self.lost_tracks = [t for t in self.lost_tracks if t.time_since_update <= self.max_time_lost]
 
         return [t for t in self.tracked_tracks if t.state in ["tentative", "confirmed"]]

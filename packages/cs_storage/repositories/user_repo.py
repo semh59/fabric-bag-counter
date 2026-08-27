@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Sequence
 import bcrypt
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -71,6 +70,9 @@ class UserRepository:
         return self.db.execute(
             select(UserAccountORM).where(UserAccountORM.username == username)
         ).scalar_one_or_none()
+
+    def count_users(self) -> int:
+        return self.db.query(UserAccountORM).count()
 
     def get_by_id(self, user_id: int) -> UserAccountORM | None:
         """Fetch user by ID."""

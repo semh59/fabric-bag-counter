@@ -173,6 +173,13 @@ def upgrade() -> None:
     )
 
     # reconciliation (§5.7)
+    # NOTE: session_id's FK to session.id is added further below via
+    # op.create_foreign_key(), once the "session" table (created after this
+    # one) actually exists -- reconciliation and session reference each other
+    # (session.reconciliation_id -> reconciliation.id), so one side of this
+    # mutual reference must be deferred. This mirrors ReconciliationORM's
+    # plain ForeignKey("session.id") in models_orm.py and SessionORM's
+    # use_alter=True on its reconciliation_id column.
     op.create_table(
         "reconciliation",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
@@ -205,24 +212,38 @@ def upgrade() -> None:
         sa.Column("discrepancy_flag", sa.Boolean(), server_default=sa.text("false")),
         sa.Column("reconciliation_id", sa.Integer(), sa.ForeignKey("reconciliation.id"), nullable=True),
     )
+    op.create_index("ix_session_line_id", "session", ["line_id"])
+
+    # Now that both sides of the mutual session <-> reconciliation reference
+    # exist, add the deferred FK from reconciliation.session_id -> session.id
+    # (matches ReconciliationORM.session_id in models_orm.py).
+    op.create_foreign_key(
+        "fk_reconciliation_session",
+        "reconciliation",
+        "session",
+        ["session_id"],
+        ["id"],
+        ondelete="CASCADE",
+    )
 
     # count_event (§5.5)
     op.create_table(
         "count_event",
         sa.Column("event_id", sa.String(length=36), primary_key=True),
         sa.Column("session_id", sa.Integer(), sa.ForeignKey("session.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("line_id", sa.Integer(), nullable=False),
-        sa.Column("camera_id", sa.Integer(), nullable=False),
+        sa.Column("line_id", sa.Integer(), sa.ForeignKey("line.id"), nullable=False),
+        sa.Column("camera_id", sa.Integer(), sa.ForeignKey("camera.id"), nullable=False),
         sa.Column("stream_epoch", sa.BigInteger(), nullable=False),
         sa.Column("track_id", sa.Integer(), nullable=False),
         sa.Column("crossing_seq", sa.Integer(), nullable=False),
-        sa.Column("gate_id", sa.Integer(), nullable=False),
+        sa.Column("gate_id", sa.Integer(), sa.ForeignKey("gate.id"), nullable=False),
         sa.Column("crossing_timestamp", sa.DateTime(), nullable=False),
         sa.Column("frame_index", sa.BigInteger(), nullable=False),
         sa.Column("direction", sa.SmallInteger(), nullable=False),
         sa.Column("confidence", sa.Float(), nullable=True),
         sa.Column("merge_flag", sa.Boolean(), server_default=sa.text("false")),
-        sa.Column("deployment_bundle_id", sa.BigInteger(), nullable=False),
+        sa.Column("is_simulated", sa.Boolean(), server_default=sa.text("false"), nullable=False),
+        sa.Column("deployment_bundle_id", sa.BigInteger(), sa.ForeignKey("deployment_bundle.id"), nullable=False),
         sa.Column("evidence_ref", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(), server_default=sa.func.now()),
         sa.UniqueConstraint("session_id", "camera_id", "stream_epoch", "track_id", "gate_id", "crossing_seq", name="uq_count_event_idempotency"),
@@ -246,6 +267,7 @@ def upgrade() -> None:
         sa.Column("started_at", sa.DateTime(), nullable=True),
         sa.Column("finished_at", sa.DateTime(), nullable=True),
     )
+    op.create_index("ix_job_status", "job", ["status"])
 
     # outbox (§5.8)
     op.create_table(
@@ -260,6 +282,7 @@ def upgrade() -> None:
         sa.Column("last_error", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(), server_default=sa.func.now()),
     )
+    op.create_index("ix_outbox_status_next_attempt_at", "outbox", ["status", "next_attempt_at"])
 
     # user_account
     op.create_table(
@@ -278,6 +301,10 @@ def downgrade() -> None:
     op.drop_table("outbox")
     op.drop_table("job")
     op.drop_table("count_event")
+    # reconciliation.session_id -> session.id was added after both tables existed
+    # (mutual reference with session.reconciliation_id -> reconciliation.id), so it
+    # must be dropped explicitly before "session" can be dropped.
+    op.drop_constraint("fk_reconciliation_session", "reconciliation", type_="foreignkey")
     op.drop_table("session")
     op.drop_table("reconciliation")
     op.drop_table("deployment_bundle")

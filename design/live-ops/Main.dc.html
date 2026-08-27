@@ -1,0 +1,454 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap">
+  <style>
+    :root {
+      --bg-0: #0a0e17;
+      --bg-1: #0f1524;
+      --surface-1: #10182b;
+      --surface-2: #161f36;
+      --surface-3: #1c2740;
+      --border-1: #212e4a;
+      --border-2: #2c3b5c;
+      --ink-0: #f4f6fb;
+      --ink-1: #c7cfe0;
+      --ink-2: #8994b3;
+      --ink-3: #5c6789;
+      --indigo: #6366f1;
+      --indigo-strong: #4f46e5;
+      --indigo-soft: rgba(99,102,241,0.14);
+      --emerald: #10b981;
+      --emerald-soft: rgba(16,185,129,0.14);
+      --amber: #f59e0b;
+      --amber-soft: rgba(245,158,11,0.14);
+      --rose: #f43f5e;
+      --rose-soft: rgba(244,63,94,0.14);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg-0); color: var(--ink-0); font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-feature-settings: "tnum" 1; }
+    a { color: var(--indigo); text-decoration: none; }
+    a:hover { color: #818cf8; }
+    ::selection { background: var(--indigo); color: white; }
+    button { font-family: inherit; cursor: pointer; }
+    input[type="range"] { -webkit-appearance: none; appearance: none; background: transparent; }
+    input[type="range"]::-webkit-slider-runnable-track { height: 4px; background: var(--border-2); border-radius: 4px; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--indigo); margin-top: -5px; box-shadow: 0 0 0 3px var(--bg-0); }
+    select, .field-input { background: var(--bg-0); border: 1px solid var(--border-2); color: var(--ink-0); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; font-family: inherit; }
+    select:focus, .field-input:focus { outline: none; border-color: var(--indigo); box-shadow: 0 0 0 3px var(--indigo-soft); }
+    .icon-btn svg { display: block; }
+    @keyframes livePulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+    .pulse-dot { animation: livePulse 1.6s ease-in-out infinite; }
+    @keyframes countBump { 0% { transform: scale(1); } 40% { transform: scale(1.06); color: var(--emerald); } 100% { transform: scale(1); } }
+    .count-bump { animation: countBump 0.32s cubic-bezier(.4,0,.2,1); }
+    @keyframes scanMove { 0% { transform: translateX(-6%); opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { transform: translateX(106%); opacity: 0; } }
+    .scan-line { animation: scanMove 3.4s linear infinite; }
+  </style>
+</helmet>
+
+<div style="min-height:100vh; display:flex; flex-direction:column;">
+
+  <!-- ================= HEADER ================= -->
+  <header style="height:60px; flex-shrink:0; background:var(--bg-1); border-bottom:1px solid var(--border-1); display:flex; align-items:center; justify-content:space-between; padding:0 20px;">
+    <div style="display:flex; align-items:center; gap:20px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:32px; height:32px; border-radius:8px; background:var(--indigo); display:flex; align-items:center; justify-content:center;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="1.5"></rect><path d="M8 8V6a4 4 0 0 1 8 0v2"></path></svg>
+        </div>
+        <div>
+          <div style="font-size:13.5px; font-weight:700; letter-spacing:-0.01em; line-height:1.1;">Çuval Sayım <span style="color:var(--indigo); font-weight:600; font-size:10.5px;">v2.1</span></div>
+          <div style="font-size:10px; color:var(--ink-3); font-family:'IBM Plex Mono',monospace; line-height:1.3;">Gebze Çimento &amp; Yapı Kimyasalları — Hat 1</div>
+        </div>
+      </div>
+      <nav style="display:flex; align-items:center; gap:1px; background:var(--surface-1); border:1px solid var(--border-1); border-radius:10px; padding:3px;">
+        <div style="padding:5px 10px; border-radius:7px; background:var(--indigo); color:white; font-size:10.5px; font-weight:600; white-space:nowrap;">Canlı Sayım</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Oturumlar</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Mutabakat</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Kamera &amp; Model Kurulumu</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Fabrika Kurulumu</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Veri &amp; Model</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Hat Envanteri</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Sistem</div>
+      </nav>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:10px;">
+      <!-- Jobs indicator -->
+      <div style="position:relative; display:flex; align-items:center; gap:7px; background:var(--surface-1); border:1px solid var(--border-1); border-radius:9px; padding:6px 11px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-1)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l2.5 2.5"></path><circle cx="12" cy="12" r="9"></circle></svg>
+        <span style="font-size:11px; color:var(--ink-1); font-weight:600;">2 Aktif İş</span>
+        <span style="width:6px; height:6px; border-radius:50%; background:var(--amber);" class="pulse-dot"></span>
+      </div>
+      <!-- Health -->
+      <div style="display:flex; align-items:center; gap:7px; background:var(--surface-1); border:1px solid var(--border-1); border-radius:9px; padding:6px 11px;">
+        <span style="width:7px; height:7px; border-radius:50%; background:var(--emerald);" class="pulse-dot"></span>
+        <span style="font-size:11px; color:var(--ink-1); font-weight:600;">Sistem Canlı</span>
+      </div>
+      <!-- Role switch -->
+      <div style="display:flex; align-items:center; gap:2px; background:var(--surface-1); border:1px solid var(--border-1); border-radius:9px; padding:3px; margin-left:4px;">
+        <div style="padding:5px 11px; border-radius:6px; background:var(--surface-3); color:var(--ink-0); font-size:11px; font-weight:600;">Operatör</div>
+        <div style="padding:5px 11px; border-radius:6px; color:var(--ink-3); font-size:11px; font-weight:600;">Mühendis</div>
+        <div style="padding:5px 11px; border-radius:6px; color:var(--ink-3); font-size:11px; font-weight:600;">Yönetici</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= MAIN ================= -->
+  <main style="flex:1; padding:22px 24px 28px; max-width:1440px; width:100%; margin:0 auto; display:flex; flex-direction:column; gap:18px;">
+
+    <div style="display:grid; grid-template-columns: 360px 1fr; gap:18px; align-items:start;">
+
+      <!-- ===== LEFT: Counter card ===== -->
+      <div style="background:var(--surface-1); border:1px solid var(--border-1); border-radius:14px; padding:22px; display:flex; flex-direction:column; gap:18px;">
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="width:8px; height:8px; border-radius:50%; background:{{statusDotColor}};" class="{{statusDotClass}}"></span>
+            <span style="font-size:10.5px; font-weight:700; letter-spacing:0.06em; color:var(--ink-2); text-transform:uppercase;">Oturum #348</span>
+          </div>
+          <span style="font-size:10px; font-weight:700; letter-spacing:0.04em; padding:4px 9px; border-radius:99px; background:{{statusBadgeBg}}; color:{{statusBadgeFg}};">{{statusLabel}}</span>
+        </div>
+
+        <div style="text-align:center; padding:6px 0 2px;">
+          <div class="mono {{flashClass}}" style="font-size:76px; font-weight:700; line-height:1; letter-spacing:-0.02em; color:var(--ink-0);">{{count}}</div>
+          <div style="font-size:11.5px; color:var(--ink-2); margin-top:10px;">Hedef <span style="color:var(--ink-0); font-weight:600;">{{target}} çuval</span> · <span style="color:var(--indigo);">%{{pct}}</span></div>
+        </div>
+
+        <div style="height:6px; background:var(--bg-0); border-radius:99px; overflow:hidden; border:1px solid var(--border-1);">
+          <div style="height:100%; background:var(--indigo); border-radius:99px; width:{{pct}}%; transition:width 0.3s ease;"></div>
+        </div>
+
+        <div style="background:var(--surface-2); border:1px solid var(--border-1); border-radius:11px; padding:14px; display:flex; flex-direction:column; gap:10px;">
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <span style="font-size:10px; font-weight:700; letter-spacing:0.05em; color:var(--indigo); text-transform:uppercase;">Çuval / Ürün Profili</span>
+            <span style="font-size:10px; font-weight:700; color:var(--indigo); cursor:pointer;">+ Yeni</span>
+          </div>
+          <select class="field-input" style="width:100%;">
+            <option>50kg Polipropilen Çimento Çuvalı</option>
+            <option>25kg Beyaz Çimento Çuvalı</option>
+            <option>40kg Kuru Harç Torbası</option>
+          </select>
+          <div style="display:flex; flex-direction:column; gap:6px; padding-top:8px; border-top:1px solid var(--border-1); font-size:11px;">
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--ink-3);">ERP Malzeme</span><span class="mono" style="color:var(--ink-1);">MAT-CIM-50</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--ink-3);">Nominal Boyut</span><span class="mono" style="color:var(--ink-1);">480 × 650 × 130 mm</span></div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <div style="background:var(--surface-2); border:1px solid var(--border-1); border-radius:11px; padding:12px; text-align:center;">
+            <div style="font-size:9.5px; font-weight:700; color:var(--ink-3); text-transform:uppercase; letter-spacing:0.04em;">Alan İntegrali</div>
+            <div class="mono" style="font-size:19px; font-weight:600; color:var(--ink-0); margin-top:4px;">141.7</div>
+          </div>
+          <div style="background:var(--surface-2); border:1px solid var(--border-1); border-radius:11px; padding:12px; text-align:center;">
+            <div style="font-size:9.5px; font-weight:700; color:var(--ink-3); text-transform:uppercase; letter-spacing:0.04em;">Ayrışma Güveni</div>
+            <div class="mono" style="font-size:19px; font-weight:600; color:var(--emerald); margin-top:4px;">99.6%</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== RIGHT: Vision panel ===== -->
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <div style="background:var(--surface-1); border:1px solid var(--border-1); border-radius:14px; padding:18px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; align-items:center; gap:9px;">
+              <span style="font-size:12.5px; font-weight:700; color:var(--ink-0);">Kamera 1 — Canlı Görüntü Analizi</span>
+              <span style="font-size:9.5px; font-weight:700; padding:3px 8px; border-radius:6px; background:var(--indigo-soft); color:#a5b4fc; font-family:'IBM Plex Mono',monospace;">RF-DETR · ByteTrack</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <select class="field-input" style="font-size:11px; padding:6px 9px;">
+                <option>Simüle Konveyör</option>
+                <option>Yerel Web Kamerası #0</option>
+                <option>Fabrika IP Kamerası (RTSP)</option>
+              </select>
+              <span class="mono" style="font-size:11px; color:var(--emerald); font-weight:600;">25.0 FPS</span>
+            </div>
+          </div>
+
+          <!-- Tool ribbon -->
+          <div style="display:flex; flex-wrap:wrap; gap:6px; padding:8px; background:var(--bg-0); border:1px solid var(--border-1); border-radius:10px; margin-bottom:12px;">
+            <button class="icon-btn" onclick="{{onToggleGate}}" style="display:flex; align-items:center; gap:6px; padding:6px 10px; border-radius:7px; border:1px solid {{gateBorder}}; background:{{gateBg}}; color:{{gateFg}}; font-size:11px; font-weight:600;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8L22 12L18 16"></path><path d="M6 8L2 12L6 16"></path><line x1="2" y1="12" x2="22" y2="12"></line></svg>
+              Kapı Konumu
+            </button>
+            <button class="icon-btn" onclick="{{onToggleRoi}}" style="display:flex; align-items:center; gap:6px; padding:6px 10px; border-radius:7px; border:1px solid {{roiBorder}}; background:{{roiBg}}; color:{{roiFg}}; font-size:11px; font-weight:600;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="16" height="12" rx="1.5" stroke-dasharray="3 2.5"></rect></svg>
+              Sayım Alanı
+            </button>
+            <button class="icon-btn" onclick="{{onToggleWarp}}" style="display:flex; align-items:center; gap:6px; padding:6px 10px; border-radius:7px; border:1px solid {{warpBorder}}; background:{{warpBg}}; color:{{warpFg}}; font-size:11px; font-weight:600;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5h4"></path><path d="M20 9V5h-4"></path><path d="M4 15v4h4"></path><path d="M20 15v4h-4"></path></svg>
+              Kuşbakışı
+            </button>
+            <button class="icon-btn" onclick="{{onToggleSound}}" style="display:flex; align-items:center; gap:6px; padding:6px 10px; border-radius:7px; border:1px solid var(--border-2); background:transparent; color:var(--ink-1); font-size:11px; font-weight:600;">
+              <sc-if value="{{soundOn}}" hint-placeholder-val="{{true}}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4V5z"></path><path d="M16 9a4 4 0 0 1 0 6"></path></svg>
+              </sc-if>
+              <sc-if value="{{soundOff}}" hint-placeholder-val="{{false}}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4V5z"></path><line x1="16" y1="9" x2="21" y2="14"></line><line x1="21" y1="9" x2="16" y2="14"></line></svg>
+              </sc-if>
+              Ses
+            </button>
+            <button class="icon-btn" style="margin-left:auto; display:flex; align-items:center; gap:6px; padding:6px 10px; border-radius:7px; border:1px solid var(--amber); background:var(--amber-soft); color:#fbbf24; font-size:11px; font-weight:600;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path></svg>
+              İrsaliye Raporu
+            </button>
+          </div>
+
+          <!-- Vector conveyor viewport -->
+          <div style="position:relative; background:var(--bg-0); border:1px solid var(--border-2); border-radius:12px; overflow:hidden; height:280px;">
+            <svg width="100%" height="100%" viewBox="0 0 900 280" preserveAspectRatio="xMidYMid slice">
+              <defs>
+                <pattern id="beltLines" width="34" height="280" patternUnits="userSpaceOnUse">
+                  <rect width="34" height="280" fill="#0d1220"></rect>
+                  <rect x="0" width="17" height="280" fill="#0f1524"></rect>
+                </pattern>
+              </defs>
+              <rect x="0" y="0" width="900" height="280" fill="url(#beltLines)"></rect>
+              <rect x="0" y="0" width="900" height="14" fill="#1c2740"></rect>
+              <rect x="0" y="266" width="900" height="14" fill="#1c2740"></rect>
+
+              <!-- gate line -->
+              <line x1="{{gateXsvg}}" y1="14" x2="{{gateXsvg}}" y2="266" stroke="var(--emerald)" stroke-width="2" stroke-dasharray="6 5"></line>
+              <rect x="{{gateLabelX}}" y="20" width="94" height="20" rx="4" fill="var(--emerald)"></rect>
+              <text x="{{gateLabelTextX}}" y="34" fill="#04140f" font-size="10.5" font-weight="700" font-family="IBM Plex Mono, monospace">SAYIM KAPISI</text>
+
+              <!-- bags -->
+              <g>
+                <rect x="120" y="95" width="118" height="90" rx="10" fill="#ceb896" stroke="#8a7250" stroke-width="1.5"></rect>
+                <text x="179" y="145" text-anchor="middle" fill="#4a3a24" font-size="10.5" font-weight="700" font-family="IBM Plex Sans, sans-serif">50kg CİM</text>
+                <rect x="128" y="98" width="60" height="15" rx="3" fill="#1e3a8a"></rect>
+                <text x="158" y="109" text-anchor="middle" fill="#c7d8ff" font-size="8.5" font-weight="700">TRK-1002</text>
+              </g>
+              <g>
+                <rect x="360" y="90" width="122" height="94" rx="10" fill="#d6c2a1" stroke="#8a7250" stroke-width="1.5"></rect>
+                <text x="421" y="142" text-anchor="middle" fill="#4a3a24" font-size="10.5" font-weight="700" font-family="IBM Plex Sans, sans-serif">50kg CİM</text>
+                <rect x="368" y="94" width="60" height="15" rx="3" fill="#1e3a8a"></rect>
+                <text x="398" y="105" text-anchor="middle" fill="#c7d8ff" font-size="8.5" font-weight="700">TRK-1001</text>
+              </g>
+              <g>
+                <rect x="610" y="100" width="112" height="86" rx="10" fill="#c7b28d" stroke="#8a7250" stroke-width="1.5"></rect>
+                <text x="666" y="148" text-anchor="middle" fill="#4a3a24" font-size="10.5" font-weight="700" font-family="IBM Plex Sans, sans-serif">50kg CİM</text>
+                <rect x="618" y="104" width="60" height="15" rx="3" fill="#374151"></rect>
+                <text x="648" y="115" text-anchor="middle" fill="#e5e7eb" font-size="8.5" font-weight="700">TRK-1000</text>
+              </g>
+
+              <rect class="scan-line" x="0" y="14" width="3" height="252" fill="var(--indigo)" opacity="0.55"></rect>
+            </svg>
+            <div style="position:absolute; top:10px; right:12px; display:flex; align-items:center; gap:6px; background:rgba(10,14,23,0.75); padding:4px 9px; border-radius:99px; border:1px solid var(--border-2);">
+              <span style="width:6px; height:6px; border-radius:50%; background:var(--emerald);" class="pulse-dot"></span>
+              <span class="mono" style="font-size:10px; color:var(--ink-1); font-weight:600;">AI VISION ACTIVE</span>
+            </div>
+          </div>
+
+          <!-- Action row -->
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:14px; padding-top:14px; border-top:1px solid var(--border-1); flex-wrap:wrap;">
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button onclick="{{onAddNormal}}" style="display:flex; align-items:center; gap:7px; padding:9px 14px; border-radius:9px; border:none; background:var(--emerald); color:#04140f; font-size:12px; font-weight:700;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#04140f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"></rect><path d="M8 7V5a4 4 0 0 1 8 0v2"></path></svg>
+                +1 Normal Çuval
+              </button>
+              <button onclick="{{onAddMulti}}" style="display:flex; align-items:center; gap:7px; padding:9px 14px; border-radius:9px; border:none; background:var(--amber); color:#2b1600; font-size:12px; font-weight:700;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2b1600" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="8" width="12" height="12" rx="2"></rect><rect x="10" y="4" width="12" height="12" rx="2"></rect></svg>
+                +2 Bitişik Çuval
+              </button>
+              <button onclick="{{onAddDefect}}" style="display:flex; align-items:center; gap:7px; padding:9px 14px; border-radius:9px; border:1px solid var(--rose); background:var(--rose-soft); color:#fda4af; font-size:12px; font-weight:700;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"></path><path d="M10.3 3.9L2.5 17a1.6 1.6 0 0 0 1.4 2.5h16.2a1.6 1.6 0 0 0 1.4-2.5L13.7 3.9a1.6 1.6 0 0 0-2.8 0z"></path><circle cx="12" cy="16.2" r="0.6" fill="currentColor"></circle></svg>
+                +1 Hasarlı
+              </button>
+              <button onclick="{{onRollback}}" style="display:flex; align-items:center; gap:7px; padding:9px 14px; border-radius:9px; border:1px solid var(--border-2); background:transparent; color:var(--ink-1); font-size:12px; font-weight:600;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.5 15a9 9 0 1 0 2-9.5L1 10"></path></svg>
+                Geri Al
+              </button>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button onclick="{{onTogglePause}}" style="display:flex; align-items:center; gap:7px; padding:9px 14px; border-radius:9px; border:1px solid var(--border-2); background:var(--surface-2); color:var(--ink-0); font-size:12px; font-weight:700;">
+                <sc-if value="{{isPaused}}" hint-placeholder-val="{{false}}">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>
+                </sc-if>
+                <sc-if value="{{isCounting}}" hint-placeholder-val="{{true}}">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>
+                </sc-if>
+                {{pauseLabel}}
+              </button>
+              <button style="display:flex; align-items:center; gap:7px; padding:9px 14px; border-radius:9px; border:1px solid var(--rose); background:transparent; color:#fb7185; font-size:12px; font-weight:700;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg>
+                Oturumu Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Belt & gate settings -->
+        <div style="background:var(--surface-1); border:1px solid var(--border-1); border-radius:14px; padding:18px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-1)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            <span style="font-size:12.5px; font-weight:700; color:var(--ink-0);">Bant, Kapı ve Kamera Canlı Ayarları</span>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+            <div style="background:var(--surface-2); border:1px solid var(--border-1); border-radius:10px; padding:13px;">
+              <div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span style="font-size:10.5px; color:var(--ink-2); font-weight:600;">Bant Hızı</span><span class="mono" style="font-size:11px; color:var(--emerald); font-weight:700;">{{beltMs}} m/s</span></div>
+              <input type="range" min="0.5" max="5.0" step="0.2" value="{{beltSpeed}}" onchange="{{onBeltSpeed}}" style="width:100%;">
+            </div>
+            <div style="background:var(--surface-2); border:1px solid var(--border-1); border-radius:10px; padding:13px;">
+              <div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span style="font-size:10.5px; color:var(--ink-2); font-weight:600;">Kapı Konumu (X)</span><span class="mono" style="font-size:11px; color:var(--indigo); font-weight:700;">{{gateX}} px</span></div>
+              <input type="range" min="150" max="650" step="10" value="{{gateX}}" onchange="{{onGateX}}" style="width:100%;">
+            </div>
+            <div style="background:var(--surface-2); border:1px solid var(--border-1); border-radius:10px; padding:9px; display:flex; flex-direction:column; justify-content:center;">
+              <div style="font-size:10.5px; color:var(--ink-2); font-weight:600; margin-bottom:8px;">Akış Yönü</div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+                <button onclick="{{onDirLeft}}" style="padding:6px; border-radius:7px; border:1px solid {{dirLeftBorder}}; background:{{dirLeftBg}}; color:{{dirLeftFg}}; font-size:10.5px; font-weight:700;">Soldan Sağa</button>
+                <button onclick="{{onDirRight}}" style="padding:6px; border-radius:7px; border:1px solid {{dirRightBorder}}; background:{{dirRightBg}}; color:{{dirRightFg}}; font-size:10.5px; font-weight:700;">Sağdan Sola</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Bottom strip: throughput + jobs ===== -->
+    <div style="display:grid; grid-template-columns:1.4fr 1fr; gap:18px;">
+      <div style="background:var(--surface-1); border:1px solid var(--border-1); border-radius:14px; padding:18px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+          <span style="font-size:12px; font-weight:700; color:var(--ink-0);">Son 10 Dakika — Sayım Hızı</span>
+          <div style="display:flex; gap:18px;">
+            <div style="text-align:right;"><div style="font-size:9.5px; color:var(--ink-3); font-weight:600;">ORT. HIZ</div><div class="mono" style="font-size:13px; color:var(--ink-0); font-weight:700;">14.2 çuval/dk</div></div>
+            <div style="text-align:right;"><div style="font-size:9.5px; color:var(--ink-3); font-weight:600;">HEDEFE KALAN</div><div class="mono" style="font-size:13px; color:var(--ink-0); font-weight:700;">~4 dk</div></div>
+          </div>
+        </div>
+        <svg width="100%" height="86" viewBox="0 0 560 86" preserveAspectRatio="none" style="overflow:visible;">
+          <line x1="0" y1="72" x2="560" y2="72" stroke="var(--border-1)" stroke-width="1"></line>
+          <polygon points="0,72 0,52 40,44 80,50 120,34 160,40 200,26 240,32 280,20 320,28 360,16 400,24 440,14 480,20 520,10 560,18 560,72" fill="var(--emerald)" opacity="0.10"></polygon>
+          <polyline points="0,52 40,44 80,50 120,34 160,40 200,26 240,32 280,20 320,28 360,16 400,24 440,14 480,20 520,10 560,18" fill="none" stroke="var(--emerald)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>
+          <circle cx="560" cy="18" r="3.5" fill="var(--emerald)"></circle>
+        </svg>
+      </div>
+
+      <div style="background:var(--surface-1); border:1px solid var(--border-1); border-radius:14px; padding:18px;">
+        <div style="font-size:12px; font-weight:700; color:var(--ink-0); margin-bottom:12px;">Arka Plan İşleri</div>
+        <div style="display:flex; flex-direction:column; gap:9px;">
+          <div style="display:flex; align-items:center; gap:10px; padding:9px 11px; background:var(--surface-2); border:1px solid var(--border-1); border-radius:9px;">
+            <span style="width:7px; height:7px; border-radius:50%; background:var(--amber); flex-shrink:0;" class="pulse-dot"></span>
+            <div style="flex:1; min-width:0;">
+              <div style="font-size:11.5px; font-weight:600; color:var(--ink-0);">Optik Akış Kalibrasyonu</div>
+              <div style="font-size:10px; color:var(--ink-3);">Hat 1 · çalışıyor</div>
+            </div>
+            <span class="mono" style="font-size:10.5px; color:var(--amber); font-weight:700;">%68</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px; padding:9px 11px; background:var(--surface-2); border:1px solid var(--border-1); border-radius:9px;">
+            <span style="width:7px; height:7px; border-radius:50%; background:var(--ink-3); flex-shrink:0;"></span>
+            <div style="flex:1; min-width:0;">
+              <div style="font-size:11.5px; font-weight:600; color:var(--ink-0);">Model Eğitimi — rfdetr_seg_v3</div>
+              <div style="font-size:10px; color:var(--ink-3);">kuyrukta · tahmini 12 dk</div>
+            </div>
+            <span style="font-size:9.5px; font-weight:700; color:var(--ink-3); text-transform:uppercase;">Sırada</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      count: 142,
+      target: 200,
+      status: 'counting',
+      flash: false,
+      tools: { gate: false, roi: false, warp: false, sound: true },
+      beltSpeed: 2.4,
+      gateX: 480,
+      direction: 1,
+    };
+  }
+
+  addBag(n) {
+    this.setState((s) => ({ count: Math.max(0, s.count + n), flash: true }));
+    setTimeout(() => this.setState({ flash: false }), 300);
+  }
+
+  togglePause() {
+    this.setState((s) => ({ status: s.status === 'paused' ? 'counting' : 'paused' }));
+  }
+
+  toggleTool(name) {
+    this.setState((s) => ({ tools: { ...s.tools, [name]: !s.tools[name] } }));
+  }
+
+  renderVals() {
+    const s = this.state;
+    const pct = Math.min(100, Math.round((s.count / s.target) * 100));
+    const isPaused = s.status === 'paused';
+    const svgX = 60 + ((s.gateX - 150) / 500) * 780;
+
+    const toolStyle = (active, tone) => {
+      const tones = {
+        indigo: { border: 'var(--indigo)', bg: 'var(--indigo-soft)', fg: '#a5b4fc' },
+        emerald: { border: 'var(--emerald)', bg: 'var(--emerald-soft)', fg: '#6ee7b7' },
+        purple: { border: '#8b5cf6', bg: 'rgba(139,92,246,0.14)', fg: '#c4b5fd' },
+      };
+      if (!active) return { border: 'var(--border-2)', bg: 'transparent', fg: 'var(--ink-1)' };
+      return tones[tone];
+    };
+    const gate = toolStyle(s.tools.gate, 'emerald');
+    const roi = toolStyle(s.tools.roi, 'indigo');
+    const warp = toolStyle(s.tools.warp, 'purple');
+
+    const dirActive = { border: 'var(--indigo)', bg: 'var(--indigo)', fg: 'white' };
+    const dirInactive = { border: 'var(--border-2)', bg: 'transparent', fg: 'var(--ink-2)' };
+    const dl = s.direction > 0 ? dirActive : dirInactive;
+    const dr = s.direction < 0 ? dirActive : dirInactive;
+
+    return {
+      count: s.count,
+      target: s.target,
+      pct,
+      flashClass: s.flash ? 'count-bump' : '',
+      statusLabel: isPaused ? 'DURAKLATILDI' : 'SAYIM SÜRÜYOR',
+      statusDotColor: isPaused ? 'var(--amber)' : 'var(--emerald)',
+      statusDotClass: isPaused ? '' : 'pulse-dot',
+      statusBadgeBg: isPaused ? 'var(--amber-soft)' : 'var(--emerald-soft)',
+      statusBadgeFg: isPaused ? '#fbbf24' : '#6ee7b7',
+      isPaused,
+      isCounting: !isPaused,
+      pauseLabel: isPaused ? 'Devam Et' : 'Duraklat',
+      onAddNormal: () => this.addBag(1),
+      onAddMulti: () => this.addBag(2),
+      onAddDefect: () => this.addBag(1),
+      onRollback: () => this.addBag(-1),
+      onTogglePause: () => this.togglePause(),
+      onToggleGate: () => this.toggleTool('gate'),
+      onToggleRoi: () => this.toggleTool('roi'),
+      onToggleWarp: () => this.toggleTool('warp'),
+      onToggleSound: () => this.toggleTool('sound'),
+      gateBorder: gate.border, gateBg: gate.bg, gateFg: gate.fg,
+      roiBorder: roi.border, roiBg: roi.bg, roiFg: roi.fg,
+      warpBorder: warp.border, warpBg: warp.bg, warpFg: warp.fg,
+      soundOn: s.tools.sound,
+      soundOff: !s.tools.sound,
+      beltSpeed: s.beltSpeed,
+      beltMs: (s.beltSpeed * 0.4).toFixed(2),
+      onBeltSpeed: (e) => this.setState({ beltSpeed: parseFloat(e.target.value) }),
+      gateX: s.gateX,
+      gateXsvg: svgX,
+      gateLabelX: svgX - 47,
+      gateLabelTextX: svgX,
+      onGateX: (e) => this.setState({ gateX: parseInt(e.target.value, 10) }),
+      onDirLeft: () => this.setState({ direction: 1 }),
+      onDirRight: () => this.setState({ direction: -1 }),
+      dirLeftBorder: dl.border, dirLeftBg: dl.bg, dirLeftFg: dl.fg,
+      dirRightBorder: dr.border, dirRightBg: dr.bg, dirRightFg: dr.fg,
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,264 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap">
+  <style>
+    :root {
+      --bg-0: #0a0e17; --bg-1: #0f1524; --surface-1: #10182b; --surface-2: #161f36; --surface-3: #1c2740;
+      --border-1: #212e4a; --border-2: #2c3b5c;
+      --ink-0: #f4f6fb; --ink-1: #c7cfe0; --ink-2: #8994b3; --ink-3: #5c6789;
+      --indigo: #6366f1; --indigo-soft: rgba(99,102,241,0.14);
+      --emerald: #10b981; --emerald-soft: rgba(16,185,129,0.14);
+      --amber: #f59e0b; --amber-soft: rgba(245,158,11,0.14);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg-0); color: var(--ink-0); font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+    button { font-family: inherit; cursor: pointer; }
+    input, select { background: var(--bg-0); border: 1px solid var(--border-2); color: var(--ink-0); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; font-family: inherit; width: 100%; }
+    input:focus, select:focus { outline: none; border-color: var(--indigo); box-shadow: 0 0 0 3px var(--indigo-soft); }
+    label { font-size: 10px; color: var(--ink-3); font-weight: 600; display: block; margin-bottom: 5px; }
+    @keyframes fadeUp { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
+    .fade-up { animation: fadeUp 0.2s ease-out; }
+  </style>
+</helmet>
+
+<div style="min-height:100vh; display:flex; flex-direction:column;">
+  <header style="height:60px; flex-shrink:0; background:var(--bg-1); border-bottom:1px solid var(--border-1); display:flex; align-items:center; justify-content:space-between; padding:0 20px;">
+    <div style="display:flex; align-items:center; gap:20px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:32px; height:32px; border-radius:8px; background:var(--indigo); display:flex; align-items:center; justify-content:center;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="1.5"></rect><path d="M8 8V6a4 4 0 0 1 8 0v2"></path></svg>
+        </div>
+        <div>
+          <div style="font-size:13.5px; font-weight:700; letter-spacing:-0.01em; line-height:1.1;">Çuval Sayım <span style="color:var(--indigo); font-weight:600; font-size:10.5px;">v2.1</span></div>
+          <div style="font-size:10px; color:var(--ink-3); font-family:'IBM Plex Mono',monospace; line-height:1.3;">Gebze Çimento &amp; Yapı Kimyasalları</div>
+        </div>
+      </div>
+      <nav style="display:flex; align-items:center; gap:1px; background:var(--surface-1); border:1px solid var(--border-1); border-radius:10px; padding:3px;">
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Canlı Sayım</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Oturumlar</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Mutabakat</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Kamera &amp; Model Kurulumu</div>
+        <div style="padding:5px 10px; border-radius:7px; background:var(--indigo); color:white; font-size:10.5px; font-weight:600; white-space:nowrap;">Fabrika Kurulumu</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Veri &amp; Model</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Hat Envanteri</div>
+        <div style="padding:5px 10px; border-radius:7px; color:var(--ink-2); font-size:10.5px; font-weight:600; white-space:nowrap;">Sistem</div>
+      </nav>
+    </div>
+    <div style="display:flex; align-items:center; gap:2px; background:var(--surface-1); border:1px solid var(--border-1); border-radius:9px; padding:3px;">
+      <div style="padding:5px 11px; border-radius:6px; color:var(--ink-3); font-size:11px; font-weight:600;">Operatör</div>
+      <div style="padding:5px 11px; border-radius:6px; color:var(--ink-3); font-size:11px; font-weight:600;">Mühendis</div>
+      <div style="padding:5px 11px; border-radius:6px; background:var(--surface-3); color:var(--ink-0); font-size:11px; font-weight:600;">Yönetici</div>
+    </div>
+  </header>
+
+  <main style="flex:1; padding:22px 24px 32px; max-width:1440px; width:100%; margin:0 auto; display:grid; grid-template-columns:280px 1fr; gap:18px; align-items:start;">
+
+    <!-- Checklist rail -->
+    <div style="background:var(--surface-1); border:1px solid var(--border-1); border-radius:14px; padding:16px; display:flex; flex-direction:column; gap:4px;">
+      <div style="font-size:11px; font-weight:700; color:var(--ink-3); text-transform:uppercase; letter-spacing:0.05em; padding:6px 8px 10px;">Fabrika Kurulum Adımları</div>
+      <sc-for list="{{sections}}" as="sec" hint-placeholder-count="6">
+        <div onclick="{{sec.onGo}}" style="cursor:pointer; display:flex; align-items:center; gap:10px; padding:10px 10px; border-radius:9px; background:{{sec.bg}};">
+          <div style="width:22px; height:22px; border-radius:50%; background:{{sec.dotBg}}; color:{{sec.dotFg}}; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; flex-shrink:0;">
+            <sc-if value="{{sec.done}}" hint-placeholder-val="{{false}}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="{{sec.dotFg}}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></sc-if>
+            <sc-if value="{{sec.notDone}}" hint-placeholder-val="{{true}}">{{sec.num}}</sc-if>
+          </div>
+          <span style="font-size:12px; font-weight:600; color:{{sec.textColor}};">{{sec.label}}</span>
+          <span style="margin-left:auto; font-size:10px; color:var(--ink-3);" class="mono">{{sec.count}}</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- Active section -->
+    <div style="background:var(--surface-1); border:1px solid var(--border-1); border-radius:14px; padding:24px;">
+
+      <sc-if value="{{isSites}}" hint-placeholder-val="{{true}}">
+        <div class="fade-up">
+          <div style="font-size:13px; font-weight:700; margin-bottom:2px;">Tesis Bilgileri</div>
+          <div style="font-size:11.5px; color:var(--ink-3); margin-bottom:18px;">Sayım sisteminin kurulacağı fiziksel tesisi tanımlayın.</div>
+          <div style="display:grid; grid-template-columns:2fr 1fr auto; gap:10px; align-items:end; margin-bottom:20px;">
+            <div><label>Tesis Adı</label><input type="text" placeholder="Gebze Fabrikası" value="{{siteName}}" onchange="{{onSiteName}}"></div>
+            <div><label>Saat Dilimi</label><input type="text" class="mono" value="Europe/Istanbul"></div>
+            <button onclick="{{onAddSite}}" style="padding:9px 16px; border-radius:8px; border:none; background:var(--indigo); color:white; font-size:11.5px; font-weight:700; white-space:nowrap;">Tesis Ekle</button>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <sc-for list="{{sites}}" as="s" hint-placeholder-count="1">
+              <div style="display:flex; align-items:center; gap:10px; padding:11px 13px; background:var(--surface-2); border:1px solid var(--border-1); border-radius:9px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--indigo)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"></path><path d="M5 21V7l7-4 7 4v14"></path><path d="M9 9h1M14 9h1M9 13h1M14 13h1"></path></svg>
+                <span style="font-size:12px; font-weight:600;">{{s.name}}</span>
+                <span class="mono" style="font-size:10px; color:var(--ink-3);">#{{s.id}}</span>
+                <span style="margin-left:auto; font-size:9.5px; font-weight:700; padding:3px 8px; border-radius:99px; background:var(--emerald-soft); color:#6ee7b7;">AKTİF</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{isLines}}" hint-placeholder-val="{{false}}">
+        <div class="fade-up">
+          <div style="font-size:13px; font-weight:700; margin-bottom:2px;">Konveyör Hatları</div>
+          <div style="font-size:11.5px; color:var(--ink-3); margin-bottom:18px;">Her fiziksel konveyör bandı için ayrı bir sayım hattı tanımlanır.</div>
+          <div style="display:grid; grid-template-columns:1fr 2fr auto; gap:10px; align-items:end; margin-bottom:20px;">
+            <div><label>Bağlı Tesis</label><select><option>Gebze Fabrikası</option></select></div>
+            <div><label>Hat Adı</label><input type="text" placeholder="Konveyör Hat-2" value="{{lineName}}" onchange="{{onLineName}}"></div>
+            <button onclick="{{onAddLine}}" style="padding:9px 16px; border-radius:8px; border:none; background:var(--indigo); color:white; font-size:11.5px; font-weight:700; white-space:nowrap;">Hat Ekle</button>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <sc-for list="{{lines}}" as="l" hint-placeholder-count="1">
+              <div style="display:flex; align-items:center; gap:10px; padding:11px 13px; background:var(--surface-2); border:1px solid var(--border-1); border-radius:9px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--indigo)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="10" width="20" height="4" rx="1"></rect><circle cx="7" cy="12" r="1.2" fill="var(--indigo)" stroke="none"></circle><circle cx="17" cy="12" r="1.2" fill="var(--indigo)" stroke="none"></circle></svg>
+                <span style="font-size:12px; font-weight:600;">{{l.name}}</span>
+                <span class="mono" style="font-size:10px; color:var(--ink-3);">#{{l.id}}</span>
+                <span style="margin-left:auto; font-size:9.5px; font-weight:700; padding:3px 8px; border-radius:99px; background:var(--amber-soft); color:#fbbf24;">KAMERA BEKLİYOR</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{isCameras}}" hint-placeholder-val="{{false}}">
+        <div class="fade-up">
+          <div style="font-size:13px; font-weight:700; margin-bottom:2px;">Kamera Ataması</div>
+          <div style="font-size:11.5px; color:var(--ink-3); margin-bottom:18px;">Her hatta bir görüntü kaynağı atanır. Bağlantı ve kalibrasyon "Kamera &amp; Model Kurulumu" akışında yapılır.</div>
+          <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:18px;">
+            <sc-for list="{{lines}}" as="l" hint-placeholder-count="1">
+              <div style="display:flex; align-items:center; gap:10px; padding:11px 13px; background:var(--surface-2); border:1px solid var(--border-1); border-radius:9px;">
+                <span style="font-size:12px; font-weight:600;">{{l.name}}</span>
+                <span style="margin-left:auto; font-size:9.5px; font-weight:700; padding:3px 8px; border-radius:99px; background:var(--amber-soft); color:#fbbf24;">Atanmadı</span>
+                <button style="padding:5px 10px; border-radius:7px; border:1px solid var(--border-2); background:transparent; color:var(--ink-1); font-size:10.5px; font-weight:600;">Kamera Ata</button>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px; padding:13px; background:var(--indigo-soft); border-radius:10px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a5b4fc" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <span style="font-size:11px; color:#c7d2fe;">Kamera bağlama ve canlı kalibrasyon, <b>Kamera &amp; Model Kurulumu</b> ekranında tamamlanır.</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{isProducts}}" hint-placeholder-val="{{false}}">
+        <div class="fade-up">
+          <div style="font-size:13px; font-weight:700; margin-bottom:2px;">Ürün / Çuval Profilleri</div>
+          <div style="font-size:11.5px; color:var(--ink-3); margin-bottom:18px;">Sayılacak her çuval türü için nominal boyut ve ERP eşlemesi tanımlanır.</div>
+          <div style="display:grid; grid-template-columns:2fr 1fr auto; gap:10px; align-items:end; margin-bottom:20px;">
+            <div><label>Ürün Adı</label><input type="text" placeholder="50kg Beyaz Çimento" value="{{prodName}}" onchange="{{onProdName}}"></div>
+            <div><label>ERP Kodu</label><input type="text" class="mono" placeholder="MAT-CIM-50W"></div>
+            <button onclick="{{onAddProduct}}" style="padding:9px 16px; border-radius:8px; border:none; background:var(--indigo); color:white; font-size:11.5px; font-weight:700; white-space:nowrap;">Profil Ekle</button>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px;">
+            <sc-for list="{{products}}" as="p" hint-placeholder-count="1">
+              <div style="padding:13px; background:var(--surface-2); border:1px solid var(--border-1); border-radius:10px;">
+                <div style="font-size:12px; font-weight:700; margin-bottom:6px;">{{p.name}}</div>
+                <div class="mono" style="font-size:10.5px; color:var(--ink-3);">{{p.erp}}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{isCalibration}}" hint-placeholder-val="{{false}}">
+        <div class="fade-up">
+          <div style="font-size:13px; font-weight:700; margin-bottom:2px;">Kalibrasyon</div>
+          <div style="font-size:11.5px; color:var(--ink-3); margin-bottom:18px;">Her hat, canlı görüntüsü üzerinden ayrı ayrı kalibre edilir.</div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <sc-for list="{{lines}}" as="l" hint-placeholder-count="1">
+              <div style="display:flex; align-items:center; gap:10px; padding:13px; background:var(--surface-2); border:1px solid var(--border-1); border-radius:10px;">
+                <span style="font-size:12px; font-weight:600;">{{l.name}}</span>
+                <span style="margin-left:auto; font-size:9.5px; font-weight:700; padding:3px 8px; border-radius:99px; background:var(--amber-soft); color:#fbbf24;">Kalibrasyon Bekliyor</span>
+                <button style="padding:6px 12px; border-radius:7px; border:none; background:var(--indigo); color:white; font-size:10.5px; font-weight:700;">Kalibrasyona Başla →</button>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{isGoLive}}" hint-placeholder-val="{{false}}">
+        <div class="fade-up">
+          <div style="font-size:13px; font-weight:700; margin-bottom:2px;">Özet &amp; Canlıya Alma</div>
+          <div style="font-size:11.5px; color:var(--ink-3); margin-bottom:18px;">Tüm ön koşullar tamamlandığında hat canlı sayıma açılır.</div>
+          <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:20px;">
+            <div style="padding:13px; background:var(--surface-2); border:1px solid var(--border-1); border-radius:10px; text-align:center;"><div class="mono" style="font-size:18px; font-weight:700;">{{siteCount}}</div><div style="font-size:9px; color:var(--ink-3); font-weight:600;">TESİS</div></div>
+            <div style="padding:13px; background:var(--surface-2); border:1px solid var(--border-1); border-radius:10px; text-align:center;"><div class="mono" style="font-size:18px; font-weight:700;">{{lineCount}}</div><div style="font-size:9px; color:var(--ink-3); font-weight:600;">HAT</div></div>
+            <div style="padding:13px; background:var(--surface-2); border:1px solid var(--border-1); border-radius:10px; text-align:center;"><div class="mono" style="font-size:18px; font-weight:700;">{{productCount}}</div><div style="font-size:9px; color:var(--ink-3); font-weight:600;">ÜRÜN PROFİLİ</div></div>
+            <div style="padding:13px; background:var(--amber-soft); border:1px solid var(--amber); border-radius:10px; text-align:center;"><div class="mono" style="font-size:18px; font-weight:700; color:#fbbf24;">2</div><div style="font-size:9px; color:#fbbf24; font-weight:600;">EKSİK ADIM</div></div>
+          </div>
+          <button disabled style="width:100%; padding:12px; border-radius:9px; border:none; background:var(--surface-3); color:var(--ink-3); font-size:12.5px; font-weight:700;">Tüm Ön Koşullar Tamamlanınca Etkinleşir</button>
+        </div>
+      </sc-if>
+
+    </div>
+  </main>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      section: 'sites',
+      sites: [{ id: 1, name: 'Gebze Fabrikası' }],
+      lines: [{ id: 1, name: 'Konveyör Hat-1' }],
+      products: [{ id: 1, name: '50kg Polipropilen Çimento', erp: 'MAT-CIM-50' }],
+      siteName: '', lineName: '', prodName: '',
+    };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const order = ['sites', 'lines', 'cameras', 'products', 'calibration', 'golive'];
+    const idx = order.indexOf(s.section);
+    const meta = [
+      { key: 'sites', label: 'Tesis Bilgileri', count: s.sites.length },
+      { key: 'lines', label: 'Konveyör Hatları', count: s.lines.length },
+      { key: 'cameras', label: 'Kamera Ataması', count: '0/' + s.lines.length },
+      { key: 'products', label: 'Ürün Profilleri', count: s.products.length },
+      { key: 'calibration', label: 'Kalibrasyon', count: '0/' + s.lines.length },
+      { key: 'golive', label: 'Canlıya Alma', count: '' },
+    ];
+    const sections = meta.map((m, i) => {
+      const active = m.key === s.section;
+      const done = i < idx;
+      return {
+        num: i + 1, label: m.label, count: m.count, done, notDone: !done,
+        onGo: () => this.setState({ section: m.key }),
+        bg: active ? 'var(--indigo-soft)' : 'transparent',
+        dotBg: done ? 'var(--emerald)' : active ? 'var(--indigo)' : 'var(--surface-3)',
+        dotFg: done ? '#04140f' : active ? 'white' : 'var(--ink-3)',
+        textColor: active ? '#c7d2fe' : done ? 'var(--ink-0)' : 'var(--ink-2)',
+      };
+    });
+
+    return {
+      sections,
+      isSites: s.section === 'sites', isLines: s.section === 'lines', isCameras: s.section === 'cameras',
+      isProducts: s.section === 'products', isCalibration: s.section === 'calibration', isGoLive: s.section === 'golive',
+      sites: s.sites, lines: s.lines, products: s.products,
+      siteName: s.siteName, onSiteName: (e) => this.setState({ siteName: e.target.value }),
+      onAddSite: () => {
+        if (!s.siteName.trim()) return;
+        this.setState((st) => ({ sites: [...st.sites, { id: st.sites.length + 1, name: st.siteName }], siteName: '' }));
+      },
+      lineName: s.lineName, onLineName: (e) => this.setState({ lineName: e.target.value }),
+      onAddLine: () => {
+        if (!s.lineName.trim()) return;
+        this.setState((st) => ({ lines: [...st.lines, { id: st.lines.length + 1, name: st.lineName }], lineName: '' }));
+      },
+      prodName: s.prodName, onProdName: (e) => this.setState({ prodName: e.target.value }),
+      onAddProduct: () => {
+        if (!s.prodName.trim()) return;
+        this.setState((st) => ({ products: [...st.products, { id: st.products.length + 1, name: st.prodName, erp: 'MAT-NEW-' + (st.products.length + 1) }], prodName: '' }));
+      },
+      siteCount: s.sites.length, lineCount: s.lines.length, productCount: s.products.length,
+    };
+  }
+}
+</script>
+</body>
+</html>

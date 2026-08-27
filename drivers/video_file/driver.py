@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime, timezone
 from typing import Any
-import numpy as np
-from PIL import Image
 from packages.cs_core.frame import Frame
+from packages.cs_core.interfaces.frame_transport import FrameTransport
 from packages.cs_core.interfaces.video_source import VideoSource
+
+logger = logging.getLogger(__name__)
 
 
 class FileVideoSource:
@@ -32,41 +34,49 @@ class FileVideoSource:
             import cv2
             self.cap = cv2.VideoCapture(self.file_path)
             self._is_connected = bool(self.cap.isOpened())
-        except Exception:
-            # Fallback simulated frame generator
-            self._is_connected = True
+            if not self._is_connected:
+                logger.error(f"[FileVideoSource] Failed to open video source: {self.file_path!r}")
+        except Exception as e:
+            logger.error(f"[FileVideoSource] Exception while opening video source {self.file_path!r}: {e}")
+            self.cap = None
+            self._is_connected = False
 
-    def read(self) -> Frame | None:
-        if not self._is_connected:
+    def read(self, transport: FrameTransport) -> Frame | None:
+        if not self._is_connected or self.cap is None:
             return None
 
-        img_shape = (640, 640, 3)
-        if self.cap is not None:
-            ret, img = self.cap.read()
-            if not ret or img is None:
-                if self.config.get("loop", False):
-                    self.cap.set(0, 0)  # Rewind to start
-                    ret, img = self.cap.read()
-                    if not ret or img is None:
-                        return None
-                else:
+        import cv2
+
+        ret, img = self.cap.read()
+        if not ret or img is None:
+            if self.config.get("loop", False):
+                self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Rewind to start
+                ret, img = self.cap.read()
+                if not ret or img is None:
                     self._is_connected = False
                     return None
-            img_shape = img.shape
+            else:
+                self._is_connected = False
+                return None
 
         self.frame_counter += 1
         mono_ns = time.monotonic_ns()
         wall = datetime.now(timezone.utc)
+        camera_id = self.config.get("camera_id", 1)
+        shm_name = f"shm_file_cam_{camera_id}_slot_{self.frame_counter % 8}"
+
+        # Write decoded pixel data into shared memory before publishing metadata.
+        transport.write_image_data(shm_name, img)
 
         return Frame(
-            camera_id=self.config.get("camera_id", 1),
+            camera_id=camera_id,
             stream_epoch=self.epoch,
             frame_index=self.frame_counter,
             monotonic_ns=mono_ns,
             wall_clock=wall,
-            shm_name=f"shm_file_cam_{self.config.get('camera_id', 1)}_slot_{self.frame_counter % 8}",
-            shape=img_shape,
-            dtype="uint8",
+            shm_name=shm_name,
+            shape=img.shape,
+            dtype=str(img.dtype),
         )
 
     def close(self) -> None:

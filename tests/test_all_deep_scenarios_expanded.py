@@ -591,7 +591,14 @@ def test_scenario_l_13_step_setup_wizard_complete():
     assert c_res.status_code == 200
     cam_id = c_res.json()["id"]
     test_cam = client.post(f"/api/cameras/{cam_id}/test", headers=headers)
-    assert test_cam.json()["status"] == "ok"
+    # This camera was created with no real source_config (no RTSP URL/device),
+    # so a genuine connection attempt correctly reports failure rather than
+    # faking success -- the wizard step itself completing (200 OK, with an
+    # honest connected=False) is what's under test here, not that an
+    # unconfigured camera can somehow be reached.
+    assert test_cam.status_code == 200
+    assert test_cam.json()["connected"] is False
+    assert test_cam.json()["status"] == "error"
 
     # Step 4: Create Config Version (ROI & Gate)
     cfg_res = client.post(

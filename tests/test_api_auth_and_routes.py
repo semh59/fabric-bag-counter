@@ -1,11 +1,23 @@
 """Unit tests for FastAPI endpoints, authentication, and RBAC (§8.1, §8.2)."""
 
+import pytest
 from fastapi.testclient import TestClient
 from packages.cs_storage.db import get_sync_session, init_db_sync
 from packages.cs_storage.models_orm import LineORM, ProductProfileORM, SiteORM
+from packages.cs_storage.repositories.user_repo import UserRepository
 from services.api.main import app
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _seed_default_users():
+    # login() no longer auto-seeds (removed with the rest of demo-data
+    # behavior); this file logs in with the fixed operator/engineer/admin
+    # test accounts, so seed them explicitly here instead.
+    init_db_sync()
+    with get_sync_session() as db:
+        UserRepository(db).seed_default_users()
 
 
 def setup_api_data():

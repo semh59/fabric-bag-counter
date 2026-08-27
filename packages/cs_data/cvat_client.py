@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 from typing import Any
+import httpx
 import numpy as np
 from packages.cs_core.geometry import compute_mask_iou
+
+
+class CvatApiError(RuntimeError):
+    """Raised when the CVAT REST API returns a non-2xx response."""
 
 
 class CvatClient:
@@ -14,9 +19,11 @@ class CvatClient:
         self,
         base_url: str = "http://localhost:8080/api",
         auth_token: str | None = None,
+        timeout_seconds: float = 10.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.auth_token = auth_token
+        self.timeout = timeout_seconds
 
     def get_labels_spec(self) -> list[dict[str, Any]]:
         """Return standardized 2-class CVAT specification (§6.4)."""
@@ -47,14 +54,37 @@ class CvatClient:
         ]
 
     def create_task(self, name: str, project_id: int | None = None) -> dict[str, Any]:
-        """Create new annotation task in CVAT."""
-        # Standard schema payload
-        payload = {
+        """Create a new annotation task in CVAT via its REST API.
+
+        Issues a real `POST {base_url}/tasks` request with the standard
+        2-class label spec as payload, authenticating via the CVAT token
+        auth scheme (`Authorization: Token <auth_token>`). Raises
+        `CvatApiError` on any non-2xx response.
+        """
+        url = f"{self.base_url}/tasks"
+        payload: dict[str, Any] = {
             "name": name,
-            "project_id": project_id,
             "labels": self.get_labels_spec(),
         }
-        return {"id": 101, "name": name, "status": "annotation", "labels": payload["labels"]}
+        if project_id is not None:
+            payload["project_id"] = project_id
+
+        headers = {"Content-Type": "application/json", "Accept": "application/json"}
+        if self.auth_token:
+            headers["Authorization"] = f"Token {self.auth_token}"
+
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.post(url, json=payload, headers=headers)
+        except httpx.HTTPError as exc:
+            raise CvatApiError(f"CVAT create_task request to {url} failed: {exc}") from exc
+
+        if not (200 <= response.status_code < 300):
+            raise CvatApiError(
+                f"CVAT create_task failed: HTTP {response.status_code} for {url}: {response.text}"
+            )
+
+        return response.json()
 
     def calculate_inter_annotator_agreement(
         self,
@@ -62,8 +92,9 @@ class CvatClient:
         annotator2_masks: list[np.ndarray],
     ) -> float:
         """Calculate mean pairwise Mask-IoU agreement between two independent annotators (§6.3).
-        
-        Kural: İlk 100 karede iki etiketçi bağımsız çalışır. IoU uyumu >= 0.85 olmalıdır.
+
+        Rule: for the first 100 frames, two annotators work independently. The
+        IoU agreement between them must be >= 0.85.
         """
         n = min(len(annotator1_masks), len(annotator2_masks))
         if n == 0:

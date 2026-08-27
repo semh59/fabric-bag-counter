@@ -2,11 +2,29 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import random
 from typing import Any
 import numpy as np
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+
+logger = logging.getLogger(__name__)
+
+# Truetype fonts to try (in order) for legible print-mark text. Falls back to
+# PIL's tiny bitmap default font (rendered at a higher supersample scale) if
+# none of these are resolvable on the current platform.
+_PRINT_MARK_FONT_CANDIDATES = ("arial.ttf", "DejaVuSans-Bold.ttf", "DejaVuSans.ttf", "Arial.ttf")
+
+
+def _load_print_mark_font(size: int) -> ImageFont.ImageFont | ImageFont.FreeTypeFont | None:
+    """Best-effort load of a real truetype font for print-mark text; None if unavailable."""
+    for name in _PRINT_MARK_FONT_CANDIDATES:
+        try:
+            return ImageFont.truetype(name, size)
+        except Exception:
+            continue
+    return None
 
 
 class SyntheticBagGenerator:
@@ -44,8 +62,16 @@ class SyntheticBagGenerator:
         base_size: tuple[int, int] = (160, 240),
         color: tuple[int, int, int] = (220, 215, 200),  # woven pp bag texture
         has_print_mark: bool = True,
-    ) -> tuple[Image.Image, Image.Image, list[float] | None]:
-        """Generate a single bag template image, its binary alpha mask, and print mark box."""
+    ) -> tuple[Image.Image, Image.Image, list[float] | None, Image.Image | None]:
+        """Generate a single bag template image, its binary alpha mask, its print mark
+        box (in bag-local, unrotated coordinates), and a single-channel "print mask"
+        image (mode "L", same size as the bag) whose non-zero pixels mark the print
+        box region. The print mask lets callers retransform the print box through
+        whatever rotation is later applied to the bag image (see generate_scene),
+        by rotating this mask with the exact same PIL call and re-deriving the
+        bounding box from the rotated pixels, instead of naively offsetting the
+        original untransformed coordinates.
+        """
         bw, bh = base_size
         bag_img = Image.new("RGBA", (bw, bh), (0, 0, 0, 0))
         draw = ImageDraw.Draw(bag_img)
@@ -58,6 +84,7 @@ class SyntheticBagGenerator:
         draw.line([(8, bh - 12), (bw - 8, bh - 12)], fill=(120, 115, 100, 255), width=2)
 
         print_box = None
+        print_mask_img = None
         if has_print_mark:
             # Add center print mark / logo box
             pw, ph = int(bw * 0.5), int(bh * 0.3)
@@ -66,11 +93,54 @@ class SyntheticBagGenerator:
             px2 = px1 + pw
             py2 = py1 + ph
             draw.rectangle([(px1, py1), (px2, py2)], fill=(180, 50, 40, 220))
-            draw.text((px1 + 10, py1 + 10), "FABRIC", fill=(255, 255, 255, 255))
+
+            # Render the print-mark text at a supersampled scale (or with a real
+            # truetype font when available) so it isn't the tiny/illegible PIL
+            # default bitmap font baked straight into the bag image.
+            label = "FABRIC"
+            supersample = 4
+            font = _load_print_mark_font(size=int(ph * 0.5))
+            if font is not None:
+                text_layer_size = (pw, ph)
+                text_layer = Image.new("RGBA", text_layer_size, (0, 0, 0, 0))
+                tdraw = ImageDraw.Draw(text_layer)
+                bbox = tdraw.textbbox((0, 0), label, font=font)
+                tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+                tx = (pw - tw) // 2 - bbox[0]
+                ty = (ph - th) // 2 - bbox[1]
+                tdraw.text((tx, ty), label, fill=(255, 255, 255, 255), font=font)
+            else:
+                # No truetype font resolvable: fall back to the default bitmap
+                # font but render it big via supersampling, then downsample with
+                # a high-quality filter for much better perceived legibility.
+                big_size = (pw * supersample, ph * supersample)
+                text_layer_big = Image.new("RGBA", big_size, (0, 0, 0, 0))
+                tdraw = ImageDraw.Draw(text_layer_big)
+                bbox = tdraw.textbbox((0, 0), label)
+                tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+                scale = min(big_size[0] / max(tw, 1), big_size[1] / max(th, 1)) * 0.7
+                text_layer_scaled = Image.new("RGBA", big_size, (0, 0, 0, 0))
+                tdraw2 = ImageDraw.Draw(text_layer_scaled)
+                tdraw2.text((0, 0), label, fill=(255, 255, 255, 255))
+                new_w = max(1, int(text_layer_scaled.width * scale))
+                new_h = max(1, int(text_layer_scaled.height * scale))
+                text_layer_resized = text_layer_scaled.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                text_layer = Image.new("RGBA", (pw, ph), (0, 0, 0, 0))
+                text_layer.paste(
+                    text_layer_resized,
+                    ((pw - new_w) // 2, (ph - new_h) // 2),
+                    text_layer_resized,
+                )
+
+            bag_img.alpha_composite(text_layer, (px1, py1))
             print_box = [float(px1), float(py1), float(px2), float(py2)]
 
+            print_mask_img = Image.new("L", (bw, bh), 0)
+            pm_draw = ImageDraw.Draw(print_mask_img)
+            pm_draw.rectangle([(px1, py1), (px2, py2)], fill=255)
+
         mask = bag_img.split()[3]
-        return bag_img, mask, print_box
+        return bag_img, mask, print_box, print_mask_img
 
     def generate_scene(
         self,
@@ -109,7 +179,7 @@ class SyntheticBagGenerator:
         for i in range(num_bags):
             color = random.choice(colors)
             has_print = random.random() > 0.3
-            bag_img, bag_mask, pbox = self.create_bag_template(
+            bag_img, bag_mask, pbox, pmask_img = self.create_bag_template(
                 base_size=(random.randint(140, 180), random.randint(220, 260)),
                 color=color,
                 has_print_mark=has_print,
@@ -119,10 +189,23 @@ class SyntheticBagGenerator:
             rot_deg = random.uniform(-15, 15)
             bag_img_rot = bag_img.rotate(rot_deg, expand=True, resample=Image.Resampling.BILINEAR)
             bag_mask_rot = bag_mask.rotate(rot_deg, expand=True, resample=Image.Resampling.NEAREST)
+            # Rotate the print-mark mask through the *exact same* PIL call (same
+            # angle, same expand=True canvas recentering) used for the bag image
+            # itself, so its post-rotation pixel footprint is genuinely correct
+            # instead of naively offsetting the pre-rotation box coordinates.
+            pmask_rot = (
+                pmask_img.rotate(rot_deg, expand=True, resample=Image.Resampling.NEAREST)
+                if pmask_img is not None
+                else None
+            )
 
             bw, bh = bag_img_rot.size
 
-            # Apply shingling overlap along x axis
+            # Apply shingling overlap along x axis. overlap_ratio here describes
+            # how much *this* bag (i) overlaps backward onto the previous bag
+            # (i-1); it must be captured per-bag (not left as a shared loop
+            # variable) because it is read back below, once per bag, when
+            # deriving each bag's own visible_ratio.
             overlap_ratio = random.uniform(self.min_overlap, self.max_overlap) if i > 0 else 0.0
             x_pos = int(start_x - (bw * overlap_ratio)) if i > 0 else start_x
             y_pos = int(y_center - bh // 2 + random.randint(-20, 20))
@@ -132,10 +215,12 @@ class SyntheticBagGenerator:
             bag_records.append({
                 "img": bag_img_rot,
                 "mask": bag_mask_rot,
+                "pmask_rot": pmask_rot,
                 "pos": (x_pos, y_pos),
                 "size": (bw, bh),
                 "has_print": has_print,
                 "pbox": pbox,
+                "overlap_ratio": overlap_ratio,
             })
 
         # Z-order paste: bags on top overlap those underneath
@@ -170,15 +255,26 @@ class SyntheticBagGenerator:
             amodal_masks.append(full_amodal_mask)
             amodal_boxes.append([float(dst_x1), float(dst_y1), float(dst_x2), float(dst_y2)])
 
-            if rec["has_print"] and rec["pbox"] is not None:
-                # Estimate transformed print mark box
-                px1, py1, px2, py2 = rec["pbox"]
-                print_mark_boxes.append([
-                    float(bx + px1), float(by + py1),
-                    float(bx + px2), float(by + py2),
-                ])
+            if rec["has_print"] and rec["pbox"] is not None and rec["pmask_rot"] is not None:
+                # Derive the *actually* rotated print mark box by reading back
+                # the bounding box of the non-zero pixels in the print mask
+                # after it went through the identical rotate(expand=True) call
+                # as the bag image, then offsetting by the final paste position.
+                pm_arr = np.array(rec["pmask_rot"]) > 128
+                ys, xs = np.nonzero(pm_arr)
+                if xs.size > 0 and ys.size > 0:
+                    print_mark_boxes.append([
+                        float(bx + xs.min()), float(by + ys.min()),
+                        float(bx + xs.max() + 1), float(by + ys.max() + 1),
+                    ])
 
-            visible_ratio = 1.0 - (0.5 * overlap_ratio if i < len(bag_records) - 1 else 0.0)
+            # Each bag's visibility is reduced by whichever bag was pasted on
+            # top of it -- i.e. the *next* bag in z-order -- so we must read
+            # back that next bag's own stored overlap_ratio (not a stale
+            # shared loop variable) rather than this bag's own overlap with
+            # its predecessor.
+            next_overlap = bag_records[i + 1]["overlap_ratio"] if i < len(bag_records) - 1 else 0.0
+            visible_ratio = 1.0 - 0.5 * next_overlap
             visible_ratios.append(visible_ratio)
 
         # Apply realistic distortions (lighting, slight blur)

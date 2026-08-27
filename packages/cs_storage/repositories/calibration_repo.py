@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Sequence
+from typing import Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from packages.cs_storage.models_orm import LineCalibrationORM

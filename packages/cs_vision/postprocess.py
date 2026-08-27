@@ -5,6 +5,19 @@ from __future__ import annotations
 import numpy as np
 from PIL import Image
 
+# NMS IoU threshold for suppressing duplicate bag_body detections. 0.45 is the
+# conventional COCO-style default (looser than the typical 0.5 used for
+# well-separated objects) chosen because shingled/overlapping bags on the
+# conveyor can legitimately have adjacent boxes with moderate IoU; a tighter
+# threshold started suppressing genuinely distinct, touching bags.
+NMS_IOU_THRESHOLD = 0.45
+
+# Default model input/canvas size (must match VisionDetector.input_size and
+# train_rfdetr.CANVAS_SIZE -- the fixed 640x640 square the model is trained
+# and run on). Callers should pass their actual canvas_size explicitly;
+# this is only a fallback default.
+DEFAULT_CANVAS_SIZE = (640, 640)
+
 
 def postprocess_rfdetr_seg(
     boxes: np.ndarray,          # (N, 4) in [x1, y1, x2, y2]
@@ -16,6 +29,7 @@ def postprocess_rfdetr_seg(
     pad: tuple[int, int],          # (pad_w, pad_h)
     conf_threshold: float = 0.40,
     mask_threshold: float = 0.50,
+    canvas_size: tuple[int, int] = DEFAULT_CANVAS_SIZE,  # (canvas_h, canvas_w) the model was run on
 ) -> tuple[list[dict], list[dict]]:
     """Decode raw model predictions into bag_body masks and print_mark bounding boxes.
     
@@ -54,18 +68,44 @@ def postprocess_rfdetr_seg(
                 # Decode mask
                 rmask = raw_masks[i]
                 if rmask.ndim == 2:
-                    # Resize mask to original image size
-                    pil_mask = Image.fromarray((rmask > mask_threshold).astype(np.uint8) * 255)
-                    mask_h, mask_w = rmask.shape
-                    if mask_h != orig_h or mask_w != orig_w:
-                        resized_mask = pil_mask.resize((int(mask_w / scale), int(mask_h / scale)), Image.Resampling.NEAREST)
+                    # The raw mask (e.g. 160x160, see train_rfdetr.MASK_SIZE) is
+                    # predicted over the *full padded model canvas*
+                    # (e.g. 640x640, see train_rfdetr.CANVAS_SIZE) -- a fixed
+                    # architecture ratio (4x here) that is entirely independent
+                    # of the per-image letterbox `scale`/`pad` used for the box
+                    # coordinates above. Inverting only `scale` (as a previous
+                    # version of this code did) leaves the mask sized for the
+                    # ~160px mask grid while treating it as if it already
+                    # covered the original image, which strands the decoded
+                    # mask as a small, wrong patch pinned to the top-left
+                    # corner. The correct inversion mirrors the box inversion
+                    # in three explicit steps:
+                    #   1) upsample the raw mask to the full padded canvas size
+                    #   2) crop out the letterbox padding (pad_w/pad_h)
+                    #   3) rescale the unpadded crop by 1/scale into the
+                    #      original image's coordinate space
+                    canvas_h, canvas_w = canvas_size
+                    bin_mask = (rmask > mask_threshold).astype(np.uint8) * 255
+
+                    # Step 1: raw mask grid -> full padded canvas.
+                    pil_mask = Image.fromarray(bin_mask)
+                    canvas_mask_img = pil_mask.resize((canvas_w, canvas_h), Image.Resampling.NEAREST)
+                    canvas_mask = np.array(canvas_mask_img) > 128
+
+                    # Step 2: crop out the letterbox padding, leaving just the
+                    # scaled (but still unpadded) image region within the canvas.
+                    new_h = min(max(0, canvas_h - pad_h), max(1, int(round(orig_h * scale))))
+                    new_w = min(max(0, canvas_w - pad_w), max(1, int(round(orig_w * scale))))
+                    crop = canvas_mask[pad_h : pad_h + new_h, pad_w : pad_w + new_w]
+
+                    # Step 3: rescale the unpadded crop back up to original
+                    # image resolution (inverting the letterbox `scale`).
+                    if crop.size == 0:
                         full_mask = np.zeros((orig_h, orig_w), dtype=bool)
-                        res_arr = np.array(resized_mask) > 128
-                        rh = min(orig_h, res_arr.shape[0])
-                        rw = min(orig_w, res_arr.shape[1])
-                        full_mask[:rh, :rw] = res_arr[:rh, :rw]
                     else:
-                        full_mask = rmask > mask_threshold
+                        crop_img = Image.fromarray(crop.astype(np.uint8) * 255)
+                        full_mask_img = crop_img.resize((orig_w, orig_h), Image.Resampling.NEAREST)
+                        full_mask = np.array(full_mask_img) > 128
                 else:
                     full_mask = np.zeros((orig_h, orig_w), dtype=bool)
                     bx1, by1, bx2, by2 = map(int, unpadded_box)
@@ -118,7 +158,7 @@ def postprocess_rfdetr_seg(
             inter = w * h
             ovr = inter / np.maximum(1.0, areas[idx] + areas[order[1:]] - inter)
             
-            inds = np.where(ovr <= 0.45)[0]
+            inds = np.where(ovr <= NMS_IOU_THRESHOLD)[0]
             order = order[inds + 1]
 
         bag_bodies = [raw_bag_bodies[k] for k in keep]
