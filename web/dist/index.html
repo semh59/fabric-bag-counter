@@ -29,6 +29,29 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     input, select, textarea { background-color: #1e2227; border: 1px solid #363b41; color: #edf0f2; border-radius: 0.5rem; padding: 0.55rem 0.85rem; font-size: 0.875rem; transition: all 0.15s ease; font-family: inherit; }
     input:focus, select:focus, textarea:focus { outline: none; border-color: #5b9bd1; box-shadow: 0 0 0 2px rgba(91, 155, 209, 0.35); }
+
+    /* Camera wall: one hero (the tile an operator actually watches) + a
+       scrollable thumbnail rail (awareness, not scrutiny). Past ~4 equal
+       tiles a flat grid either shrinks every feed to unreadable or pushes
+       the rest of the screen off-view -- click a thumbnail to promote it.
+       A grid toggle is offered for a start-of-shift sweep of every feed. */
+    .cam-wall { display: flex; gap: 0.875rem; align-items: flex-start; }
+    .cam-wall.grid-mode { display: grid; gap: 0.875rem; }
+    .cam-hero { flex: 1; min-width: 0; }
+    .cam-wall.grid-mode .cam-hero { display: none; }
+    .cam-thumbs-wrap { position: relative; width: 200px; flex-shrink: 0; }
+    .cam-wall.grid-mode .cam-thumbs-wrap { display: contents; }
+    .cam-thumbs { display: flex; flex-direction: column; gap: 0.5rem; max-height: 420px; overflow-y: auto; padding-right: 2px; }
+    .cam-wall.grid-mode .cam-thumbs { display: contents; }
+    .cam-thumb { background: #1a1d22; border: 1px solid #363b41; border-radius: 0.6rem; overflow: hidden; cursor: pointer; transition: border-color .12s; flex-shrink: 0; }
+    .cam-thumb:hover { border-color: #5b9bd1; }
+    .cam-thumb.attn { border-color: #d99b3e; }
+    .cam-thumb img { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; background: #101215; }
+    .cam-wall.grid-mode .cam-thumb img { aspect-ratio: 16/10; }
+    .cam-thumb .th-label { padding: 0.35rem 0.5rem; font-size: 0.7rem; font-weight: 600; display: flex; align-items: center; gap: 0.35rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cam-thumbs-more { position: absolute; left: 0; right: 2px; bottom: 0; text-align: center; font-size: 0.65rem; font-weight: 600; color: #15171a; background: linear-gradient(0deg, #5b9bd1 0%, #5b9bd1 65%, transparent 100%); padding: 0.9rem 0 0.3rem; border-radius: 0 0 0.6rem 0.6rem; pointer-events: none; }
+    .primary-cam-badge { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.04em; background: rgba(91,155,209,0.16); color: #7cb8e8; padding: 0.1rem 0.4rem; border-radius: 0.2rem; white-space: nowrap; }
+    .aux-cam-badge { font-size: 0.6rem; font-weight: 600; letter-spacing: 0.02em; color: #868d94; border: 1px solid #363b41; padding: 0.1rem 0.4rem; border-radius: 0.2rem; white-space: nowrap; }
     .digital-font { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-variant-numeric: tabular-nums; }
     .glass-card { background: var(--card-bg); backdrop-filter: blur(12px); border: 1px solid var(--border-color); border-radius: 1.25rem; }
     .glass-card:hover { border-color: rgba(91, 155, 209, 0.4); }
@@ -172,6 +195,9 @@
     let activeTab = 'live';
     let sseSource = null;
     let selectedLineId = null; // which line's video/session the Live screen shows -- null = default to the first line
+    let auxCamHeroId = null;   // which non-counting camera is promoted to the big tile in "Diğer Kameralar"
+    let auxCamGridMode = false;
+    let currentOtherCameras = []; // the camera list renderAuxCamWall's onclick handlers operate on
 
     // Live Feed Mode: 'stream' (Real OpenCV MJPEG) or 'canvas' (60 FPS Simulator)
     let feedMode = 'stream';
@@ -428,6 +454,70 @@
     function switchLiveLine(lineIdStr) {
       selectedLineId = parseInt(lineIdStr, 10);
       renderScreen();
+    }
+
+    function auxCamTileHtml(cam) {
+      const label = CAMERA_ROLE_LABELS[cam.role] || cam.role;
+      const badge = cam.role === 'vehicle_watchdog' ? '<span class="primary-cam-badge">' + escapeHtml(label) + '</span>' : '<span class="aux-cam-badge">' + escapeHtml(label) + '</span>';
+      return `<div class="cam-thumb-inner" style="background:#1a1d22;border:1px solid #363b41;border-radius:0.6rem;overflow:hidden;">
+        <img src="${API}/cameras/${cam.id}/stream" alt="KAM-${cam.id}" style="width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#101215;">
+        <div style="padding:0.5rem 0.65rem;display:flex;align-items:center;justify-content:space-between;font-size:0.7rem;">
+          <span style="font-weight:700;color:#cdd1d5;">KAM-${cam.id}</span>${badge}
+        </div>
+      </div>`;
+    }
+
+    function renderAuxCamWall(cameras) {
+      const wall = document.getElementById('aux-cam-wall');
+      if (!wall) return;
+      wall.classList.toggle('grid-mode', auxCamGridMode);
+      if (!auxCamHeroId || !cameras.some(c => c.id === auxCamHeroId)) {
+        auxCamHeroId = cameras[0].id;
+      }
+      const heroEl = document.getElementById('aux-cam-hero');
+      const thumbsEl = document.getElementById('aux-cam-thumbs');
+      const hero = cameras.find(c => c.id === auxCamHeroId);
+      heroEl.innerHTML = auxCamTileHtml(hero);
+
+      if (auxCamGridMode) {
+        const cols = Math.max(2, Math.ceil(Math.sqrt(cameras.length * 1.6)));
+        wall.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+        thumbsEl.innerHTML = cameras.map(cam => auxCamTileHtml(cam)).join('');
+      } else {
+        wall.style.gridTemplateColumns = '';
+        thumbsEl.innerHTML = cameras.filter(c => c.id !== auxCamHeroId).map(cam => `
+          <div class="cam-thumb" onclick="promoteAuxCam(${cam.id})" title="Büyütmek için tıklayın">
+            <img src="${API}/cameras/${cam.id}/stream" alt="KAM-${cam.id}">
+            <div class="th-label">KAM-${cam.id} · ${escapeHtml(CAMERA_ROLE_LABELS[cam.role] || cam.role)}</div>
+          </div>
+        `).join('');
+        requestAnimationFrame(() => {
+          const wrap = document.getElementById('aux-cam-thumbs-wrap');
+          const existing = document.getElementById('aux-cam-thumbs-more');
+          if (existing) existing.remove();
+          if (thumbsEl.scrollHeight > thumbsEl.clientHeight + 2) {
+            const div = document.createElement('div');
+            div.id = 'aux-cam-thumbs-more';
+            div.className = 'cam-thumbs-more';
+            div.textContent = '↓ kaydırın — daha fazla kamera var';
+            wrap.appendChild(div);
+          }
+        });
+      }
+    }
+
+    function promoteAuxCam(camId) {
+      auxCamHeroId = camId;
+      renderAuxCamWall(currentOtherCameras);
+    }
+
+    function toggleAuxCamGrid() {
+      auxCamGridMode = !auxCamGridMode;
+      const btn = document.getElementById('aux-cam-grid-toggle');
+      if (btn) btn.textContent = auxCamGridMode ? '▤ Öne Çıkan Görünüm' : '⊞ Izgara Görünümü';
+      const more = document.getElementById('aux-cam-thumbs-more');
+      if (more) more.remove();
+      renderAuxCamWall(currentOtherCameras);
     }
 
     // ===================== HEALTH CHECK =====================
@@ -728,19 +818,29 @@
                 <div class="glass-card p-5 border border-slate-700/80 shadow-xl">
                   <div class="flex items-center justify-between mb-3">
                     <div class="text-sm font-bold text-slate-100">Diğer Kameralar</div>
-                    <span class="text-[11px] text-slate-500">${otherCameras.length} kamera • izleme amaçlı, sayıma dahil değil</span>
+                    <div class="flex items-center gap-2">
+                      <span class="text-[11px] text-slate-500">${otherCameras.length} kamera • izleme amaçlı, sayıma dahil değil</span>
+                      ${otherCameras.length > 2 ? `<button onclick="toggleAuxCamGrid()" id="aux-cam-grid-toggle" class="text-[11px] px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700">⊞ Izgara Görünümü</button>` : ''}
+                    </div>
                   </div>
-                  <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    ${otherCameras.map(cam => `
-                      <div class="bg-slate-950 rounded-xl border border-slate-700/70 overflow-hidden">
-                        <img src="${API}/cameras/${cam.id}/stream" alt="KAM-${cam.id}" class="w-full aspect-video object-cover block bg-slate-900">
-                        <div class="px-2 py-1.5 flex items-center justify-between text-[10px]">
-                          <span class="font-bold text-slate-300">KAM-${cam.id}</span>
-                          <span class="text-slate-500">${escapeHtml(CAMERA_ROLE_LABELS[cam.role] || cam.role)}</span>
+                  ${otherCameras.length > 2 ? `
+                    <div class="cam-wall" id="aux-cam-wall">
+                      <div class="cam-hero" id="aux-cam-hero"></div>
+                      <div class="cam-thumbs-wrap" id="aux-cam-thumbs-wrap"><div class="cam-thumbs" id="aux-cam-thumbs"></div></div>
+                    </div>
+                  ` : `
+                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                      ${otherCameras.map(cam => `
+                        <div class="bg-slate-950 rounded-xl border border-slate-700/70 overflow-hidden">
+                          <img src="${API}/cameras/${cam.id}/stream" alt="KAM-${cam.id}" class="w-full aspect-video object-cover block bg-slate-900">
+                          <div class="px-2 py-1.5 flex items-center justify-between text-[10px]">
+                            <span class="font-bold text-slate-300">KAM-${cam.id}</span>
+                            <span class="text-slate-500">${escapeHtml(CAMERA_ROLE_LABELS[cam.role] || cam.role)}</span>
+                          </div>
                         </div>
-                      </div>
-                    `).join('')}
-                  </div>
+                      `).join('')}
+                    </div>
+                  `}
                 </div>
               ` : ''}
 
@@ -819,6 +919,10 @@
           initConveyorCanvas(session.id);
         }
         startSSE(lineId);
+        if (otherCameras.length > 2) {
+          currentOtherCameras = otherCameras;
+          renderAuxCamWall(otherCameras);
+        }
 
       } catch (e) {
         c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-8 text-rose-300">Hata: ${escapeHtml(e.detail || e.message || 'Canlı sayım başlatılamadı.')}</div>`;
