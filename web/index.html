@@ -30,6 +30,16 @@
     input, select, textarea { background-color: #1e2227; border: 1px solid #363b41; color: #edf0f2; border-radius: 0.5rem; padding: 0.55rem 0.85rem; font-size: 0.875rem; transition: all 0.15s ease; font-family: inherit; }
     input:focus, select:focus, textarea:focus { outline: none; border-color: #5b9bd1; box-shadow: 0 0 0 2px rgba(91, 155, 209, 0.35); }
 
+    /* Alarm bar: persistent (ISA-18.2 style) -- a "no active alarms" state
+       is itself information worth showing, never hidden. Built from real
+       signals only (session.discrepancy_flag, real per-camera connection
+       status, real FPS) -- never a decorative placeholder. */
+    .alarm-bar { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 1rem; border-radius: 0.6rem; margin-bottom: 1rem; border: 1px solid #363b41; background: #1a1d22; }
+    .alarm-bar.has-alarms { background: rgba(217, 155, 62, 0.12); border-color: #d99b3e; }
+    .alarm-bar .list { display: flex; gap: 1.1rem; flex-wrap: wrap; font-size: 0.75rem; color: #edf0f2; flex: 1; }
+    .alarm-bar.clean .list { color: #868d94; }
+    .alarm-bar .list b { font-family: "IBM Plex Mono", monospace; }
+
     /* Camera wall: one hero (the tile an operator actually watches) + a
        scrollable thumbnail rail (awareness, not scrutiny). Past ~4 equal
        tiles a flat grid either shrinks every feed to unreadable or pushes
@@ -643,8 +653,36 @@
         const dims = currentProduct.nominal_dims_mm || {};
         const dimsLabel = (dims.width && dims.length && dims.height) ? `${dims.width} x ${dims.length} x ${dims.height} mm` : 'Belirtilmemiş';
 
+        // Real alarm bar (ISA-18.2 style, always shown -- never faked): only
+        // conditions the backend actually reports. session.discrepancy_flag
+        // is the system's own real double-integral mismatch flag; per-camera
+        // status comes from the already-tracked in-memory feed state (cheap,
+        // no new connection opened per poll).
+        const alarms = [];
+        if (session.discrepancy_flag) {
+          alarms.push('Bu oturumda sayım ayrışması tespit edildi — Mutabakat ekranını kontrol edin.');
+        }
+        if (otherCameras.length > 0) {
+          try {
+            const statuses = await Promise.all(otherCameras.map(cam => api(`/cameras/${cam.id}/status`).catch(() => null)));
+            statuses.forEach((s, i) => {
+              if (!s || !s.known) return;
+              const cam = otherCameras[i];
+              if (!s.connected) alarms.push(`KAM-${cam.id} bağlı değil${s.last_error ? ' (' + escapeHtml(s.last_error) + ')' : ''}.`);
+              else if (s.fps !== null && s.fps < 5) alarms.push(`KAM-${cam.id} sinyali zayıf (${s.fps.toFixed(1)} FPS).`);
+            });
+          } catch {}
+        }
+        const alarmBarHtml = `
+          <div class="alarm-bar ${alarms.length > 0 ? 'has-alarms' : 'clean'}">
+            <span>${alarms.length > 0 ? '⚠' : '●'}</span>
+            <div class="list">${alarms.length > 0 ? alarms.map(a => `<span>${a}</span>`).join('') : '<span>Aktif uyarı yok</span>'}</div>
+          </div>
+        `;
+
         c.innerHTML = `
           ${lines.length > 1 ? `<div class="flex items-center justify-between mb-3"><span class="text-xs text-slate-400 font-semibold">Hat: <span class="text-slate-200">${escapeHtml(currentLine ? currentLine.name : '')}</span></span>${lineSwitcher}</div>` : ''}
+          ${alarmBarHtml}
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- Left Card: Digital LED Counter & Bag Selector -->
             <div class="glass-card p-6 shadow-2xl flex flex-col justify-between relative overflow-hidden">

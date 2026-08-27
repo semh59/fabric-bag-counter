@@ -342,6 +342,29 @@ def set_camera_feed_source(cam_id: int, req: SetCameraFeedSourceRequest):
     return {"status": "ok" if connected else "error", "connected": connected, "camera_id": cam_id, "message": message}
 
 
+@router.get("/cameras/{cam_id}/status")
+def get_camera_feed_status(cam_id: int):
+    """Cheap, real status for a non-counting camera's live feed.
+
+    Reports the already-tracked in-memory CameraFeed state (connected,
+    measured FPS, last error) without opening a new connection -- unlike
+    POST /cameras/{id}/test, which does a fresh connect/disconnect probe.
+    Meant for cheap polling (e.g. an alarm banner), not a substitute for
+    the real test endpoint.
+    """
+    from packages.cs_counting.camera_feed import _camera_feeds
+    feed = _camera_feeds.get(cam_id)
+    if feed is None:
+        return {"camera_id": cam_id, "known": False, "connected": False, "fps": None, "last_error": None}
+    return {
+        "camera_id": cam_id,
+        "known": True,
+        "connected": feed.connected,
+        "fps": round(feed._fps_ema, 1) if feed._fps_ema is not None else None,
+        "last_error": feed.last_error,
+    }
+
+
 @router.get("/cameras/{cam_id}/stream")
 def stream_camera_feed_mjpeg(cam_id: int):
     """Real live MJPEG feed for a single non-counting camera (no detection overlay)."""

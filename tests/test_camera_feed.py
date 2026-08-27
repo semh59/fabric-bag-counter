@@ -217,6 +217,38 @@ def test_set_camera_source_persists_and_connects(small_test_video):
         assert cam.source_config.get("path") == small_test_video
 
 
+def test_camera_status_reports_unknown_before_first_use():
+    res = client.get("/api/cameras/999999/status")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["known"] is False
+    assert body["connected"] is False
+
+
+def test_camera_status_reports_real_connected_state_after_source_set(small_test_video):
+    line_id, node_id = _setup_line()
+    headers = _admin_headers()
+    res_cam = client.post(
+        "/api/cameras",
+        json={"line_id": line_id, "node_id": node_id, "source_driver": "file", "role": "auxiliary"},
+        headers=headers,
+    )
+    cam_id = res_cam.json()["id"]
+
+    res_set = client.post(
+        f"/api/cameras/{cam_id}/source",
+        json={"source_config": {"path": small_test_video}, "source_driver": "file"},
+        headers=headers,
+    )
+    assert res_set.json()["connected"] is True
+
+    res_status = client.get(f"/api/cameras/{cam_id}/status")
+    assert res_status.status_code == 200
+    body = res_status.json()
+    assert body["known"] is True
+    assert body["connected"] is True
+
+
 def test_set_camera_source_for_counting_role_wires_real_detection_pipeline(small_test_video):
     # Regression test: setting a *counting*-role camera's source through this
     # route must also connect the real LiveStreamRenderer for its line (the
