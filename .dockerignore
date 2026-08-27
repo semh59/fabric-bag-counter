@@ -1,0 +1,13 @@
+.git
+.gitignore
+data/
+design/
+docs/
+EĞİTİM/
+web/.bin/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
