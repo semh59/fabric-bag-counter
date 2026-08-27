@@ -132,3 +132,60 @@ def test_ledger_idempotency_and_net_count_derivation():
         closed_sess = session_repo.close_session(sess.id)
         assert closed_sess.counted_total == 2
         assert closed_sess.status == "closed"
+
+
+def test_dispute_defect_event_records_real_attributed_annotation():
+    _, line_id, cam_id, profile_id = setup_test_db()
+    with get_sync_session() as db:
+        session_repo = SessionRepository(db)
+        ledger_repo = LedgerRepository(db)
+        sess = session_repo.create_session(line_id=line_id, product_profile_id=profile_id)
+
+        event, _ = ledger_repo.record_event(
+            session_id=sess.id, line_id=line_id, camera_id=cam_id, stream_epoch=1,
+            track_id=20, crossing_seq=1, gate_id=1, crossing_timestamp=datetime.now(timezone.utc),
+            frame_index=100, direction=1, defect_reason="yirtik",
+        )
+        assert event.defect_disputed is False
+
+        disputed = ledger_repo.dispute_defect_event(event.event_id, disputed_by="ahmet.y", note="Torba sağlamdı")
+        assert disputed is not None
+        assert disputed.defect_disputed is True
+        assert disputed.defect_disputed_by == "ahmet.y"
+        assert disputed.defect_disputed_note == "Torba sağlamdı"
+        assert disputed.defect_disputed_at is not None
+        # The original AI detection is never erased -- it's what's being overturned.
+        assert disputed.defect_reason == "yirtik"
+
+
+def test_dispute_defect_event_is_idempotent_first_dispute_wins():
+    _, line_id, cam_id, profile_id = setup_test_db()
+    with get_sync_session() as db:
+        session_repo = SessionRepository(db)
+        ledger_repo = LedgerRepository(db)
+        sess = session_repo.create_session(line_id=line_id, product_profile_id=profile_id)
+
+        event, _ = ledger_repo.record_event(
+            session_id=sess.id, line_id=line_id, camera_id=cam_id, stream_epoch=1,
+            track_id=21, crossing_seq=1, gate_id=1, crossing_timestamp=datetime.now(timezone.utc),
+            frame_index=100, direction=1, defect_reason="yirtik",
+        )
+        ledger_repo.dispute_defect_event(event.event_id, disputed_by="ahmet.y")
+        second = ledger_repo.dispute_defect_event(event.event_id, disputed_by="mehmet.k")
+        assert second.defect_disputed_by == "ahmet.y"  # unchanged, not overwritten
+
+
+def test_dispute_defect_event_returns_none_for_non_defect_event():
+    _, line_id, cam_id, profile_id = setup_test_db()
+    with get_sync_session() as db:
+        session_repo = SessionRepository(db)
+        ledger_repo = LedgerRepository(db)
+        sess = session_repo.create_session(line_id=line_id, product_profile_id=profile_id)
+
+        event, _ = ledger_repo.record_event(
+            session_id=sess.id, line_id=line_id, camera_id=cam_id, stream_epoch=1,
+            track_id=22, crossing_seq=1, gate_id=1, crossing_timestamp=datetime.now(timezone.utc),
+            frame_index=100, direction=1,
+        )
+        assert ledger_repo.dispute_defect_event(event.event_id, disputed_by="ahmet.y") is None
+        assert ledger_repo.dispute_defect_event("not-a-real-event-id", disputed_by="ahmet.y") is None

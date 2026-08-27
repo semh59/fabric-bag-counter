@@ -40,6 +40,16 @@
     .alarm-bar.clean .list { color: #868d94; }
     .alarm-bar .list b { font-family: "IBM Plex Mono", monospace; }
 
+    /* Damage/defect log: each row is a real ledger event with a real,
+       attributed dispute action -- not a static list. Disputing never hides
+       or replaces the row; it adds the reviewer's verdict alongside the
+       original AI flag, so both stay visible in the audit trail. */
+    .defect-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 1rem; font-size: 0.8rem; border-bottom: 1px solid #292d33; }
+    .defect-row:last-child { border-bottom: none; }
+    .defect-row .t { font-family: "IBM Plex Mono", monospace; color: #868d94; font-size: 0.7rem; width: 3.6rem; flex-shrink: 0; }
+    .defect-row .desc { flex: 1; color: #cdd1d5; }
+    .defect-row .who { color: #868d94; }
+
     /* Camera wall: one hero (the tile an operator actually watches) + a
        scrollable thumbnail rail (awareness, not scrutiny). Past ~4 equal
        tiles a flat grid either shrinks every feed to unreadable or pushes
@@ -530,6 +540,18 @@
       renderAuxCamWall(currentOtherCameras);
     }
 
+    async function disputeDefectEvent(eventId) {
+      const note = prompt('Bu hasar tespiti neden yanlıştı? (isteğe bağlı not)');
+      if (note === null) return; // cancelled
+      try {
+        await api(`/events/${eventId}/dispute_defect`, { method: 'POST', body: JSON.stringify({ note: note || null }) });
+        toast('İtiraz kaydedildi', 'success');
+        renderScreen();
+      } catch (e) {
+        toast(e.detail || 'İtiraz kaydedilemedi', 'error');
+      }
+    }
+
     // ===================== HEALTH CHECK =====================
     async function checkHealth() {
       try {
@@ -615,6 +637,9 @@
 
         let otherCameras = [];
         try { otherCameras = (await api(`/cameras?line_id=${lineId}`)).filter(c => c.role !== 'counting'); } catch {}
+
+        let defectEvents = [];
+        try { defectEvents = (await api(`/lines/${lineId}/defects`)).slice(0, 20); } catch {}
 
         const lineSwitcher = lines.length > 1 ? `
           <select onchange="switchLiveLine(this.value)" class="text-xs bg-slate-800 border-slate-700 py-1.5 px-2.5 rounded-lg font-semibold text-slate-200 cursor-pointer">
@@ -879,6 +904,31 @@
                       `).join('')}
                     </div>
                   `}
+                </div>
+              ` : ''}
+
+              ${defectEvents.length > 0 ? `
+                <!-- Hasar / Ayırma Kaydı: kapıdan önce ayrılan gerçek ledger olayları -->
+                <div class="glass-card p-5 border border-slate-700/80 shadow-xl">
+                  <div class="text-sm font-bold text-slate-100 mb-1">Hasar / Ayırma Kaydı</div>
+                  <div class="text-[11px] text-slate-500 mb-3">Kapıdan önce ayrılan torbalar — her kayıt bir operatör onayı gerektirir ve itiraz edilebilir.</div>
+                  <div>
+                    ${defectEvents.map(ev => `
+                      <div class="defect-row" id="defect-row-${ev.event_id}">
+                        <span class="t">${escapeHtml((ev.crossing_timestamp || '').substring(11, 16))}</span>
+                        <span class="desc">
+                          ${escapeHtml(ev.defect_reason)} tespit edildi (TRK-${ev.track_id})
+                          ${ev.defect_disputed
+                            ? ` → <span class="who">itiraz edildi: ${escapeHtml(ev.defect_disputed_by || '')}${ev.defect_disputed_note ? ' — ' + escapeHtml(ev.defect_disputed_note) : ''}</span>`
+                            : ''}
+                        </span>
+                        ${ev.defect_disputed
+                          ? `<span class="badge bg-slate-700/60 text-slate-300 border border-slate-600/50">İTİRAZ EDİLDİ</span>`
+                          : `<span class="badge bg-amber-500/20 text-amber-300 border border-amber-500/30">HASARLI</span>
+                             <button onclick="disputeDefectEvent('${ev.event_id}')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-[11px] font-semibold">İtiraz Et</button>`}
+                      </div>
+                    `).join('')}
+                  </div>
                 </div>
               ` : ''}
 

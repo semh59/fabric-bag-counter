@@ -91,3 +91,39 @@ def test_session_lifecycle_routes():
     res_submit = client.post(f"/api/sessions/{sess_id}/submit", headers=headers)
     assert res_submit.status_code == 200
     assert res_submit.json()["status"] == "submitted_to_outbox"
+
+
+def test_dispute_defect_event_route():
+    _, line_id, prof_id = setup_api_data()
+    res_login = client.post("/api/auth/login", json={"username": "operator", "password": "op123"})
+    headers = {"Authorization": f"Bearer {res_login.json()['token']}"}
+
+    sess_id = client.post(
+        "/api/sessions",
+        json={"line_id": line_id, "product_profile_id": prof_id, "target_count": 10},
+        headers=headers,
+    ).json()["id"]
+    client.post(f"/api/sessions/{sess_id}/simulate_bag", json={"direction": 1, "defect_reason": "yirtik"}, headers=headers)
+
+    events = client.get(f"/api/sessions/{sess_id}/events", headers=headers).json()
+    defect_event = next(e for e in events if e["defect_reason"] == "yirtik")
+    assert defect_event["defect_disputed"] is False
+
+    res = client.post(
+        f"/api/events/{defect_event['event_id']}/dispute_defect",
+        json={"note": "Torba sağlamdı"},
+        headers=headers,
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["defect_disputed"] is True
+    assert body["defect_disputed_by"] == "operator"
+    assert body["defect_disputed_note"] == "Torba sağlamdı"
+    assert body["defect_reason"] == "yirtik"  # original detection preserved
+
+
+def test_dispute_nonexistent_event_returns_404():
+    res_login = client.post("/api/auth/login", json={"username": "operator", "password": "op123"})
+    headers = {"Authorization": f"Bearer {res_login.json()['token']}"}
+    res = client.post("/api/events/not-a-real-id/dispute_defect", json={}, headers=headers)
+    assert res.status_code == 404

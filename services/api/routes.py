@@ -641,6 +641,29 @@ def get_line_defect_events(line_id: int, user: Annotated[CurrentUser, Depends(ge
         return ledger_repo.get_defect_events(line_id=line_id)
 
 
+class DisputeDefectRequest(BaseModel):
+    note: str | None = None
+
+
+@router.post(
+    "/events/{event_id}/dispute_defect",
+    dependencies=[Depends(require_role(UserRole.OPERATOR, UserRole.ENGINEER))],
+)
+def dispute_defect_event(event_id: str, req: DisputeDefectRequest, user: Annotated[CurrentUser, Depends(get_current_user)]):
+    """Overturn a defect flag found to be a false positive (§5.5).
+
+    Does not erase the original AI detection -- appends a real, attributed
+    annotation next to it. Idempotent: disputing an already-disputed event
+    is a no-op, it does not overwrite who disputed it first.
+    """
+    with get_sync_session() as db:
+        ledger_repo = LedgerRepository(db)
+        event = ledger_repo.dispute_defect_event(event_id, disputed_by=user.username, note=req.note)
+        if event is None:
+            raise HTTPException(status_code=404, detail="Event not found or not flagged as a defect")
+        return event
+
+
 @router.get("/sessions/{sess_id}/dispatch_report")
 def get_session_dispatch_report(sess_id: int, user: Annotated[CurrentUser, Depends(get_current_user)] = None):
     """Generate official Dispatch & Reconciliation Manifest with cryptographic seal (§5.7, §5.8)."""

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Sequence
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -116,6 +116,30 @@ class LedgerRepository:
             stmt = stmt.where(CountEventORM.line_id == line_id)
         stmt = stmt.order_by(CountEventORM.crossing_timestamp.desc()).limit(limit)
         return self.db.execute(stmt).scalars().all()
+
+    def dispute_defect_event(self, event_id: str, disputed_by: str, note: str | None = None) -> CountEventORM | None:
+        """Record that a defect flag was reviewed and found wrong.
+
+        Appends a real annotation (who/when/why) next to the original
+        defect_reason rather than clearing or overwriting it -- the ledger is
+        append-only, so the original AI detection stays in the audit trail
+        even after being overturned. Returns None if the event doesn't exist
+        or was never flagged as a defect; idempotent (returns the event
+        unchanged if already disputed, does not overwrite the first dispute).
+        """
+        event = self.db.execute(
+            select(CountEventORM).where(CountEventORM.event_id == event_id)
+        ).scalar_one_or_none()
+        if event is None or event.defect_reason is None:
+            return None
+        if not event.defect_disputed:
+            event.defect_disputed = True
+            event.defect_disputed_by = disputed_by
+            event.defect_disputed_note = note
+            event.defect_disputed_at = datetime.now(timezone.utc)
+            self.db.commit()
+            self.db.refresh(event)
+        return event
 
     def get_merge_count(self, session_id: int) -> int:
         """Count total merge flag occurrences in a session."""
