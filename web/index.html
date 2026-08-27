@@ -167,6 +167,7 @@
     let auth = { token: null, username: null, role: null };
     let activeTab = 'live';
     let sseSource = null;
+    let selectedLineId = null; // which line's video/session the Live screen shows -- null = default to the first line
 
     // Live Feed Mode: 'stream' (Real OpenCV MJPEG) or 'canvas' (60 FPS Simulator)
     let feedMode = 'stream';
@@ -420,6 +421,11 @@
       renderScreen();
     }
 
+    function switchLiveLine(lineIdStr) {
+      selectedLineId = parseInt(lineIdStr, 10);
+      renderScreen();
+    }
+
     // ===================== HEALTH CHECK =====================
     async function checkHealth() {
       try {
@@ -477,10 +483,6 @@
           api('/sessions'),
           api('/products'),
         ]);
-        let otherCameras = [];
-        if (lines.length > 0) {
-          try { otherCameras = (await api(`/cameras?line_id=${lines[0].id}`)).filter(c => c.role !== 'counting'); } catch {}
-        }
 
         if (lines.length === 0) {
           c.innerHTML = `
@@ -498,16 +500,40 @@
           return;
         }
 
-        const activeSessions = sessions.filter(s => s.status === 'open' || s.status === 'counting' || s.status === 'paused');
+        // Which line's video/session this screen shows -- sticky across
+        // re-renders via selectedLineId, defaulting to (and falling back to,
+        // if a previously selected line no longer exists) the first line.
+        if (!selectedLineId || !lines.some(l => l.id === selectedLineId)) {
+          selectedLineId = lines[0].id;
+        }
+        const lineId = selectedLineId;
+        const currentLine = lines.find(l => l.id === lineId);
+
+        let otherCameras = [];
+        try { otherCameras = (await api(`/cameras?line_id=${lineId}`)).filter(c => c.role !== 'counting'); } catch {}
+
+        const lineSwitcher = lines.length > 1 ? `
+          <select onchange="switchLiveLine(this.value)" class="text-xs bg-slate-800 border-slate-700 py-1.5 px-2.5 rounded-lg font-semibold text-slate-200 cursor-pointer">
+            ${lines.map(l => `<option value="${l.id}" ${l.id === lineId ? 'selected' : ''}>${escapeHtml(l.name)}</option>`).join('')}
+          </select>
+        ` : '';
+
+        // Only this line's own active session -- previously this picked the
+        // first active session across ANY line while the video panel below
+        // always showed lines[0], so with more than one line open at once
+        // the counter and the camera feed could silently belong to two
+        // different lines.
+        const activeSessions = sessions.filter(s => s.line_id === lineId && (s.status === 'open' || s.status === 'counting' || s.status === 'paused'));
         let session = activeSessions[0];
 
         if (!session) {
           c.innerHTML = `
+            ${lines.length > 1 ? `<div class="flex justify-end mb-3">${lineSwitcher}</div>` : ''}
             <div class="glass-card p-10 text-center max-w-xl mx-auto my-12 shadow-2xl">
               <div class="text-4xl mb-4">📦</div>
               <h2 class="text-2xl font-bold text-white mb-2">Aktif Sayım Oturumu Yok</h2>
-              <p class="text-slate-400 text-sm mb-6">Canlı konveyör sayımını başlatmak için hemen yeni bir oturum açın.</p>
-              <button onclick="quickStartSession(${lines[0].id}, ${products[0] ? products[0].id : 1})" class="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition">
+              <p class="text-slate-400 text-sm mb-6">${escapeHtml(currentLine ? currentLine.name : '')} için canlı konveyör sayımını başlatmak üzere hemen yeni bir oturum açın.</p>
+              <button onclick="quickStartSession(${lineId}, ${products[0] ? products[0].id : 1})" class="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition">
                 ▶ Hızlı Oturum Başlat (200 Çuval)
               </button>
             </div>`;
@@ -524,6 +550,7 @@
         const dimsLabel = (dims.width && dims.length && dims.height) ? `${dims.width} x ${dims.length} x ${dims.height} mm` : 'Belirtilmemiş';
 
         c.innerHTML = `
+          ${lines.length > 1 ? `<div class="flex items-center justify-between mb-3"><span class="text-xs text-slate-400 font-semibold">Hat: <span class="text-slate-200">${escapeHtml(currentLine ? currentLine.name : '')}</span></span>${lineSwitcher}</div>` : ''}
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- Left Card: Digital LED Counter & Bag Selector -->
             <div class="glass-card p-6 shadow-2xl flex flex-col justify-between relative overflow-hidden">
@@ -595,13 +622,13 @@
                       <span class="badge bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px]">RF-DETR + ByteTrack</span>
                     </div>
                     <div class="flex items-center space-x-2">
-                      <select id="camera-source-select" onchange="switchCameraSource(${lines[0].id}, this.value)" class="text-xs bg-slate-800 border-indigo-500/40 py-1 px-2.5 rounded-lg font-semibold text-slate-200 cursor-pointer">
+                      <select id="camera-source-select" onchange="switchCameraSource(${lineId}, this.value)" class="text-xs bg-slate-800 border-indigo-500/40 py-1 px-2.5 rounded-lg font-semibold text-slate-200 cursor-pointer">
                         <option value="demo">🏭 Simüle Konveyör (OpenCV AI)</option>
                         <option value="0">📷 Yerel Web Kamerası (#0)</option>
                         <option value="1">📷 İkincil USB Kamera (#1)</option>
                         <option value="rtsp">🌐 Fabrika IP Kamerası (RTSP)</option>
                       </select>
-                      <button onclick="toggleFeedMode(${lines[0].id}, ${session.id})" id="feed-mode-toggle" class="text-[11px] px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700">
+                      <button onclick="toggleFeedMode(${lineId}, ${session.id})" id="feed-mode-toggle" class="text-[11px] px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700">
                         ${feedMode === 'stream' ? '🎬 Canlı Akış' : '🎨 60 FPS Canvas'}
                       </button>
                       <span class="text-emerald-400 font-bold text-xs" id="live-fps">— FPS</span>
@@ -639,7 +666,7 @@
                   <!-- Live Stream Viewport -->
                   <div class="relative bg-slate-950 rounded-2xl border-2 border-slate-700/80 overflow-hidden shadow-inner flex items-center justify-center min-h-[300px]" id="video-viewport">
                     ${feedMode === 'stream' ? `
-                      <img id="liveVideoFeed" src="${API}/live/lines/${lines[0].id}/stream" alt="Live AI Vision Camera Stream" class="w-full h-auto block rounded-xl">
+                      <img id="liveVideoFeed" src="${API}/live/lines/${lineId}/stream" alt="Live AI Vision Camera Stream" class="w-full h-auto block rounded-xl">
                     ` : `
                       <canvas id="conveyorCanvas" width="760" height="300" class="w-full h-full block cursor-crosshair"></canvas>
                     `}
@@ -665,7 +692,7 @@
                       <span>+1 Hasarlı / Patlak</span>
                     </button>
 
-                    <button onclick="promptUploadVideo(${lines[0].id})" class="px-3 py-2 bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-200 text-xs font-bold rounded-xl transition flex items-center space-x-1.5">
+                    <button onclick="promptUploadVideo(${lineId})" class="px-3 py-2 bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-200 text-xs font-bold rounded-xl transition flex items-center space-x-1.5">
                       <span>📁</span>
                       <span>Video Yükle</span>
                     </button>
@@ -730,7 +757,7 @@
                       <label class="text-slate-400 font-semibold">Bant Hızı (m/s)</label>
                       <span class="font-mono text-emerald-400 font-bold text-xs" id="belt-speed-val">${beltSpeedFactor.toFixed(1)}x (${(beltSpeedFactor * 0.4).toFixed(2)} m/s)</span>
                     </div>
-                    <input type="range" id="belt-speed-range" min="0.5" max="5.0" step="0.2" value="${beltSpeedFactor}" oninput="setBeltSpeed(${lines[0].id}, this.value)" class="w-full accent-indigo-500 cursor-pointer">
+                    <input type="range" id="belt-speed-range" min="0.5" max="5.0" step="0.2" value="${beltSpeedFactor}" oninput="setBeltSpeed(${lineId}, this.value)" class="w-full accent-indigo-500 cursor-pointer">
                     <div class="flex justify-between text-[10px] text-slate-500 mt-1">
                       <span>0.2 m/s (Yavaş)</span>
                       <span>2.0 m/s (Hızlı)</span>
@@ -743,7 +770,7 @@
                       <label class="text-slate-400 font-semibold">Kapı Çizgisi (X Pos)</label>
                       <span class="font-mono text-indigo-400 font-bold text-xs" id="gate-x-val">${opticalGateX} px</span>
                     </div>
-                    <input type="range" id="gate-x-range" min="150" max="650" step="10" value="${opticalGateX}" oninput="setGateX(${lines[0].id}, this.value)" class="w-full accent-emerald-500 cursor-pointer">
+                    <input type="range" id="gate-x-range" min="150" max="650" step="10" value="${opticalGateX}" oninput="setGateX(${lineId}, this.value)" class="w-full accent-emerald-500 cursor-pointer">
                     <div class="flex justify-between text-[10px] text-slate-500 mt-1">
                       <span>Giriş (150px)</span>
                       <span>Çıkış (650px)</span>
@@ -755,8 +782,8 @@
                     <div>
                       <label class="text-slate-400 font-semibold block mb-1.5">Bant Akış Yönü</label>
                       <div class="grid grid-cols-2 gap-2">
-                        <button onclick="setBeltDirection(${lines[0].id}, 1)" id="dir-lr-btn" class="py-1 px-2 rounded-lg font-bold text-xs ${beltDirection > 0 ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-400'}">➔ Soldan Sağa</button>
-                        <button onclick="setBeltDirection(${lines[0].id}, -1)" id="dir-rl-btn" class="py-1 px-2 rounded-lg font-bold text-xs ${beltDirection < 0 ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-400'}">⬅ Sağdan Sola</button>
+                        <button onclick="setBeltDirection(${lineId}, 1)" id="dir-lr-btn" class="py-1 px-2 rounded-lg font-bold text-xs ${beltDirection > 0 ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-400'}">➔ Soldan Sağa</button>
+                        <button onclick="setBeltDirection(${lineId}, -1)" id="dir-rl-btn" class="py-1 px-2 rounded-lg font-bold text-xs ${beltDirection < 0 ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-400'}">⬅ Sağdan Sola</button>
                       </div>
                     </div>
                   </div>
@@ -767,14 +794,14 @@
                   <div class="flex-1 min-w-[280px] flex items-center space-x-2">
                     <span class="text-slate-400 whitespace-nowrap">🎥 RTSP IP:</span>
                     <input type="text" id="camera-rtsp-input" value="rtsp://192.168.1.100:554/live" class="flex-1 text-xs font-mono py-1.5" placeholder="rtsp://kullanici:sifre@ip:554/live">
-                    <button onclick="saveCameraRTSP(${lines[0].id})" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg">Kaydet</button>
+                    <button onclick="saveCameraRTSP(${lineId})" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg">Kaydet</button>
                   </div>
 
                   <div class="flex items-center space-x-2">
-                    <button onclick="triggerCalibration(${lines[0].id}, 'motion')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg font-semibold transition">
+                    <button onclick="triggerCalibration(${lineId}, 'motion')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg font-semibold transition">
                       🔄 Optik Akış Kalibrasyonu
                     </button>
-                    <button onclick="triggerCalibration(${lines[0].id}, 'scale')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg font-semibold transition">
+                    <button onclick="triggerCalibration(${lineId}, 'scale')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg font-semibold transition">
                       📐 Ölçek Kalibrasyonu
                     </button>
                   </div>
@@ -787,7 +814,7 @@
         if (feedMode === 'canvas') {
           initConveyorCanvas(session.id);
         }
-        startSSE(lines[0].id);
+        startSSE(lineId);
 
       } catch (e) {
         c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-8 text-rose-300">Hata: ${escapeHtml(e.detail || e.message || 'Canlı sayım başlatılamadı.')}</div>`;
