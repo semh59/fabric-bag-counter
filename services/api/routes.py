@@ -304,13 +304,16 @@ class SetCameraFeedSourceRequest(BaseModel):
 
 @router.post("/cameras/{cam_id}/source", dependencies=[Depends(require_role(UserRole.ADMIN))])
 def set_camera_feed_source(cam_id: int, req: SetCameraFeedSourceRequest):
-    """Persist a non-counting camera's connection info and (re)connect its live feed.
+    """Persist a camera's connection info and (re)connect its live feed.
 
-    The line's counting camera is configured through
-    POST /lines/{line_id}/camera_source instead, since that source also
-    feeds the real detection/tracking pipeline -- this route is for the
-    other cameras on a line (damage inspection, pallet station, yard, ...),
-    which only need a real live picture, not detection.
+    Every camera gets a real monitoring feed via camera_feed.py regardless of
+    role. A counting-role camera additionally has to be pushed into the real
+    LiveStreamRenderer for its line -- that is the object the actual
+    detection/tracking pipeline reads frames from, and it is keyed by
+    line_id, not camera_id, so setting a counting camera's source here would
+    silently do nothing to real detection without this extra step (found by
+    testing this end-to-end: the counting engine kept running in demo mode
+    after "adding" a counting camera through this exact route).
     """
     from packages.cs_core.camera_source import resolve_camera_source
     from packages.cs_counting.camera_feed import reconnect_camera_feed
@@ -323,10 +326,19 @@ def set_camera_feed_source(cam_id: int, req: SetCameraFeedSourceRequest):
         if req.source_driver:
             cam.source_driver = req.source_driver
         db.commit()
-        source_driver, source_config = cam.source_driver, cam.source_config
+        source_driver, source_config, role, line_id = cam.source_driver, cam.source_config, cam.role, cam.line_id
 
     source = resolve_camera_source(source_driver, source_config)
     connected, message = reconnect_camera_feed(cam_id, source)
+
+    if role == "counting":
+        from packages.cs_counting.stream_renderer import _renderers, LiveStreamRenderer
+        if line_id not in _renderers:
+            _renderers[line_id] = LiveStreamRenderer(line_id=line_id)
+        detect_ok, detect_msg = _renderers[line_id].set_camera_source(source)
+        connected = connected and detect_ok
+        message = detect_msg if not detect_ok else message
+
     return {"status": "ok" if connected else "error", "connected": connected, "camera_id": cam_id, "message": message}
 
 

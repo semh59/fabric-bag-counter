@@ -26,13 +26,22 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def _reset_camera_feed_registry():
-    # The module-level feed registry must not leak connections between tests.
+    # The module-level feed registries (this module's _camera_feeds, and
+    # stream_renderer's _renderers for the counting-camera pipeline) must
+    # not leak connections between tests.
+    from packages.cs_counting import stream_renderer as stream_renderer_module
+
     camera_feed_module._camera_feeds.clear()
+    stream_renderer_module._renderers.clear()
     yield
     for feed in camera_feed_module._camera_feeds.values():
         if feed.video_cap is not None:
             feed.video_cap.release()
     camera_feed_module._camera_feeds.clear()
+    for renderer in stream_renderer_module._renderers.values():
+        if renderer.video_cap is not None:
+            renderer.video_cap.release()
+    stream_renderer_module._renderers.clear()
 
 
 @pytest.fixture
@@ -206,6 +215,38 @@ def test_set_camera_source_persists_and_connects(small_test_video):
     with get_sync_session() as db:
         cam = db.query(CameraORM).filter(CameraORM.id == cam_id).first()
         assert cam.source_config.get("path") == small_test_video
+
+
+def test_set_camera_source_for_counting_role_wires_real_detection_pipeline(small_test_video):
+    # Regression test: setting a *counting*-role camera's source through this
+    # route must also connect the real LiveStreamRenderer for its line (the
+    # thing the actual detection pipeline reads frames from) -- found by
+    # testing end-to-end that the counting engine silently stayed in demo
+    # mode after "adding" a counting camera through the UI, because only the
+    # separate camera_feed.py registry (monitoring-only) was being wired.
+    from packages.cs_counting.stream_renderer import _renderers
+
+    line_id, node_id = _setup_line()
+    headers = _admin_headers()
+
+    res_cam = client.post(
+        "/api/cameras",
+        json={"line_id": line_id, "node_id": node_id, "source_driver": "file", "role": "counting"},
+        headers=headers,
+    )
+    cam_id = res_cam.json()["id"]
+
+    res = client.post(
+        f"/api/cameras/{cam_id}/source",
+        json={"source_config": {"path": small_test_video}, "source_driver": "file"},
+        headers=headers,
+    )
+    assert res.status_code == 200
+    assert res.json()["connected"] is True
+
+    assert line_id in _renderers
+    assert _renderers[line_id].video_cap is not None
+    assert _renderers[line_id].video_cap.isOpened()
 
 
 def test_set_camera_source_requires_admin():
