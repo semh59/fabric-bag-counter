@@ -1,2 +1,84 @@
 @import "tailwindcss";
 @source "../index.html";
+
+/*
+ * "Kontrol Odası" palette -- remaps the existing Tailwind color scales the
+ * app already uses throughout (slate/indigo/emerald/amber/rose) to a real
+ * industrial-HMI palette (graphite neutrals, a steel-blue accent, semantic
+ * color reserved for actual warnings/critical states -- see design/live-ops/
+ * for the original exploration this is drawn from).
+ *
+ * This is the highest-leverage way to reskin the whole app: every screen
+ * already uses these utility classes (bg-slate-900, text-indigo-400, ...),
+ * so remapping the scales here propagates everywhere without rewriting
+ * markup on every screen.
+ */
+@theme {
+  /* graphite neutral scale (replaces slate) -- warm-biased dark grey, not blue-grey */
+  --color-slate-50: #f4f5f6;
+  --color-slate-100: #e8eaec;
+  --color-slate-200: #cdd1d5;
+  --color-slate-300: #a9afb5;
+  --color-slate-400: #868d94;
+  --color-slate-500: #656c73;
+  --color-slate-600: #4b5158;
+  --color-slate-700: #363b41;
+  --color-slate-800: #24282e;
+  --color-slate-900: #1a1d22;
+  --color-slate-950: #121417;
+
+  /* steel-blue accent (replaces indigo) */
+  --color-indigo-50: #eef6fc;
+  --color-indigo-100: #d7ebf7;
+  --color-indigo-200: #b0d6ef;
+  --color-indigo-300: #82bce2;
+  --color-indigo-400: #5b9bd1;
+  --color-indigo-500: #4a86b8;
+  --color-indigo-600: #3d729e;
+  --color-indigo-700: #315c80;
+  --color-indigo-800: #274a67;
+  --color-indigo-900: #1c3450;
+  --color-indigo-950: #142639;
+
+  /* semantic ok/success (replaces emerald) */
+  --color-emerald-50: #eef9f1;
+  --color-emerald-100: #d6f0dd;
+  --color-emerald-200: #a9e0ba;
+  --color-emerald-300: #7ecb96;
+  --color-emerald-400: #59b378;
+  --color-emerald-500: #46955f;
+  --color-emerald-600: #3a7a4f;
+  --color-emerald-700: #2f6240;
+  --color-emerald-800: #274f35;
+  --color-emerald-900: #1e3d29;
+  --color-emerald-950: #142a1c;
+
+  /* semantic warning (replaces amber) */
+  --color-amber-50: #fbf3e7;
+  --color-amber-100: #f5e2c3;
+  --color-amber-200: #edcb92;
+  --color-amber-300: #e3af60;
+  --color-amber-400: #d99b3e;
+  --color-amber-500: #c1832c;
+  --color-amber-600: #a06a22;
+  --color-amber-700: #80531c;
+  --color-amber-800: #664318;
+  --color-amber-900: #4d3212;
+  --color-amber-950: #33220c;
+
+  /* semantic critical/danger (replaces rose) */
+  --color-rose-50: #fbecec;
+  --color-rose-100: #f6d2d2;
+  --color-rose-200: #eda5a6;
+  --color-rose-300: #e17a7c;
+  --color-rose-400: #d55a5c;
+  --color-rose-500: #bc4547;
+  --color-rose-600: #9c393b;
+  --color-rose-700: #7c2e2f;
+  --color-rose-800: #632527;
+  --color-rose-900: #491b1c;
+  --color-rose-950: #301213;
+
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}

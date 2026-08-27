@@ -4,30 +4,34 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sayım Sistemi</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="tailwind.css">
   <style>
     :root {
-      --bg-main: #0b1120;
-      --card-bg: rgba(15, 23, 42, 0.88);
-      --border-color: rgba(51, 65, 85, 0.7);
-      --primary: #6366f1;
-      --primary-hover: #4f46e5;
-      --accent-green: #10b981;
+      --bg-main: #15171a;
+      --card-bg: rgba(36, 40, 46, 0.92);
+      --border-color: rgba(54, 59, 65, 0.85);
+      --primary: #5b9bd1;
+      --primary-hover: #7cb8e8;
+      --accent-green: #46955f;
     }
     * { box-sizing: border-box; }
-    body { background-color: var(--bg-main); color: #f8fafc; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0; }
+    body { background-color: var(--bg-main); color: #edf0f2; font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0; }
+    h1, h2, h3 { font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif; letter-spacing: 0.005em; }
     .badge { display: inline-flex; align-items: center; padding: 0.25rem 0.65rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.025em; }
     .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999; padding: 0.85rem 1.4rem; border-radius: 0.75rem; font-size: 0.875rem; font-weight: 600; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.6); animation: slideIn 0.25s ease-out; }
     @keyframes slideIn { from { transform: translateY(1rem); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-    @keyframes countPulse { 0% { transform: scale(1); } 50% { transform: scale(1.08); color: #34d399; } 100% { transform: scale(1); } }
+    @keyframes countPulse { 0% { transform: scale(1); } 50% { transform: scale(1.08); color: #59b378; } 100% { transform: scale(1); } }
     .count-pulse { animation: countPulse 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
-    .spinner { border: 3px solid rgba(99, 102, 241, 0.2); border-top-color: #6366f1; border-radius: 50%; width: 1.5rem; height: 1.5rem; animation: spin 0.6s linear infinite; display: inline-block; }
+    .spinner { border: 3px solid rgba(91, 155, 209, 0.2); border-top-color: #5b9bd1; border-radius: 50%; width: 1.5rem; height: 1.5rem; animation: spin 0.6s linear infinite; display: inline-block; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    input, select, textarea { background-color: #1e293b; border: 1px solid #334155; color: #f8fafc; border-radius: 0.5rem; padding: 0.55rem 0.85rem; font-size: 0.875rem; transition: all 0.15s ease; }
-    input:focus, select:focus, textarea:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35); }
-    .digital-font { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    input, select, textarea { background-color: #1e2227; border: 1px solid #363b41; color: #edf0f2; border-radius: 0.5rem; padding: 0.55rem 0.85rem; font-size: 0.875rem; transition: all 0.15s ease; font-family: inherit; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #5b9bd1; box-shadow: 0 0 0 2px rgba(91, 155, 209, 0.35); }
+    .digital-font { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-variant-numeric: tabular-nums; }
     .glass-card { background: var(--card-bg); backdrop-filter: blur(12px); border: 1px solid var(--border-color); border-radius: 1.25rem; }
-    .glass-card:hover { border-color: rgba(99, 102, 241, 0.4); }
+    .glass-card:hover { border-color: rgba(91, 155, 209, 0.4); }
   </style>
 </head>
 <body class="min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
