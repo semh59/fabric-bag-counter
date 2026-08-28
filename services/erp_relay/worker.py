@@ -10,7 +10,6 @@ from packages.cs_storage.db import get_sync_session
 from packages.cs_storage.models_orm import OutboxORM, SessionORM
 from packages.cs_storage.repositories.outbox_repo import OutboxRepository
 from packages.cs_storage.repositories.reconciliation_repo import ReconciliationRepository
-from packages.cs_storage.repositories.session_repo import SessionRepository
 from drivers.erp_csv.adapter import CsvErpAdapter
 from drivers.erp_sap_odata.adapter import SapODataErpAdapter
 
@@ -46,7 +45,6 @@ class ErpRelayWorker:
 
         with get_sync_session() as db:
             outbox_repo = OutboxRepository(db)
-            session_repo = SessionRepository(db)
             rec_repo = ReconciliationRepository(db)
 
             if result.success:
@@ -65,7 +63,23 @@ class ErpRelayWorker:
                         outbox_repo.mark_sent(entry.id)
                         return True
                     else:
-                        outbox_repo.mark_failed(entry.id, error_msg=result.error_message or "Unknown ERP error")
+                        escalated = outbox_repo.mark_failed(entry.id, error_msg=result.error_message or "Unknown ERP error")
+                        if escalated:
+                            # Retries exhausted -- claim_pending_entries() will never
+                            # pick this outbox entry up again, so this is the only
+                            # chance to make the failure visible to a human: without
+                            # this, the session's status never leaves whatever it was
+                            # (e.g. "closed") and no row appears in /reconciliations,
+                            # so the session would be stuck with zero operator-visible
+                            # signal anywhere in the app.
+                            logger.error(
+                                f"[ErpRelay] Session {entry.session_id} exhausted ERP delivery retries. Routing to human RECONCILIATION."
+                            )
+                            rec_repo.create_reconciliation(
+                                session_id=entry.session_id,
+                                trigger_reason="erp_conflict",
+                                evidence_refs={"last_error": result.error_message, "outbox_id": entry.id},
+                            )
                 else:
                     # Unidirectional adapter without status query: route to reconciliation!
                     logger.error(

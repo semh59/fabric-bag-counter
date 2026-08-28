@@ -130,14 +130,26 @@ class OutboxRepository:
         error_msg: str,
         backoff_seconds: int = 30,
         max_attempts: int = 5,
-    ) -> None:
-        """Record delivery failure and schedule retry or route to reconciliation."""
+    ) -> bool:
+        """Record delivery failure and schedule retry or route to reconciliation.
+
+        Returns True when this call escalated the entry to reconcile_required
+        (retries exhausted) -- claim_pending_entries() never selects that
+        status again, so this is the caller's only chance to also create a
+        real ReconciliationORM case / update the session's own status
+        (session_repo, before this fix, was constructed for exactly that in
+        ErpRelayWorker.process_entry() but never actually called with this
+        outcome, leaving those sessions stuck with no human-visible signal
+        anywhere -- not in /reconciliations, not in the session status badge).
+        """
         entry = self.db.execute(select(OutboxORM).where(OutboxORM.id == entry_id)).scalar_one_or_none()
         if entry:
             entry.last_error = error_msg
             if entry.attempts >= max_attempts:
                 # Route to reconcile_required
                 entry.status = "reconcile_required"
+                self.db.commit()
+                return True
             else:
                 entry.status = "pending"
                 # In every call site today (ErpRelayWorker.process_entry, and the
@@ -152,6 +164,7 @@ class OutboxRepository:
                 exponent = max(0, entry.attempts - 1)
                 entry.next_attempt_at = datetime.now(timezone.utc) + timedelta(seconds=backoff_seconds * (2 ** exponent))
             self.db.commit()
+        return False
 
     def route_to_reconciliation(self, entry_id: int, reason: str) -> None:
         """Explicitly route an outbox failure directly to human reconciliation."""

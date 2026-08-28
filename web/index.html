@@ -2239,11 +2239,31 @@
       }
     }
 
+    // external_ref is unvalidated free text an operator can set to anything
+    // (services/api/routes.py's CreateSessionRequest has no format/length
+    // constraint on it) -- csvField() both escapes it for correct CSV
+    // structure (a literal `"` or `,` inside it would otherwise corrupt
+    // every column after it) and neutralizes CSV/formula injection: a
+    // leading =, +, -, or @ makes Excel/Sheets/LibreOffice evaluate the
+    // cell as a formula when this exported file is opened, which is a
+    // real, currently-exploitable attack class (CWE-1236), not a
+    // hypothetical one -- prefixing those with a tab defuses it while
+    // leaving the visible text unchanged.
+    function csvField(value) {
+      let s = String(value ?? '');
+      if (/^[=+\-@]/.test(s)) s = '\t' + s;
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+
     function exportSessionsCSV() {
       api('/sessions').then(sessions => {
         let csv = 'ID,External_Ref,Line_ID,Target,Counted_Total,Area_Estimate,Status\n';
         sessions.forEach(s => {
-          csv += `${s.id},"${s.external_ref || ''}",${s.line_id},${s.target_count || ''},${s.counted_total || 0},${s.area_estimate_total || 0},${s.status}\n`;
+          csv += [
+            csvField(s.id), csvField(s.external_ref || ''), csvField(s.line_id),
+            csvField(s.target_count || ''), csvField(s.counted_total || 0),
+            csvField(s.area_estimate_total || 0), csvField(s.status),
+          ].join(',') + '\n';
         });
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);

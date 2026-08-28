@@ -31,7 +31,23 @@ class RtspVideoSource:
 
         try:
             import cv2
-            self.cap = cv2.VideoCapture(self.rtsp_url)
+            # cv2.VideoCapture(url) with no timeout blocks on the OS's default
+            # TCP connect timeout when the camera is unreachable -- commonly
+            # tens of seconds, not the ~1s the ingest worker's reconnect loop
+            # (IngestWorker.run_step) deliberately sleeps between attempts.
+            # Verified directly: against an unreachable address, the plain
+            # constructor call hangs far longer than these explicit
+            # open/read timeouts (passed via the params-array constructor,
+            # the only overload that applies them *before* connecting --
+            # setting them via .set() after construction is too late for
+            # OPEN_TIMEOUT specifically, since the constructor itself already
+            # blocked trying to connect).
+            open_timeout_ms = int(config.get("open_timeout_ms", 5000))
+            read_timeout_ms = int(config.get("read_timeout_ms", 5000))
+            self.cap = cv2.VideoCapture(
+                self.rtsp_url, cv2.CAP_FFMPEG,
+                [cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, open_timeout_ms, cv2.CAP_PROP_READ_TIMEOUT_MSEC, read_timeout_ms],
+            )
             self._is_connected = bool(self.cap.isOpened())
             if not self._is_connected:
                 logger.error(f"[RtspVideoSource] Failed to open RTSP stream: {self.rtsp_url!r}")

@@ -316,13 +316,11 @@ class LiveStreamRenderer:
         self, frame: np.ndarray, session_id: int | None, t_now: datetime, mono_ns: int
     ) -> tuple[np.ndarray, int | None]:
         # Check gate crossings in simulated bag objects
-        crossing_detected = False
         for bag in self.bags:
             mid_x = bag["x"] + bag["w"] / 2
             if not bag.get("passed", False):
                 if (self.belt_dir > 0 and mid_x >= self.gate_x) or (self.belt_dir < 0 and mid_x <= self.gate_x):
                     bag["passed"] = True
-                    crossing_detected = True
                     self.last_crossing_time = time.time()
 
                     # Record to real database ledger (explicit demo/simulated crossing)
