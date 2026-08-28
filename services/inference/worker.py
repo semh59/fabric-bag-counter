@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Any
 from packages.cs_core.frame import Frame
@@ -140,8 +141,9 @@ class InferenceWorker:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
+    line_id = int(os.environ.get("LINE_ID", "1"))
     transport = SharedMemoryTransport()
-    worker = InferenceWorker(transport=transport)
+    worker = InferenceWorker(transport=transport, line_id=line_id)
     try:
         worker.start_loop()
     except KeyboardInterrupt:

@@ -1,0 +1,76 @@
+# Edge/field machine stack: the process that actually reads cameras and runs
+# the detection model. This is a SEPARATE compose file from docker-compose.yml
+# on purpose -- docker-compose.yml is the server/cloud stack (postgres, api,
+# jobrunner, erp-relay), which has no camera or GPU hardware attached and
+# never needs it. This file runs ON the factory-floor machine that has the
+# real cameras and (ideally) a GPU plugged in.
+#
+# `supervisor` dynamically spawns one `services.ingest.worker --camera-id N`
+# process per enabled row in the `camera` table (see
+# services/supervisor/manager.py) -- that's why there's no per-camera
+# `ingest` service listed here: the camera list is decided at runtime via
+# the database, not fixed at compose-file-authoring time.
+#
+# Usage: on the edge machine, set POSTGRES_HOST/POSTGRES_PASSWORD below to
+# point at the real server stack's Postgres (reachable over the network --
+# these two compose files are NOT on the same Docker network since they run
+# on different machines), then:
+#   docker compose -f docker-compose.edge.yml up -d --build
+
+services:
+  supervisor:
+    build:
+      context: .
+      dockerfile: Dockerfile.edge
+    container_name: cs-edge-supervisor
+    restart: always
+    # REQUIRED: ingest processes (spawned by this container) and the
+    # separate `inference` container both use packages.cs_core.transport's
+    # real multiprocessing.shared_memory.SharedMemory -- an OS-level IPC
+    # mechanism, not something that crosses a network. Docker containers get
+    # an isolated IPC namespace by default, so without both containers
+    # sharing the *host's* IPC namespace, inference would never see any
+    # frame ingest publishes (they'd silently just never connect, not
+    # error). ipc: host is the simple fix for two containers on one host;
+    # it trades some container IPC isolation for this to work at all.
+    ipc: host
+    environment:
+      DATABASE_URL: postgresql://cuval_admin:${POSTGRES_PASSWORD:-cuval_secure_2026}@${POSTGRES_HOST:-host.docker.internal}:5434/cuval_sayim_db
+      DATABASE_SYNC_URL: postgresql://cuval_admin:${POSTGRES_PASSWORD:-cuval_secure_2026}@${POSTGRES_HOST:-host.docker.internal}:5434/cuval_sayim_db
+      LOG_LEVEL: INFO
+    command: ["python", "-m", "services.supervisor.manager"]
+    volumes:
+      - ./data:/app/data
+    # Ingest processes the supervisor spawns need to open real camera devices
+    # (RTSP is network-only and needs nothing extra; a local USB/webcam
+    # source needs the device node below).
+    devices:
+      - "/dev/video0:/dev/video0"
+    # Uncomment if this machine has an NVIDIA GPU for the inference worker's
+    # onnxruntime-gpu session (untested on real GPU hardware in this
+    # environment -- verify the runtime is actually available before relying
+    # on this):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  inference:
+    build:
+      context: .
+      dockerfile: Dockerfile.edge
+    container_name: cs-edge-inference
+    restart: always
+    ipc: host  # see the comment on the supervisor service above
+    environment:
+      DATABASE_URL: postgresql://cuval_admin:${POSTGRES_PASSWORD:-cuval_secure_2026}@${POSTGRES_HOST:-host.docker.internal}:5434/cuval_sayim_db
+      DATABASE_SYNC_URL: postgresql://cuval_admin:${POSTGRES_PASSWORD:-cuval_secure_2026}@${POSTGRES_HOST:-host.docker.internal}:5434/cuval_sayim_db
+      LINE_ID: ${LINE_ID:-1}
+      LOG_LEVEL: INFO
+    command: ["python", "-m", "services.inference.worker"]
+    volumes:
+      - ./data:/app/data
+    # See the commented-out GPU reservation block above -- same applies here.

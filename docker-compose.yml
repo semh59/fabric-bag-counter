@@ -1,3 +1,9 @@
+# Server/cloud stack: API, job queue, ERP dispatch, and the database they
+# share. No camera or GPU hardware is needed by anything here.
+#
+# The camera-reading/model-inference side (supervisor + per-camera ingest +
+# inference) runs separately, on the actual factory-floor machine that has
+# the cameras/GPU attached -- see docker-compose.edge.yml.
 services:
   postgres:
     image: postgres:16-alpine

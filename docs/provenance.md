@@ -9,7 +9,7 @@
 - **Code License**: Apache-2.0
 - **Model Weights License**: Apache-2.0
 - **Prohibited Variants**: RF-DETR Plus, RF-DETR-XL, RF-DETR-2XL (PML 1.0 lisanslı varyantlar yasaklıdır)
-- **Doğrulama ve Doğruluk**: Sentetik ve gerçekçi örtüşen çuval veri setinde %90+ doğruluk eşiği doğrulanmıştır.
+- **Doğrulama ve Doğruluk**: `tests/test_model_accuracy.py::test_rfdetr_seg_accuracy_on_overlapping_bags` — örtüşen çuval sahnelerinde (60 sentetik sahne, sabit tohum) gerçek ölçüm: **tam sayım doğruluğu ~%52, ortalama sayım hatası ~0.78 çuval, ortalama kutu IoU ~0.65**. Test eşiği (`mean_count_error <= 0.80`) bu ölçümün hemen üzerinde durduğu için farklı ortam/model sürümlerinde marjinal biçimde başarısız olabilir — bu **kabul edilmiş, dürüst bir sınır durumdur**, "%90+" iddiası yanlıştı ve kaldırılmıştır. Gerçek fabrika verisiyle (bkz. `docs/annotation_guide.md` §4) yeniden eğitim yapılmadan bu sayı üretim için yeterli kabul edilmemelidir.
 
 ### OpenCV Kontur Fallback (GEÇİCİ / PLACEHOLDER)
 - **Durum**: **GEÇİCİ / PLACEHOLDER (Temporary Fallback)**
@@ -25,7 +25,7 @@
   - Latent track hypothesis integration for `merge_detector` split events (2, 3 ve 4+ çuval örtüşmelerini destekler).
 
 ## 2. Dataset & Kalibrasyon Provenance
-- Tüm sentetik veri setleri `packages/cs_data/synth.py` ile CC0/temiz lisanslı zemin ve şablonlar kullanılarak üretilmektedir.
+- Tüm sentetik veri setleri `packages/cs_data/synth.py` ile tamamen prosedürel olarak üretilmektedir (OpenCV çizim primitifleri: dikdörtgen, degrade, doku deseni) — hiçbir dış fotoğraf/doku dosyası yüklenmez, dolayısıyla dış varlık lisanslama sorunu yoktur.
 - Kalibrasyon tek bir kaynaktan (`mean_bag_gate_area_px`, `merge_area_ratio`) yönetilmekte; sabit piksel eşikleri kullanılmamaktadır.
 - Gerçek fabrika veri seti sürümleri SHA-256 manifest hash'leri ile takip edilmektedir.
 

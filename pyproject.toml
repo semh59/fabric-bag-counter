@@ -28,6 +28,7 @@ dependencies = [
     "pyjwt>=2.8.0",
     "passlib[bcrypt]>=1.7.4",
     "opencv-python-headless>=4.9.0.80",
+    "pyserial>=3.5",
 ]
 
 [project.optional-dependencies]
