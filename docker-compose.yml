@@ -60,6 +60,12 @@ services:
       DATABASE_SYNC_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
       NODE_ID: 1
       LOG_LEVEL: INFO
+      # Without this, services/api/auth.py generates a fresh random secret
+      # on every container start -- every previously issued JWT (every
+      # logged-in browser session) is silently invalidated on every
+      # restart/rebuild. Set in a real .env file (see .env.example),
+      # Compose substitutes it in automatically; empty if unset there.
+      SECRET_KEY: ${SECRET_KEY:-}
     ports:
       - "8080:8080"
     volumes:
