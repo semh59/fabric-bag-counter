@@ -23,8 +23,15 @@ def test_configure_applies_all_wireable_thresholds():
         "confidence_threshold": 0.72,
         "merge_area_ratio": 2.1,
         "discrepancy_threshold": 0.22,
-        "merge_signals": {"min_votes": 3},
+        "merge_signals": {
+            "min_votes": 3,
+            "area_enabled": False, "shape_enabled": False,
+            "temporal_enabled": True, "print_mark_enabled": True,
+        },
         "mask_iou_threshold": 0.61,
+        "tracking_cost_weights": {"mask_iou": 0.55, "centroid_distance": 0.45},
+        "latent_track_grace_frames": 45,
+        "area_integral": {"min_confidence": 0.5},
     })
 
     assert engine.detector.conf_threshold == 0.72
@@ -33,6 +40,14 @@ def test_configure_applies_all_wireable_thresholds():
     assert engine.area_counter.discrepancy_threshold == 0.22
     assert engine.merge_detector.min_votes == 3
     assert engine.tracker.match_cost_threshold == 0.61
+    assert engine.merge_detector.area_enabled is False
+    assert engine.merge_detector.shape_enabled is False
+    assert engine.merge_detector.temporal_enabled is True
+    assert engine.merge_detector.print_mark_enabled is True
+    assert engine.tracker.w_mask == 0.55
+    assert engine.tracker.w_dist == 0.45
+    assert engine.tracker.max_time_lost == 45
+    assert engine._area_min_confidence == 0.5
 
 
 def test_configure_partial_payload_only_touches_given_keys():
@@ -96,6 +111,49 @@ def test_process_frame_roi_filters_detections_outside_polygon(monkeypatch):
 
     assert len(out.detections.bag_bodies) == 1
     assert out.detections.bag_bodies[0]["box"] == inside_box
+
+
+def test_area_integral_min_confidence_excludes_low_score_masks(monkeypatch):
+    """area_integral.min_confidence (see CountingEngine.configure()) must
+    actually exclude a low-confidence detection's mask from the area
+    estimate -- real AreaIntegralCounter math (calibrated, not mocked),
+    not just an attribute check. Compares a filtered engine's estimate
+    against an unfiltered one processing the exact same two masks, rather
+    than asserting a guessed absolute magic number: with the low-confidence
+    mask correctly excluded, the filtered estimate must equal exactly half
+    of the unfiltered one (both masks are the same size)."""
+    high_mask = np.zeros((640, 640), dtype=bool)
+    high_mask[0:10, 0:10] = True  # area 100
+    low_mask = np.zeros((640, 640), dtype=bool)
+    low_mask[0:10, 10:20] = True  # area 100, same size as high_mask
+
+    def make_fake_predict():
+        def fake_predict(image):
+            return DetectionResult(
+                bag_bodies=[
+                    {"box": [0.0, 0.0, 10.0, 10.0], "score": 0.9, "mask": high_mask},
+                    {"box": [10.0, 0.0, 20.0, 10.0], "score": 0.2, "mask": low_mask},
+                ],
+                print_marks=[],
+            )
+        return fake_predict
+
+    def run(min_confidence):
+        engine = CountingEngine()
+        engine.area_counter.update_calibration(mean_bag_area_px=100.0, is_active=True)
+        if min_confidence is not None:
+            engine.configure({"area_integral": {"min_confidence": min_confidence}})
+        monkeypatch.setattr(engine.detector, "predict", make_fake_predict())
+        return engine.process_frame(
+            image=np.zeros((640, 640, 3), dtype=np.uint8),
+            frame_index=1, monotonic_ns=1, wall_clock=datetime.now(UTC),
+        ).area_estimate
+
+    unfiltered = run(min_confidence=None)
+    filtered = run(min_confidence=0.5)
+
+    assert unfiltered > 0.0
+    assert filtered == pytest.approx(unfiltered / 2.0, rel=1e-6)
 
 
 def test_configure_confidence_threshold_reaches_real_postprocessing_call(monkeypatch):

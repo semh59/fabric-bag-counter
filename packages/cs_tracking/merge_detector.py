@@ -28,11 +28,23 @@ class MergeDetector:
         merge_area_ratio: float = 1.50,
         min_votes: int = 2,
         is_scale_calibrated: bool = False,
+        area_enabled: bool = True,
+        shape_enabled: bool = True,
+        temporal_enabled: bool = True,
+        print_mark_enabled: bool = True,
     ) -> None:
         self.mean_bag_gate_area_px = mean_bag_gate_area_px
         self.merge_area_ratio = merge_area_ratio
         self.min_votes = min_votes
         self.is_scale_calibrated = is_scale_calibrated
+        # Per-signal on/off switches -- mirror config schema's
+        # merge_signals.{area,shape,temporal,print_mark}_enabled. Previously
+        # declared in the schema with no way to actually disable a signal;
+        # analyze_detection() always ran all 4 unconditionally.
+        self.area_enabled = area_enabled
+        self.shape_enabled = shape_enabled
+        self.temporal_enabled = temporal_enabled
+        self.print_mark_enabled = print_mark_enabled
 
     def update_calibration(
         self,
@@ -66,7 +78,7 @@ class MergeDetector:
         # -------------------------------------------------------------------
         # Signal 1: Area threshold
         # -------------------------------------------------------------------
-        if mask_area >= (self.mean_bag_gate_area_px * self.merge_area_ratio):
+        if self.area_enabled and mask_area >= (self.mean_bag_gate_area_px * self.merge_area_ratio):
             votes.append("signal_area_oversized")
 
         # -------------------------------------------------------------------
@@ -80,20 +92,20 @@ class MergeDetector:
         # Normal single bag rectangular solidity is typically 0.70 - 0.90
         # Shingled bags create an L-shape or stepped contour with lower solidity or elongated ratio
         aspect_ratio = max(box_w / box_h, box_h / box_w)
-        if solidity < 0.55 or aspect_ratio > 2.8:
+        if self.shape_enabled and (solidity < 0.55 or aspect_ratio > 2.8):
             votes.append("signal_shape_convexity_deficit")
 
         # -------------------------------------------------------------------
         # Signal 3: Temporal convergence
         # -------------------------------------------------------------------
-        if converging_tracks and len(converging_tracks) >= 2:
+        if self.temporal_enabled and converging_tracks and len(converging_tracks) >= 2:
             votes.append("signal_temporal_track_convergence")
 
         # -------------------------------------------------------------------
         # Signal 4: Print mark count within same mask
         # -------------------------------------------------------------------
         marks_inside = 0
-        if print_marks and mask is not None:
+        if self.print_mark_enabled and print_marks and mask is not None:
             for pm in print_marks:
                 pbox = pm.get("box", [0, 0, 0, 0])
                 pcx = int((pbox[0] + pbox[2]) / 2.0)

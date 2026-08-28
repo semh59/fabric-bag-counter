@@ -123,12 +123,19 @@ class ConveyorByteTracker:
         match_cost_threshold: float = 0.70,
         max_time_lost: int = 30,
         belt_motion: BeltMotionModel | None = None,
+        w_mask: float = 0.70,
+        w_dist: float = 0.30,
     ) -> None:
         self.high_score_threshold = high_score_threshold
         self.low_score_threshold = low_score_threshold
         self.match_cost_threshold = match_cost_threshold
         self.max_time_lost = max_time_lost
         self.belt_motion = belt_motion or BeltMotionModel()
+        # Cost-matrix weighting for association (see matching.py's
+        # compute_cost_matrix) -- mirrors config schema's
+        # tracking_cost_weights.mask_iou/centroid_distance.
+        self.w_mask = w_mask
+        self.w_dist = w_dist
 
         self.tracked_tracks: list[BagTrack] = []
         self.lost_tracks: list[BagTrack] = []
@@ -161,7 +168,8 @@ class ConveyorByteTracker:
 
         # Step 3: First association — Match active tracks with high score detections
         matches_a, u_track_a, u_det_high = associate_detections_to_tracks(
-            self.tracked_tracks, high_dets, cost_threshold=self.match_cost_threshold
+            self.tracked_tracks, high_dets, cost_threshold=self.match_cost_threshold,
+            w_mask=self.w_mask, w_dist=self.w_dist,
         )
 
         for track_idx, det_idx in matches_a:
@@ -173,7 +181,8 @@ class ConveyorByteTracker:
         # Step 4: Second association — Match remaining active tracks with low score detections
         remaining_active_tracks = [self.tracked_tracks[i] for i in u_track_a]
         matches_b, u_track_b, _ = associate_detections_to_tracks(
-            remaining_active_tracks, low_dets, cost_threshold=self.match_cost_threshold
+            remaining_active_tracks, low_dets, cost_threshold=self.match_cost_threshold,
+            w_mask=self.w_mask, w_dist=self.w_dist,
         )
 
         for track_sub_idx, det_idx in matches_b:
@@ -185,7 +194,8 @@ class ConveyorByteTracker:
         # Step 5: Match remaining high score detections with lost tracks
         unmatched_high_dets = [high_dets[i] for i in u_det_high]
         matches_c, u_lost_c, u_det_final = associate_detections_to_tracks(
-            self.lost_tracks, unmatched_high_dets, cost_threshold=self.match_cost_threshold
+            self.lost_tracks, unmatched_high_dets, cost_threshold=self.match_cost_threshold,
+            w_mask=self.w_mask, w_dist=self.w_dist,
         )
 
         for lost_idx, det_idx in matches_c:

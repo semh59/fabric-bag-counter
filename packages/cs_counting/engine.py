@@ -93,6 +93,9 @@ class CountingEngine:
         # Set via configure() -- None means no ROI restriction (the default,
         # matching an engine nobody has ever called configure() on).
         self._roi_polygon_px: list[tuple[float, float]] | None = None
+        # Set via configure() -- None means no confidence filtering on area
+        # estimation (area_integral.min_confidence).
+        self._area_min_confidence: float | None = None
 
     def configure(self, payload: dict[str, Any]) -> None:
         """Apply an effective line config payload (see
@@ -100,20 +103,37 @@ class CountingEngine:
         get_effective_config_payload()) to this engine's already-constructed
         sub-components.
 
-        Only the schema keys that have a real consumer somewhere in this
-        pipeline are applied here -- confidence_threshold, merge_area_ratio
-        (two copies: the detector's own merge-count sizing, and
-        MergeDetector's Signal 1), discrepancy_threshold, merge_signals.
-        min_votes, and mask_iou_threshold (mapped onto
-        ConveyorByteTracker.match_cost_threshold, the closest real match for
-        that name -- both describe the matching-cost cutoff for track
-        association). The remaining schema keys (gate_line, pre_gate_zone,
-        post_gate_zone, tracking_cost_weights, latent_track_grace_frames,
-        latency_p95_pause_threshold_ms, merge_signals.*_enabled,
-        area_integral.min_confidence/smoothing_window) have no consumer
-        anywhere in packages/ or services/ today -- wiring those would mean
-        inventing new behavior in classes that don't support it yet, not
-        connecting an existing one, so they're deliberately left alone here.
+        Every schema key that has a real consumer somewhere in this pipeline
+        is applied here. Two categories:
+        - Direct: confidence_threshold, merge_area_ratio (two copies: the
+          detector's own merge-count sizing, and MergeDetector's Signal 1),
+          discrepancy_threshold, merge_signals.min_votes, mask_iou_threshold
+          (mapped onto ConveyorByteTracker.match_cost_threshold -- name
+          differs, same real matching-cost-cutoff concept),
+          tracking_cost_weights.mask_iou/centroid_distance (mapped onto
+          ConveyorByteTracker.w_mask/w_dist -- real params compute_cost_matrix
+          has always accepted but no caller ever passed), and
+          latent_track_grace_frames (mapped onto
+          ConveyorByteTracker.max_time_lost -- same "how long to keep a lost
+          track before pruning it" concept, different default).
+        - Feature toggles: merge_signals.{area,shape,temporal,print_mark}_enabled
+          gate MergeDetector's 4 independent signal blocks (previously always
+          all ran unconditionally); area_integral.min_confidence filters which
+          detections' masks feed the area estimator (process_frame() below).
+
+        Three schema keys remain deliberately unconsumed, each for a
+        specific reason, not a blanket "not implemented yet":
+        - gate_line/pre_gate_zone/post_gate_zone: gate position already has
+          a real, separate live mechanism (LiveStreamRenderer.gate_x via
+          POST /lines/{id}/quick_settings) that bypasses config entirely --
+          wiring these would need a real decision about which system is
+          authoritative, not just an assignment.
+        - area_integral.smoothing_window: AreaIntegralCounter has no
+          rolling-window/moving-average mechanism in any form today: adding
+          one is new infrastructure, not connecting an existing parameter.
+        - latency_p95_pause_threshold_ms: no latency-tracking or
+          pause/circuit-breaker mechanism exists anywhere in the pipeline;
+          same reasoning.
         """
         if "confidence_threshold" in payload:
             self.detector.conf_threshold = float(payload["confidence_threshold"])
@@ -123,11 +143,33 @@ class CountingEngine:
             self.merge_detector.merge_area_ratio = ratio
         if "discrepancy_threshold" in payload:
             self.area_counter.discrepancy_threshold = float(payload["discrepancy_threshold"])
-        min_votes = payload.get("merge_signals", {}).get("min_votes")
-        if min_votes is not None:
-            self.merge_detector.min_votes = int(min_votes)
         if "mask_iou_threshold" in payload:
             self.tracker.match_cost_threshold = float(payload["mask_iou_threshold"])
+        if "latent_track_grace_frames" in payload:
+            self.tracker.max_time_lost = int(payload["latent_track_grace_frames"])
+
+        cost_weights = payload.get("tracking_cost_weights", {})
+        if "mask_iou" in cost_weights:
+            self.tracker.w_mask = float(cost_weights["mask_iou"])
+        if "centroid_distance" in cost_weights:
+            self.tracker.w_dist = float(cost_weights["centroid_distance"])
+
+        merge_signals = payload.get("merge_signals", {})
+        if "min_votes" in merge_signals:
+            self.merge_detector.min_votes = int(merge_signals["min_votes"])
+        if "area_enabled" in merge_signals:
+            self.merge_detector.area_enabled = bool(merge_signals["area_enabled"])
+        if "shape_enabled" in merge_signals:
+            self.merge_detector.shape_enabled = bool(merge_signals["shape_enabled"])
+        if "temporal_enabled" in merge_signals:
+            self.merge_detector.temporal_enabled = bool(merge_signals["temporal_enabled"])
+        if "print_mark_enabled" in merge_signals:
+            self.merge_detector.print_mark_enabled = bool(merge_signals["print_mark_enabled"])
+
+        area_integral = payload.get("area_integral", {})
+        if "min_confidence" in area_integral:
+            self._area_min_confidence = float(area_integral["min_confidence"])
+
         self._roi_polygon_px = _denormalize_roi(payload.get("roi_polygon"))
 
     def reset_session(self) -> None:
@@ -219,7 +261,17 @@ class CountingEngine:
                 self.total_backward_crossings += 1
 
         # 5. Independent Area-Integral Estimator
-        frame_masks = [b["mask"] for b in detection_result.bag_bodies if b.get("mask") is not None]
+        # area_integral.min_confidence (set via configure()): excludes
+        # low-confidence detections' masks from the area estimate, same
+        # idea as confidence_threshold but for this independent second
+        # counter rather than the primary detector cutoff. None (default,
+        # nobody called configure()) means no filtering -- every mask counts,
+        # matching the original unconditional behavior.
+        frame_masks = [
+            b["mask"] for b in detection_result.bag_bodies
+            if b.get("mask") is not None
+            and (self._area_min_confidence is None or b.get("score", 1.0) >= self._area_min_confidence)
+        ]
         area_estimate = self.area_counter.process_frame_masks(
             masks=frame_masks,
             belt_speed_px_per_frame=self.belt_motion.speed_px,

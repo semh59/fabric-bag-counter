@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import math
 from typing import Any
+
 import numpy as np
 from scipy.optimize import linear_sum_assignment
+
 from packages.cs_core.geometry import compute_mask_iou
 
 
@@ -82,9 +84,18 @@ def associate_detections_to_tracks(
     tracks: list[Any],
     detections: list[dict[str, Any]],
     cost_threshold: float = 0.70,
+    w_mask: float = 0.70,
+    w_dist: float = 0.30,
 ) -> tuple[list[tuple[int, int]], list[int], list[int]]:
     """Associate detections to active tracks using Hungarian linear sum assignment.
-    
+
+    w_mask/w_dist were previously silently ignored -- compute_cost_matrix()
+    has always accepted them, but every caller (this function included)
+    called it with no arguments, so the cost weighting was permanently
+    stuck at its hardcoded defaults regardless of config
+    (tracking_cost_weights.mask_iou/centroid_distance, see
+    CountingEngine.configure()).
+
     Returns:
         (matches, unmatched_tracks, unmatched_detections)
     """
@@ -93,7 +104,7 @@ def associate_detections_to_tracks(
     if len(detections) == 0:
         return [], list(range(len(tracks))), []
 
-    cost_matrix = compute_cost_matrix(tracks, detections)
+    cost_matrix = compute_cost_matrix(tracks, detections, w_mask=w_mask, w_dist=w_dist)
     row_ind, col_ind = linear_sum_assignment(cost_matrix)
 
     matches = []
