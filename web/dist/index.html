@@ -850,7 +850,7 @@
                       <span>✏️</span>
                       <span>Sayım Alanı (ROI)</span>
                     </button>
-                    <button onclick="togglePerspectiveWarp()" id="warp-btn" class="px-2.5 py-1 rounded ${perspectiveMode ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-300'} border border-slate-700 font-semibold flex items-center space-x-1 transition">
+                    <button onclick="togglePerspectiveWarp(${lineId})" id="warp-btn" class="px-2.5 py-1 rounded ${perspectiveMode ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-300'} border border-slate-700 font-semibold flex items-center space-x-1 transition">
                       <span>📐</span>
                       <span>Kuşbakışı (4-Nokta)</span>
                     </button>
@@ -867,7 +867,7 @@
                   <!-- Live Stream Viewport -->
                   <div class="relative bg-slate-950 rounded-2xl border-2 border-slate-700/80 overflow-hidden shadow-inner flex items-center justify-center min-h-[300px]" id="video-viewport">
                     ${feedMode === 'stream' ? `
-                      <img id="liveVideoFeed" src="${API}/live/lines/${lineId}/stream" alt="Live AI Vision Camera Stream" class="w-full h-auto block rounded-xl">
+                      <img id="liveVideoFeed" src="${API}/live/lines/${lineId}/stream" alt="Live AI Vision Camera Stream" class="w-full h-auto block rounded-xl ${perspectiveMode ? 'cursor-crosshair' : ''}" onclick="handleStreamWarpClick(event, ${lineId})">
                     ` : `
                       <canvas id="conveyorCanvas" width="760" height="300" class="w-full h-full block cursor-crosshair"></canvas>
                     `}
@@ -1370,15 +1370,64 @@
       }
     }
 
-    function togglePerspectiveWarp() {
+    let perspectiveLineId = 1;
+
+    function togglePerspectiveWarp(lineId) {
       perspectiveMode = !perspectiveMode;
+      perspectiveLineId = lineId || perspectiveLineId;
       const btn = document.getElementById('warp-btn');
       if (btn) btn.className = `px-2.5 py-1 rounded ${perspectiveMode ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-300'} border border-slate-700 font-semibold flex items-center space-x-1 transition`;
+      const img = document.getElementById('liveVideoFeed');
+      if (img) img.classList.toggle('cursor-crosshair', perspectiveMode);
       if (perspectiveMode) {
         warpPoints = [];
         toast('📐 Kuşbakışı Perspektif: Konveyörün 4 köşesine sırayla tıklayın [1, 2, 3, 4]', 'info');
-      } else {
-        toast(`Perspektif matrisi oluşturuldu (${warpPoints.length} nokta)`, 'success');
+      } else if (warpPoints.length < 4) {
+        toast('Perspektif kalibrasyonu iptal edildi (4 nokta tamamlanmadı)', 'info');
+        warpPoints = [];
+      }
+    }
+
+    // Real backend homography submission -- POSTs the 4 marked source points
+    // to /calibrations/{lineId}/perspective, which computes a real cv2
+    // homography and applies it to every subsequent real camera frame
+    // before detection (see packages/cs_vision/calibration.py). Without
+    // this call, marking points was pure decoration: nothing was ever sent
+    // to the backend and anchor_grid()'s fixed single-camera assumption
+    // stayed in effect regardless of what the operator clicked.
+    async function submitPerspectiveCalibration(lineId, points) {
+      try {
+        const res = await api(`/calibrations/${lineId}/perspective`, {
+          method: 'POST',
+          body: JSON.stringify({ roi_src_points: points })
+        });
+        toast('✓ 4-Nokta Homografi Perspektif Düzeltmesi Aktif! (Kalibrasyon #' + res.calibration_id + ')', 'success');
+      } catch (e) {
+        toast(e.detail || 'Perspektif kalibrasyonu kaydedilemedi', 'error');
+      }
+    }
+
+    // Live MJPEG stream frames are rendered at CANVAS_SIZE (640x640, see
+    // packages/cs_vision/calibration.py) regardless of the <img>'s displayed
+    // CSS size -- scale click coordinates from displayed pixels to that
+    // native frame resolution so the points sent to the backend match what
+    // the detector actually sees.
+    function handleStreamWarpClick(event, lineId) {
+      if (!perspectiveMode) return;
+      const img = event.target;
+      const rect = img.getBoundingClientRect();
+      const natW = img.naturalWidth || 640;
+      const natH = img.naturalHeight || 640;
+      const x = Math.round(((event.clientX - rect.left) / rect.width) * natW);
+      const y = Math.round(((event.clientY - rect.top) / rect.height) * natH);
+      warpPoints.push([x, y]);
+      toast(`Nokta ${warpPoints.length}/4 işaretlendi`, 'info');
+      if (warpPoints.length >= 4) {
+        perspectiveMode = false;
+        img.classList.remove('cursor-crosshair');
+        const btn = document.getElementById('warp-btn');
+        if (btn) btn.className = `px-2.5 py-1 rounded bg-slate-800 text-slate-300 border border-slate-700 font-semibold flex items-center space-x-1 transition`;
+        submitPerspectiveCalibration(lineId, warpPoints);
       }
     }
 
@@ -1433,9 +1482,12 @@
 
         if (perspectiveMode) {
           warpPoints.push([Math.round(mouseX), Math.round(mouseY)]);
+          toast(`Nokta ${warpPoints.length}/4 işaretlendi`, 'info');
           if (warpPoints.length >= 4) {
             perspectiveMode = false;
-            toast('✓ 4-Nokta Homografi Perspektif Düzeltmesi Aktif!', 'success');
+            const btn = document.getElementById('warp-btn');
+            if (btn) btn.className = `px-2.5 py-1 rounded bg-slate-800 text-slate-300 border border-slate-700 font-semibold flex items-center space-x-1 transition`;
+            submitPerspectiveCalibration(perspectiveLineId, warpPoints);
           }
           return;
         }

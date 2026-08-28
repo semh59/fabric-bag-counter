@@ -74,6 +74,32 @@ class CalibrationRepository:
         self.db.refresh(calib)
         return calib
 
+    def create_perspective_calibration(
+        self,
+        line_id: int,
+        roi_src_points: list[list[float]],
+        homography_matrix: list[list[float]],
+        created_by: str | None = None,
+        is_active: bool = True,
+    ) -> LineCalibrationORM:
+        """Create Stage 3 perspective (homography ROI-warp) calibration record."""
+        if is_active:
+            self._deactivate_stage(line_id, "perspective")
+
+        calib = LineCalibrationORM(
+            line_id=line_id,
+            stage="perspective",
+            roi_src_points=roi_src_points,
+            homography_matrix=homography_matrix,
+            is_active=is_active,
+            created_by=created_by,
+            created_at=datetime.now(timezone.utc),
+        )
+        self.db.add(calib)
+        self.db.commit()
+        self.db.refresh(calib)
+        return calib
+
     def get_active_calibration(self, line_id: int, stage: str = "scale") -> LineCalibrationORM | None:
         """Fetch the current active calibration for a specific stage."""
         stmt = (

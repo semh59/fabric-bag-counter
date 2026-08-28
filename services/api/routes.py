@@ -939,6 +939,46 @@ def start_scale_calibration_job(line_id: int, payload: dict[str, Any]):
         return SubmitJobResponse(job_id=job.id, kind=job.kind)
 
 
+class SetPerspectiveCalibrationRequest(BaseModel):
+    roi_src_points: list[list[float]]
+
+
+@router.post("/calibrations/{line_id}/perspective", dependencies=[Depends(require_role(UserRole.ENGINEER))])
+def create_perspective_calibration(line_id: int, req: SetPerspectiveCalibrationRequest, user: Annotated[CurrentUser, Depends(get_current_user)]):
+    """Real Stage 3 (perspective/ROI-warp) calibration: 4 operator-marked
+    points -> a real cv2 homography, applied to this camera's real frames
+    before detection (packages/cs_vision/calibration.py). Computed
+    synchronously, unlike the motion/scale job-queue endpoints above: this
+    is a deterministic, effectively-instant linear-algebra operation, not
+    work that benefits from background processing.
+    """
+    from packages.cs_vision.calibration import compute_homography
+
+    try:
+        homography = compute_homography(req.roi_src_points)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    with get_sync_session() as db:
+        calib_repo = CalibrationRepository(db)
+        calib = calib_repo.create_perspective_calibration(
+            line_id=line_id,
+            roi_src_points=req.roi_src_points,
+            homography_matrix=homography,
+            created_by=user.username,
+        )
+        calib_id = calib.id
+
+    # Apply immediately to this line's live renderer, if one is already
+    # running, instead of requiring a stream restart to pick up the change.
+    from packages.cs_counting.stream_renderer import _renderers
+    renderer = _renderers.get(line_id)
+    if renderer is not None:
+        renderer.reload_perspective_calibration()
+
+    return {"calibration_id": calib_id, "stage": "perspective", "homography_matrix": homography}
+
+
 @router.post("/bundles/activate", dependencies=[Depends(require_role(UserRole.ENGINEER))])
 def activate_deployment_bundle(req: ActivateBundleRequest, user: Annotated[CurrentUser, Depends(get_current_user)]):
     with get_sync_session() as db:

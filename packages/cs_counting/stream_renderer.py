@@ -14,8 +14,10 @@ import numpy as np
 from packages.cs_counting.engine import CountingEngine
 from packages.cs_storage.db import get_sync_session
 from packages.cs_storage.models_orm import CameraORM, GateORM, ProductProfileORM, SessionORM
+from packages.cs_storage.repositories.calibration_repo import CalibrationRepository
 from packages.cs_storage.repositories.ledger_repo import LedgerRepository
 from packages.cs_storage.repositories.session_repo import SessionRepository
+from packages.cs_vision.calibration import apply_perspective_warp
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +47,8 @@ class LiveStreamRenderer:
         self.last_crossing_time = 0.0
         self._last_frame_time: float | None = None
         self._fps_ema: float | None = None
+        self.homography_matrix: list[list[float]] | None = None
+        self.reload_perspective_calibration()
 
         # Initialize physical bags on conveyor
         self.bags.append({"x": 100.0, "y": 140.0, "w": 110, "h": 150, "label": "50kg Çimento", "color": (40, 180, 240), "id": self.next_sim_id, "passed": False})
@@ -80,6 +84,24 @@ class LiveStreamRenderer:
             self.video_cap = cap
             return True, f"Kamera akışı başarıyla bağlandı: {source_str}"
         return False, f"Kamera akışına bağlanılamadı: {source_str}"
+
+    def reload_perspective_calibration(self) -> None:
+        """(Re)load this line's active Stage-3 perspective calibration, if any.
+
+        Called at construction and after a new perspective calibration is
+        saved (see the /calibrations/{line_id}/perspective API endpoint), so
+        an operator recalibrating a camera doesn't need to restart the
+        stream. No active calibration means no active ROI-warp -- the raw
+        frame goes straight to detection, matching a camera framed the same
+        way the model was trained against.
+        """
+        try:
+            with get_sync_session() as db:
+                calib = CalibrationRepository(db).get_active_calibration(self.line_id, stage="perspective")
+                self.homography_matrix = calib.homography_matrix if calib else None
+        except Exception:
+            logger.exception("Failed to load perspective calibration for line_id=%s", self.line_id)
+            self.homography_matrix = None
 
     def set_video_source(self, video_path: str) -> bool:
         """Set a real MP4 / AVI video file as input source."""
@@ -224,8 +246,17 @@ class LiveStreamRenderer:
             axis_origin=(0.0, 0.0), axis_vector=(1.0, 0.0), gate_pos=float(self.gate_x)
         )
 
+        # Stage 3 calibration: warp this camera's real belt ROI into the
+        # canonical view anchor_grid() was trained against, before handing
+        # the frame to the detector. A camera framed/mounted differently
+        # than the reference setup would otherwise have every anchor
+        # silently pointed at the wrong part of the image.
+        detect_frame = frame
+        if self.homography_matrix is not None:
+            detect_frame = apply_perspective_warp(frame, self.homography_matrix)
+
         out = self.engine.process_frame(
-            image=frame, frame_index=self.frame_idx, monotonic_ns=mono_ns, wall_clock=t_now
+            image=detect_frame, frame_index=self.frame_idx, monotonic_ns=mono_ns, wall_clock=t_now
         )
 
         if out.gate_crossings:
@@ -261,8 +292,12 @@ class LiveStreamRenderer:
                         session_id, self.line_id,
                     )
 
-        annotated = frame.copy()
-        overlay = frame.copy()
+        # Annotate on detect_frame (not the raw frame): track boxes/masks are
+        # in the coordinate space the detector actually saw, i.e. the warped
+        # canvas when a perspective calibration is active -- drawing them on
+        # the un-warped original would misplace every box.
+        annotated = detect_frame.copy()
+        overlay = detect_frame.copy()
         for track in out.active_tracks:
             bx1, by1, bx2, by2 = [int(v) for v in track.box]
             box_color = (255, 140, 90)

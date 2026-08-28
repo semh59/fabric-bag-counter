@@ -102,6 +102,8 @@ def upgrade() -> None:
         sa.Column("bag_area_stddev_px", sa.Float(), nullable=True),
         sa.Column("source_video_ref", sa.Text(), nullable=True),
         sa.Column("source_model_version_id", sa.BigInteger(), nullable=True),
+        sa.Column("roi_src_points", sa.JSON(), nullable=True),
+        sa.Column("homography_matrix", sa.JSON(), nullable=True),
         sa.Column("is_active", sa.Boolean(), server_default=sa.text("false")),
     )
 

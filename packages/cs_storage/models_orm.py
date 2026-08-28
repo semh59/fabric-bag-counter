@@ -124,12 +124,12 @@ class ProductProfileORM(Base):
 
 
 class LineCalibrationORM(Base):
-    """Two-stage line calibration (§5.3)."""
+    """Three-stage line calibration (§5.3): motion, scale, perspective."""
     __tablename__ = "line_calibration"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     line_id: Mapped[int] = mapped_column(Integer, ForeignKey("line.id", ondelete="CASCADE"), nullable=False)
-    stage: Mapped[str] = mapped_column(String(32), nullable=False)  # motion | scale
+    stage: Mapped[str] = mapped_column(String(32), nullable=False)  # motion | scale | perspective
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     created_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
@@ -143,6 +143,16 @@ class LineCalibrationORM(Base):
     bag_area_stddev_px: Mapped[float | None] = mapped_column(Float, nullable=True)
     source_video_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_model_version_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
+    # Stage 3: perspective (real homography ROI-warp calibration -- see
+    # packages/cs_vision/calibration.py. Lets a camera mounted at a
+    # different height/angle/framing still feed the detector the same
+    # canonical belt-ROI view the model's fixed anchor_grid() was trained
+    # against, instead of requiring anchor_grid() itself to be hand-edited
+    # and the model retrained per camera.)
+    roi_src_points: Mapped[list[list[float]] | None] = mapped_column(JSON, nullable=True)
+    homography_matrix: Mapped[list[list[float]] | None] = mapped_column(JSON, nullable=True)
+
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
 
     line = relationship("LineORM", back_populates="calibrations")
