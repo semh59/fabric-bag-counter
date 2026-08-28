@@ -39,6 +39,11 @@ class InferenceWorker:
         self.engine = engine or CountingEngine()
         self.is_running = False
         self.active_bundle_id = 1
+        # Tracks which config_version was last applied to self.engine via
+        # CountingEngine.configure(), so run_step() only re-resolves and
+        # re-applies the effective payload when the active bundle's config
+        # actually changed, not on every single batch.
+        self._applied_config_version_id: int | None = None
 
     def run_step(self) -> int:
         """Consume pending frames and process through pipeline. Returns count of frames processed."""
@@ -56,6 +61,20 @@ class InferenceWorker:
             active_bundle = config_repo.get_active_bundle(self.line_id)
             if active_bundle:
                 self.active_bundle_id = active_bundle.id
+                # Apply the engineer's real config (confidence_threshold,
+                # merge_area_ratio, roi_polygon, etc. -- see CountingEngine.
+                # configure()) only when it actually changed since the last
+                # batch, not on every single one.
+                if active_bundle.config_version_id != self._applied_config_version_id:
+                    try:
+                        payload = config_repo.get_effective_config_payload(active_bundle.config_version)
+                        self.engine.configure(payload)
+                        self._applied_config_version_id = active_bundle.config_version_id
+                    except Exception:
+                        logger.exception(
+                            f"[Inference] Failed to apply config_version_id={active_bundle.config_version_id} "
+                            f"for line_id={self.line_id}"
+                        )
 
             stats = self.transport.get_stats()
             consecutive_drops = stats.get("consecutive_drops", {})

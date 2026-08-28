@@ -982,6 +982,60 @@ def create_perspective_calibration(line_id: int, req: SetPerspectiveCalibrationR
     return {"calibration_id": calib_id, "stage": "perspective", "homography_matrix": homography}
 
 
+class SetRoiPolygonRequest(BaseModel):
+    roi_polygon: list[list[float]]
+
+
+@router.post("/lines/{line_id}/roi", dependencies=[Depends(require_role(UserRole.ENGINEER))])
+def set_line_roi_polygon(line_id: int, req: SetRoiPolygonRequest, user: Annotated[CurrentUser, Depends(get_current_user)]):
+    """Real counting-area ROI: [0,1]-normalized polygon points, merged into
+    the line's active config and re-activated as a new bundle, then applied
+    immediately to the live renderer if one is running (same shape as
+    /calibrations/{line_id}/perspective). Previously the frontend's ROI tool
+    (togglePerspectiveWarp's sibling, toggleRoiDraw) called nothing at all
+    and just showed a fake "kaydedildi" success toast -- CountingEngine now
+    has a real consumer for roi_polygon (packages/cs_counting/engine.py's
+    configure()/process_frame()), so this endpoint is the missing link
+    between the two.
+    """
+    if len(req.roi_polygon) < 3:
+        raise HTTPException(status_code=400, detail="roi_polygon en az 3 nokta içermelidir.")
+
+    with get_sync_session() as db:
+        config_repo = ConfigRepository(db)
+        bundle = config_repo.get_active_bundle(line_id)
+        if bundle is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Bu hat için aktif bir model dağıtımı yok, önce bir model aktive edin.",
+            )
+
+        # Merge into the current effective payload rather than replacing it
+        # outright, so an already-customized confidence_threshold/
+        # merge_area_ratio/etc. on this line survives an ROI-only update.
+        merged_payload = config_repo.get_effective_config_payload(bundle.config_version)
+        merged_payload["roi_polygon"] = req.roi_polygon
+
+        new_config = config_repo.create_config_version(
+            line_id=line_id, payload=merged_payload, note="ROI güncellemesi (UI)", created_by=user.username,
+        )
+        new_bundle = config_repo.create_and_activate_bundle(
+            line_id=line_id,
+            model_version_id=bundle.model_version_id,
+            config_version_id=new_config.id,
+            calibration_id=bundle.calibration_id,
+            activated_by=user.username,
+        )
+        new_bundle_id, config_version_id = new_bundle.id, new_config.id
+
+    from packages.cs_counting.stream_renderer import _renderers
+    renderer = _renderers.get(line_id)
+    if renderer is not None:
+        renderer.reload_active_config()
+
+    return {"config_version_id": config_version_id, "bundle_id": new_bundle_id, "roi_polygon": req.roi_polygon}
+
+
 @router.post("/bundles/activate", dependencies=[Depends(require_role(UserRole.ENGINEER))])
 def activate_deployment_bundle(req: ActivateBundleRequest, user: Annotated[CurrentUser, Depends(get_current_user)]):
     with get_sync_session() as db:
@@ -993,7 +1047,19 @@ def activate_deployment_bundle(req: ActivateBundleRequest, user: Annotated[Curre
             calibration_id=req.calibration_id,
             activated_by=user.username,
         )
-        return bundle
+        bundle_id, line_id = bundle.id, bundle.line_id
+
+    # Apply the newly-active config (confidence_threshold, merge_area_ratio,
+    # roi_polygon, etc. -- see CountingEngine.configure()) to this line's
+    # live renderer immediately, if one is running, instead of requiring a
+    # stream restart. Previously activating a bundle never reached a
+    # running engine at all -- see reload_active_config()'s docstring.
+    from packages.cs_counting.stream_renderer import _renderers
+    renderer = _renderers.get(line_id)
+    if renderer is not None:
+        renderer.reload_active_config()
+
+    return bundle
 
 
 # ---------------------------------------------------------------------------

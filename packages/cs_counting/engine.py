@@ -2,17 +2,54 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+
 import numpy as np
-from packages.cs_core.frame import Frame
+
+from packages.cs_core.geometry import point_in_polygon
 from packages.cs_counting.area_counter import AreaIntegralCounter
 from packages.cs_counting.gate import GateCrossingEvent, GateStateMachine
 from packages.cs_tracking.merge_detector import MergeDetector
 from packages.cs_tracking.motion import BeltMotionModel
 from packages.cs_tracking.tracker import BagTrack, ConveyorByteTracker
 from packages.cs_vision.detector import DetectionResult, VisionDetector
+
+# The detector always runs on this canonical canvas size in the real
+# pipeline (letterboxed/perspective-warped upstream in
+# LiveStreamRenderer/InferenceWorker before process_frame() is ever
+# called) -- matches packages/cs_vision/calibration.py's own CANVAS_SIZE,
+# duplicated rather than imported for the same reason documented there:
+# avoiding a heavier import chain into this module.
+CANVAS_SIZE = (640, 640)
+
+
+# The schema's own full-frame default (packages/cs_core/config_defaults.py's
+# SCHEMA_V1_DEFAULTS["roi_polygon"]) -- an unmodified config genuinely means
+# "no ROI restriction", so it's the one shape allowed to short-circuit to
+# None. A bounding-box check ("does this polygon's extent touch all four
+# canvas edges") would be unsound here -- a non-rectangular polygon (e.g. a
+# diamond whose points touch each edge's midpoint) can satisfy that while
+# covering only a fraction of the canvas -- so this compares the actual
+# normalized points instead.
+_FULL_FRAME_ROI_NORM = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
+
+
+def _denormalize_roi(polygon_norm: list[list[float]] | None) -> list[tuple[float, float]] | None:
+    """Convert a [0,1]-normalized ROI polygon (packages/cs_core/config_defaults.py's
+    schema) into pixel coordinates on CANVAS_SIZE. Returns None (meaning "no
+    filtering") for an empty/missing polygon or one that exactly matches the
+    schema's full-frame default, so the common no-custom-ROI case costs
+    nothing extra per frame.
+    """
+    if not polygon_norm or len(polygon_norm) < 3:
+        return None
+    normalized = [[round(float(x), 6), round(float(y), 6)] for x, y in polygon_norm]
+    if normalized == _FULL_FRAME_ROI_NORM:
+        return None
+    w, h = CANVAS_SIZE
+    return [(float(x) * w, float(y) * h) for x, y in polygon_norm]
 
 
 @dataclass
@@ -53,6 +90,45 @@ class CountingEngine:
         self.running_net_count = 0
         self.total_forward_crossings = 0
         self.total_backward_crossings = 0
+        # Set via configure() -- None means no ROI restriction (the default,
+        # matching an engine nobody has ever called configure() on).
+        self._roi_polygon_px: list[tuple[float, float]] | None = None
+
+    def configure(self, payload: dict[str, Any]) -> None:
+        """Apply an effective line config payload (see
+        packages/cs_core/config_defaults.py, ConfigRepository.
+        get_effective_config_payload()) to this engine's already-constructed
+        sub-components.
+
+        Only the schema keys that have a real consumer somewhere in this
+        pipeline are applied here -- confidence_threshold, merge_area_ratio
+        (two copies: the detector's own merge-count sizing, and
+        MergeDetector's Signal 1), discrepancy_threshold, merge_signals.
+        min_votes, and mask_iou_threshold (mapped onto
+        ConveyorByteTracker.match_cost_threshold, the closest real match for
+        that name -- both describe the matching-cost cutoff for track
+        association). The remaining schema keys (gate_line, pre_gate_zone,
+        post_gate_zone, tracking_cost_weights, latent_track_grace_frames,
+        latency_p95_pause_threshold_ms, merge_signals.*_enabled,
+        area_integral.min_confidence/smoothing_window) have no consumer
+        anywhere in packages/ or services/ today -- wiring those would mean
+        inventing new behavior in classes that don't support it yet, not
+        connecting an existing one, so they're deliberately left alone here.
+        """
+        if "confidence_threshold" in payload:
+            self.detector.conf_threshold = float(payload["confidence_threshold"])
+        if "merge_area_ratio" in payload:
+            ratio = float(payload["merge_area_ratio"])
+            self.detector.merge_area_ratio = ratio
+            self.merge_detector.merge_area_ratio = ratio
+        if "discrepancy_threshold" in payload:
+            self.area_counter.discrepancy_threshold = float(payload["discrepancy_threshold"])
+        min_votes = payload.get("merge_signals", {}).get("min_votes")
+        if min_votes is not None:
+            self.merge_detector.min_votes = int(min_votes)
+        if "mask_iou_threshold" in payload:
+            self.tracker.match_cost_threshold = float(payload["mask_iou_threshold"])
+        self._roi_polygon_px = _denormalize_roi(payload.get("roi_polygon"))
 
     def reset_session(self) -> None:
         """Reset internal states for a fresh session."""
@@ -72,6 +148,20 @@ class CountingEngine:
         """Process a single image frame through the full vision-tracking-counting pipeline."""
         # 1. Vision Detection (RF-DETR Seg)
         detection_result = self.detector.predict(image)
+
+        # 1b. Real counting-area ROI filter (set via configure(), see
+        # _denormalize_roi): a detection whose box centroid falls outside
+        # the configured polygon is dropped before it can reach tracking,
+        # merge analysis, or the area estimator -- an operator-restricted
+        # counting area actually restricts counting, not just the display.
+        if self._roi_polygon_px is not None:
+            detection_result.bag_bodies = [
+                b for b in detection_result.bag_bodies
+                if point_in_polygon(
+                    ((b["box"][0] + b["box"][2]) / 2.0, (b["box"][1] + b["box"][3]) / 2.0),
+                    self._roi_polygon_px,
+                )
+            ]
 
         # 2. Merge Detection & Hypothesis analysis
         enriched_detections: list[dict[str, Any]] = []

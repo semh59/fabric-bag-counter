@@ -18,6 +18,7 @@ from packages.cs_counting.gate import GateCrossingEvent
 from packages.cs_storage.db import get_sync_session
 from packages.cs_storage.models_orm import CameraORM, GateORM, ProductProfileORM, SessionORM
 from packages.cs_storage.repositories.calibration_repo import CalibrationRepository
+from packages.cs_storage.repositories.config_repo import ConfigRepository
 from packages.cs_storage.repositories.session_repo import SessionRepository
 from packages.cs_vision.calibration import apply_perspective_warp
 
@@ -51,6 +52,7 @@ class LiveStreamRenderer:
         self._fps_ema: float | None = None
         self.homography_matrix: list[list[float]] | None = None
         self.reload_perspective_calibration()
+        self.reload_active_config()
 
         # Initialize physical bags on conveyor
         self.bags.append({"x": 100.0, "y": 140.0, "w": 110, "h": 150, "label": "50kg Çimento", "color": (40, 180, 240), "id": self.next_sim_id, "passed": False})
@@ -104,6 +106,27 @@ class LiveStreamRenderer:
         except Exception:
             logger.exception("Failed to load perspective calibration for line_id=%s", self.line_id)
             self.homography_matrix = None
+
+    def reload_active_config(self) -> None:
+        """(Re)load this line's active deployment bundle's config version and
+        apply it to the live engine, same shape as reload_perspective_calibration().
+
+        Called at construction and after a bundle is (re)activated (see
+        POST /bundles/activate and POST /lines/{line_id}/roi), so an
+        engineer changing confidence_threshold/merge_area_ratio/roi_polygon/
+        etc. doesn't need to restart the stream. No active bundle means the
+        engine keeps running on its own hardcoded defaults -- CountingEngine.
+        configure() is simply never called, not called with an empty payload.
+        """
+        try:
+            with get_sync_session() as db:
+                config_repo = ConfigRepository(db)
+                bundle = config_repo.get_active_bundle(self.line_id)
+                if bundle is not None:
+                    payload = config_repo.get_effective_config_payload(bundle.config_version)
+                    self.engine.configure(payload)
+        except Exception:
+            logger.exception("Failed to load active config for line_id=%s", self.line_id)
 
     def set_video_source(self, video_path: str) -> bool:
         """Set a real MP4 / AVI video file as input source."""

@@ -846,7 +846,7 @@
                       <span>↔️</span>
                       <span>Lazer Taşı</span>
                     </button>
-                    <button onclick="toggleRoiDraw()" id="roi-draw-btn" class="px-2.5 py-1 rounded ${roiDrawMode ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300'} border border-slate-700 font-semibold flex items-center space-x-1 transition">
+                    <button onclick="toggleRoiDraw(${lineId})" id="roi-draw-btn" class="px-2.5 py-1 rounded ${roiDrawMode ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300'} border border-slate-700 font-semibold flex items-center space-x-1 transition">
                       <span>✏️</span>
                       <span>Sayım Alanı (ROI)</span>
                     </button>
@@ -867,7 +867,7 @@
                   <!-- Live Stream Viewport -->
                   <div class="relative bg-slate-950 rounded-2xl border-2 border-slate-700/80 overflow-hidden shadow-inner flex items-center justify-center min-h-[300px]" id="video-viewport">
                     ${feedMode === 'stream' ? `
-                      <img id="liveVideoFeed" src="${API}/live/lines/${lineId}/stream" alt="Live AI Vision Camera Stream" class="w-full h-auto block rounded-xl ${perspectiveMode ? 'cursor-crosshair' : ''}" onclick="handleStreamWarpClick(event, ${lineId})">
+                      <img id="liveVideoFeed" src="${API}/live/lines/${lineId}/stream" alt="Live AI Vision Camera Stream" class="w-full h-auto block rounded-xl ${(perspectiveMode || roiDrawMode) ? 'cursor-crosshair' : ''}" onclick="handleStreamClick(event, ${lineId})">
                     ` : `
                       <canvas id="conveyorCanvas" width="760" height="300" class="w-full h-full block cursor-crosshair"></canvas>
                     `}
@@ -1358,16 +1358,62 @@
       toast(isDraggingGateEnabled ? '↔️ Lazer kapısı taşıma modu aktif (Görüntüde sürükleyin)' : 'Lazer kapısı kilitlendi', 'info');
     }
 
-    function toggleRoiDraw() {
+    let roiLineId = 1;
+
+    function toggleRoiDraw(lineId) {
       roiDrawMode = !roiDrawMode;
+      roiLineId = lineId || roiLineId;
       const btn = document.getElementById('roi-draw-btn');
       if (btn) btn.className = `px-2.5 py-1 rounded ${roiDrawMode ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300'} border border-slate-700 font-semibold flex items-center space-x-1 transition`;
+      const img = document.getElementById('liveVideoFeed');
+      if (img) img.classList.toggle('cursor-crosshair', roiDrawMode);
       if (roiDrawMode) {
         roiPoints = [];
-        toast('✏️ Sayım Alanı (ROI): Ekrana tıklayarak köşe noktalarını belirleyin', 'info');
+        toast('✏️ Sayım Alanı (ROI): Ekrana tıklayarak köşe noktalarını belirleyin (en az 3, en fazla 6 nokta)', 'info');
+      } else if (roiPoints.length >= 3) {
+        finishRoiDraw();
       } else {
-        toast(`Sayım Alanı (ROI) kaydedildi (${roiPoints.length} nokta)`, 'success');
+        toast('Sayım Alanı (ROI) iptal edildi (en az 3 nokta gerekli)', 'info');
+        roiPoints = [];
       }
+    }
+
+    // Real backend submission -- POSTs the drawn polygon (normalized to
+    // [0,1] against whichever canvas/image it was drawn on) to
+    // /lines/{lineId}/roi, which merges it into the line's active config
+    // and re-activates a bundle carrying it. CountingEngine.process_frame()
+    // (packages/cs_counting/engine.py) then actually filters detections
+    // outside the polygon -- previously drawing an ROI called no API at all
+    // and just showed a fake "kaydedildi" success toast.
+    async function submitRoiPolygon(lineId, normalizedPoints) {
+      try {
+        const res = await api(`/lines/${lineId}/roi`, {
+          method: 'POST',
+          body: JSON.stringify({ roi_polygon: normalizedPoints })
+        });
+        toast(`✓ Sayım Alanı (ROI) kaydedildi ve aktif edildi (Config #${res.config_version_id})`, 'success');
+      } catch (e) {
+        toast(e.detail || 'Sayım Alanı (ROI) kaydedilemedi', 'error');
+      }
+    }
+
+    // Normalizes whichever pixel space the points were drawn in (the demo
+    // canvas, 760x300, or the real live stream image's native resolution)
+    // to [0,1] fractions -- ROI is a fractional region of the frame, not
+    // exact pixels, so this is correct regardless of which view was used.
+    function finishRoiDraw() {
+      const canvas = document.getElementById('conveyorCanvas');
+      const img = document.getElementById('liveVideoFeed');
+      let w = 760, h = 300;
+      if (feedMode === 'stream' && img) {
+        w = img.naturalWidth || 640;
+        h = img.naturalHeight || 640;
+      } else if (canvas) {
+        w = canvas.width;
+        h = canvas.height;
+      }
+      const normalized = roiPoints.map(([x, y]) => [Math.min(1, Math.max(0, x / w)), Math.min(1, Math.max(0, y / h))]);
+      submitRoiPolygon(roiLineId, normalized);
     }
 
     let perspectiveLineId = 1;
@@ -1412,14 +1458,28 @@
     // CSS size -- scale click coordinates from displayed pixels to that
     // native frame resolution so the points sent to the backend match what
     // the detector actually sees.
-    function handleStreamWarpClick(event, lineId) {
-      if (!perspectiveMode) return;
+    function handleStreamClick(event, lineId) {
+      if (!perspectiveMode && !roiDrawMode) return;
       const img = event.target;
       const rect = img.getBoundingClientRect();
       const natW = img.naturalWidth || 640;
       const natH = img.naturalHeight || 640;
       const x = Math.round(((event.clientX - rect.left) / rect.width) * natW);
       const y = Math.round(((event.clientY - rect.top) / rect.height) * natH);
+
+      if (roiDrawMode) {
+        roiPoints.push([x, y]);
+        toast(`Nokta ${roiPoints.length}/6 işaretlendi (bitirmek için 'Sayım Alanı' butonuna tekrar basın)`, 'info');
+        if (roiPoints.length >= 6) {
+          roiDrawMode = false;
+          img.classList.remove('cursor-crosshair');
+          const btn = document.getElementById('roi-draw-btn');
+          if (btn) btn.className = `px-2.5 py-1 rounded bg-slate-800 text-slate-300 border border-slate-700 font-semibold flex items-center space-x-1 transition`;
+          finishRoiDraw();
+        }
+        return;
+      }
+
       warpPoints.push([x, y]);
       toast(`Nokta ${warpPoints.length}/4 işaretlendi`, 'info');
       if (warpPoints.length >= 4) {
@@ -1476,7 +1536,13 @@
 
         if (roiDrawMode) {
           roiPoints.push([Math.round(mouseX), Math.round(mouseY)]);
-          if (roiPoints.length >= 6) roiDrawMode = false;
+          toast(`Nokta ${roiPoints.length}/6 işaretlendi (bitirmek için tekrar tıklayın)`, 'info');
+          if (roiPoints.length >= 6) {
+            roiDrawMode = false;
+            const btn = document.getElementById('roi-draw-btn');
+            if (btn) btn.className = `px-2.5 py-1 rounded bg-slate-800 text-slate-300 border border-slate-700 font-semibold flex items-center space-x-1 transition`;
+            finishRoiDraw();
+          }
           return;
         }
 
