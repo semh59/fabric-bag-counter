@@ -64,7 +64,7 @@ def match_boxes_to_anchor_grid(
     anchors_np: np.ndarray,
     boxes: list[list[float]],
     masks: list[np.ndarray],
-    classes: list[int] | None = None,
+    classes: list[float] | None = None,
     num_queries: int = NUM_QUERIES,
     mask_size: int = MASK_SIZE,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
