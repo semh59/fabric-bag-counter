@@ -3,20 +3,19 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
+
 from packages.cs_data.extract_frames import extract_video_frames
 from packages.cs_data.mining import HardFrameMiner
 from packages.cs_data.split_dataset import DatasetSplitter
 from packages.cs_data.synth import SyntheticBagGenerator
-from packages.cs_eval.replay_engine import ReplayEngine, ReplayScenario
+from packages.cs_eval.replay_engine import ReplayEngine
 from packages.cs_storage.db import get_sync_session
 from packages.cs_storage.models_orm import (
     DatasetVersionORM,
     JobORM,
-    LineCalibrationORM,
     ModelVersionORM,
     SessionORM,
     TrainingRunORM,
@@ -38,9 +37,11 @@ def _evaluate_model(onnx_path: str, num_scenes: int = 20) -> dict[str, Any]:
     scenes (same method as tests/test_model_accuracy.py) so eval_scores reflect an
     actual run rather than a placeholder number."""
     import time
+
     import numpy as np
-    from packages.cs_vision.detector import VisionDetector
+
     from packages.cs_data.synth import SyntheticBagGenerator
+    from packages.cs_vision.detector import VisionDetector
 
     detector = VisionDetector(model_path=onnx_path, conf_threshold=0.35, allow_fallback=False)
     gen = SyntheticBagGenerator(min_overlap_ratio=0.15, max_overlap_ratio=0.40)
@@ -144,7 +145,7 @@ class JobrunnerWorker:
             with get_sync_session() as db:
                 dv = DatasetVersionORM(
                     site_id=payload.get("site_id", 1),
-                    name=payload.get("name", f"dataset_v_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"),
+                    name=payload.get("name", f"dataset_v_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"),
                     manifest_hash=res.manifest_hash,
                     frame_count=res.train_count + res.val_count + res.hard_holdout_count,
                     synthetic_count=payload.get("synthetic_count", 0),
@@ -253,7 +254,7 @@ class JobrunnerWorker:
                         run_kind="site_adaptation" if base_model_id is not None else "base",
                         status="running",
                         hyperparams=payload.get("hyperparams", {}),
-                        started_at=datetime.now(timezone.utc),
+                        started_at=datetime.now(UTC),
                     )
                     db.add(training_run)
                     db.commit()
@@ -269,7 +270,7 @@ class JobrunnerWorker:
                     tr = db.query(TrainingRunORM).filter(TrainingRunORM.id == training_run_id).first()
                     if tr:
                         tr.status = "completed"
-                        tr.finished_at = datetime.now(timezone.utc)
+                        tr.finished_at = datetime.now(UTC)
                         tr.metrics = eval_scores
                         db.commit()
 
@@ -299,13 +300,30 @@ class JobrunnerWorker:
                 }
 
         elif kind == "replay":
+            # Real animated scenarios (packages/cs_eval/replay_scenarios.py),
+            # not hardcoded frames=[] with arbitrary ground_truth_count
+            # numbers -- that combination made run_scenario() a no-op
+            # (nothing to iterate) compared against made-up targets, so
+            # this job always reported the same meaningless "always wrong"
+            # result regardless of what model was actually deployed.
+            from packages.cs_eval.replay_scenarios import (
+                build_default_scenario_suite,
+                build_scenario,
+            )
+
+            requested_types = payload.get("scenario_types")
+            seed = payload.get("seed")
+            if requested_types:
+                scenarios = [build_scenario(t, seed=seed) for t in requested_types]
+            else:
+                scenarios = build_default_scenario_suite(seed=seed)
+
             engine = ReplayEngine()
-            scenarios = [
-                ReplayScenario(name="sc1", scenario_type="heavy_shingling", ground_truth_count=20, frames=[]),
-                ReplayScenario(name="sc2", scenario_type="sparse_flow", ground_truth_count=15, frames=[]),
-            ]
             metrics = engine.run_suite(scenarios)
-            return {"metrics": metrics.__dict__}
+            return {
+                "metrics": metrics.__dict__,
+                "scenarios": [{"name": s.name, "ground_truth_count": s.ground_truth_count} for s in scenarios],
+            }
 
         elif kind == "mine_hard_frames":
             miner = HardFrameMiner()
