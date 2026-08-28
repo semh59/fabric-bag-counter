@@ -35,7 +35,7 @@ class DetectionResult:
     """Detection output containing segmented bag bodies and print marks."""
     bag_bodies: list[dict[str, Any]] = field(default_factory=list)  # list of {"box": [...], "score": float, "mask": np.ndarray}
     print_marks: list[dict[str, Any]] = field(default_factory=list) # list of {"box": [...], "score": float}
-    # True when this result came from the GEÇİCİ / PLACEHOLDER OpenCV contour
+    # True when this result came from the TEMPORARY / PLACEHOLDER OpenCV contour
     # fallback (no working RF-DETR ONNX model available), rather than the
     # real ML model. Callers/API must surface this so operators are never
     # silently shown fallback heuristic detections as if they were genuine
@@ -92,7 +92,7 @@ class VisionDetector:
                 )
             logger.error(
                 f"[VisionDetector] REAL MODEL UNAVAILABLE: RF-DETR model not found at '{self.model_path}'. "
-                "Falling back to GEÇİCİ / PLACEHOLDER OpenCV contour segmentation (temporary heuristic, "
+                "Falling back to TEMPORARY / PLACEHOLDER OpenCV contour segmentation (temporary heuristic, "
                 "NOT the trained ML model) -- detections from this session will be flagged via "
                 "DetectionResult.is_fallback_mode=True."
             )
@@ -108,7 +108,7 @@ class VisionDetector:
                 raise RuntimeError(f"[VisionDetector] Failed to load ONNX model '{self.model_path}': {e}") from e
             logger.error(
                 f"[VisionDetector] REAL MODEL UNAVAILABLE: Failed to initialize ONNX Runtime session: {e}. "
-                "Falling back to GEÇİCİ / PLACEHOLDER OpenCV contour segmentation (temporary heuristic, "
+                "Falling back to TEMPORARY / PLACEHOLDER OpenCV contour segmentation (temporary heuristic, "
                 "NOT the trained ML model) -- detections from this session will be flagged via "
                 "DetectionResult.is_fallback_mode=True."
             )
@@ -214,7 +214,7 @@ class VisionDetector:
 
 
         # =======================================================================
-        # 2. GEÇİCİ / PLACEHOLDER — Gerçek model eğitilene/yüklenene kadar Fallback
+        # 2. TEMPORARY / PLACEHOLDER — Fallback until real model is trained/loaded
         # =======================================================================
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image.copy()
         blurred = cv2.GaussianBlur(gray, (7, 7), 0)

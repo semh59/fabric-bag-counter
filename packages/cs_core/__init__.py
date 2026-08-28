@@ -1,4 +1,4 @@
-"""Çuval Sayım Çekirdek Paketi (Core domain models, frames, geometry, and interfaces)."""
+"""Fabric Bag Counter Core Package (Core domain models, frames, geometry, and interfaces)."""
 
 from packages.cs_core.frame import Frame
 from packages.cs_core.transport import SharedMemoryTransport

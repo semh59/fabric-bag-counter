@@ -60,9 +60,9 @@ class LiveStreamRenderer:
         self.reload_camera_context()
 
         # Initialize physical bags on conveyor
-        self.bags.append({"x": 100.0, "y": 140.0, "w": 110, "h": 150, "label": "50kg Çimento", "color": (40, 180, 240), "id": self.next_sim_id, "passed": False})
+        self.bags.append({"x": 100.0, "y": 140.0, "w": 110, "h": 150, "label": "50kg Cement", "color": (40, 180, 240), "id": self.next_sim_id, "passed": False})
         self.next_sim_id += 1
-        self.bags.append({"x": 340.0, "y": 140.0, "w": 110, "h": 150, "label": "50kg Çimento", "color": (40, 180, 240), "id": self.next_sim_id, "passed": False})
+        self.bags.append({"x": 340.0, "y": 140.0, "w": 110, "h": 150, "label": "50kg Cement", "color": (40, 180, 240), "id": self.next_sim_id, "passed": False})
         self.next_sim_id += 1
 
     def set_camera_source(self, source: str | int) -> tuple[bool, str]:
@@ -76,7 +76,7 @@ class LiveStreamRenderer:
 
         source_str = str(source).strip()
         if source_str in ["demo", "sim", ""]:
-            return True, "Simüle endüstriyel konveyör akışına geçildi."
+            return True, "Switched to simulated industrial conveyor feed."
 
         # USB Webcam index
         if source_str.isdigit() or source_str.lower() in ["webcam", "camera"]:
@@ -84,15 +84,15 @@ class LiveStreamRenderer:
             cap = cv2.VideoCapture(dev_idx)
             if cap.isOpened():
                 self.video_cap = cap
-                return True, f"Yerel USB / Web kamerası #{dev_idx} başarıyla bağlandı."
-            return False, f"Yerel kamera #{dev_idx} açılamadı (Kamera izinleri veya bağlantı kontrol edilmeli)."
+                return True, f"Local USB / Webcam #{dev_idx} connected successfully."
+            return False, f"Could not open local camera #{dev_idx} (check permissions or connection)."
 
         # RTSP / HTTP URL or video file
         cap = cv2.VideoCapture(source_str)
         if cap.isOpened():
             self.video_cap = cap
-            return True, f"Kamera akışı başarıyla bağlandı: {source_str}"
-        return False, f"Kamera akışına bağlanılamadı: {source_str}"
+            return True, f"Camera feed connected successfully: {source_str}"
+        return False, f"Could not connect to camera feed: {source_str}"
 
     def reload_perspective_calibration(self) -> None:
         """(Re)load this line's active Stage-3 perspective calibration, if any.
@@ -189,15 +189,15 @@ class LiveStreamRenderer:
     ) -> dict:
         """Inject an operator-triggered bag into the simulated conveyor demo.
 
-        This is the wiring for the "+1 Hasarlı / Patlak" and "+2 Bitişik
-        Çuval" manual simulation triggers: without it, `is_defective` /
+        This is the wiring for the "+1 Damaged Bag" and "+2 Merged
+        Bags" manual simulation triggers: without it, `is_defective` /
         `bag_count_estimate` were never set on any `self.bags` entry (only
         auto-spawned plain bags exist), so the defect/multi badge branches in
         `_process_simulated_frame` were unreachable dead code. Callers (e.g.
         the `/sessions/{id}/simulate_bag` API) should invoke this on the
         renderer for the session's line whenever `defect_reason` /
         `merge_flag` is set, so the MJPEG demo feed actually renders the
-        corresponding red DEFECT / amber BITISIK badge and mask color.
+        corresponding red DEFECT / amber MERGED badge and mask color.
         """
         entry_x = -120.0 if self.belt_dir > 0 else float(self.w + 40)
         bag = {
@@ -205,7 +205,7 @@ class LiveStreamRenderer:
             "y": 140.0,
             "w": 110,
             "h": 150,
-            "label": label or ("Patlak Çuval" if defective else "50kg Çimento"),
+            "label": label or ("Damaged Bag" if defective else "50kg Cement"),
             "color": (40, 40, 220) if defective else (40, 180, 240),
             "id": self.next_sim_id,
             "passed": False,
@@ -255,7 +255,7 @@ class LiveStreamRenderer:
             cv2.line(frame, (bx + 10, by + bh // 2), (bx + bw - 10, by + bh // 2), (b_color[0] - 25, b_color[1] - 25, max(0, b_color[2] - 25)), 2)
 
             # Print label
-            cv2.putText(frame, bag.get("label", "50kg Çimento")[:14], (bx + 8, by + bh // 2 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (15, 20, 25), 1, cv2.LINE_AA)
+            cv2.putText(frame, bag.get("label", "50kg Cement")[:14], (bx + 8, by + bh // 2 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (15, 20, 25), 1, cv2.LINE_AA)
             cv2.putText(frame, "FABRIC #2026", (bx + 8, by + bh // 2 + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (30, 40, 50), 1, cv2.LINE_AA)
 
             # Move bag
@@ -269,7 +269,7 @@ class LiveStreamRenderer:
                     "y": 140.0,
                     "w": 110,
                     "h": 150,
-                    "label": "50kg Çimento",
+                    "label": "50kg Cement",
                     "color": (40, 180, 240),
                     "id": self.next_sim_id,
                     "passed": False,
@@ -284,7 +284,7 @@ class LiveStreamRenderer:
                     "y": 140.0,
                     "w": 110,
                     "h": 150,
-                    "label": "50kg Çimento",
+                    "label": "50kg Cement",
                     "color": (40, 180, 240),
                     "id": self.next_sim_id,
                     "passed": False,
@@ -481,11 +481,11 @@ class LiveStreamRenderer:
 
             # Tracking & Defect Badge
             if is_defective:
-                badge_text = f"🚨 DEFECT-HASARLI {bag['id']}"
-                cv2.rectangle(annotated, (bx - 2, by - 22), (bx + 160, by - 2), (30, 30, 200), -1)
+                badge_text = f"🚨 DEFECT {bag['id']}"
+                cv2.rectangle(annotated, (bx - 2, by - 22), (bx + 140, by - 2), (30, 30, 200), -1)
                 cv2.putText(annotated, badge_text, (bx + 3, by - 7), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (255, 255, 255), 1, cv2.LINE_AA)
             elif multi_count > 1:
-                badge_text = f"📦 2x BITISIK TRK-{bag['id']}"
+                badge_text = f"📦 2x MERGED TRK-{bag['id']}"
                 cv2.rectangle(annotated, (bx - 2, by - 22), (bx + 155, by - 2), (180, 110, 20), -1)
                 cv2.putText(annotated, badge_text, (bx + 3, by - 7), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (255, 255, 255), 1, cv2.LINE_AA)
             else:
@@ -511,7 +511,7 @@ class LiveStreamRenderer:
             cv2.line(annotated, (self.gate_x - 1, 50), (self.gate_x - 1, 350), (120, 255, 180), 1)
 
         cv2.rectangle(annotated, (self.gate_x - 48, 40), (self.gate_x + 48, 62), (40, 160, 80), -1)
-        cv2.putText(annotated, "SAYIM KAPISI", (self.gate_x - 42, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1, cv2.LINE_AA)
+        cv2.putText(annotated, "COUNTING GATE", (self.gate_x - 45, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.33, (255, 255, 255), 1, cv2.LINE_AA)
 
         # Top HUD: real, measured FPS (rolling EMA of actual frame timing), not a fixed number
         cv2.rectangle(annotated, (0, 0), (self.w, 32), (10, 14, 22), -1)
@@ -526,7 +526,7 @@ class LiveStreamRenderer:
         self._last_frame_time = now
         fps_display = f"{self._fps_ema:.1f}" if self._fps_ema is not None else "—"
 
-        mode_label = "AI VISION ACTIVE [RF-DETR + ByteTrack]" if real_mode else "SIMULE KONVEYOR [Demo]"
+        mode_label = "AI VISION ACTIVE [RF-DETR + ByteTrack]" if real_mode else "SIMULATED CONVEYOR [Demo]"
         cv2.putText(annotated, f"● {mode_label}", (12, 21), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (100, 240, 120), 1, cv2.LINE_AA)
         cv2.putText(annotated, f"FPS: {fps_display} | Gate X: {self.gate_x}px", (self.w - 220, 21), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (180, 200, 220), 1, cv2.LINE_AA)
 

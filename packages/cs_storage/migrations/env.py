@@ -19,7 +19,7 @@ if config.config_file_name is not None:
 # explicit sqlalchemy.url before invoking (tests pointing at a throwaway
 # database, `alembic -x` tooling) must win, not get silently clobbered back
 # to the app default.
-_PLACEHOLDER_URL = "postgresql+psycopg2://postgres:postgres@localhost:5432/cuval_sayim"
+_PLACEHOLDER_URL = "postgresql+psycopg2://postgres:postgres@localhost:5432/bag_counter"
 if config.get_main_option("sqlalchemy.url") in (None, "", _PLACEHOLDER_URL):
     config.set_main_option("sqlalchemy.url", DEFAULT_SYNC_URL)
 

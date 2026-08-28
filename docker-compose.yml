@@ -10,28 +10,21 @@ services:
     container_name: cs-postgres
     restart: always
     environment:
-      POSTGRES_DB: cuval_sayim_db
-      POSTGRES_USER: cuval_admin
-      POSTGRES_PASSWORD: cuval_secure_2026
+      POSTGRES_DB: bag_counter_db
+      POSTGRES_USER: bag_admin
+      POSTGRES_PASSWORD: bag_secure_2026
     ports:
       - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cuval_admin -d cuval_sayim_db"]
+      test: ["CMD-SHELL", "pg_isready -U bag_admin -d bag_counter_db"]
       interval: 3s
       timeout: 3s
       retries: 5
 
   # One-shot: brings the schema up to the latest Alembic revision before any
-  # real service starts, then exits. Previously nothing ever ran migrations
-  # -- every service bootstrapped via init_db_sync()'s create_all(), which
-  # only creates missing tables and never alters existing ones, so an ORM
-  # column added after first deploy would silently never reach a real
-  # database (this happened for real this session: a 500 error from a
-  # missing column, fixed with a manual ALTER TABLE against the running
-  # container). api/jobrunner/erp-relay now wait for this to finish
-  # successfully instead of racing each other to migrate concurrently.
+  # real service starts, then exits.
   migrate:
     build:
       context: .
@@ -41,7 +34,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_SYNC_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
+      DATABASE_SYNC_URL: postgresql://bag_admin:bag_secure_2026@postgres:5432/bag_counter_db
     command: ["python", "-m", "alembic", "upgrade", "head"]
 
   api:
@@ -56,15 +49,10 @@ services:
       migrate:
         condition: service_completed_successfully
     environment:
-      DATABASE_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
-      DATABASE_SYNC_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
+      DATABASE_URL: postgresql://bag_admin:bag_secure_2026@postgres:5432/bag_counter_db
+      DATABASE_SYNC_URL: postgresql://bag_admin:bag_secure_2026@postgres:5432/bag_counter_db
       NODE_ID: 1
       LOG_LEVEL: INFO
-      # Without this, services/api/auth.py generates a fresh random secret
-      # on every container start -- every previously issued JWT (every
-      # logged-in browser session) is silently invalidated on every
-      # restart/rebuild. Set in a real .env file (see .env.example),
-      # Compose substitutes it in automatically; empty if unset there.
       SECRET_KEY: ${SECRET_KEY:-}
     ports:
       - "8080:8080"
@@ -83,8 +71,8 @@ services:
       migrate:
         condition: service_completed_successfully
     environment:
-      DATABASE_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
-      DATABASE_SYNC_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
+      DATABASE_URL: postgresql://bag_admin:bag_secure_2026@postgres:5432/bag_counter_db
+      DATABASE_SYNC_URL: postgresql://bag_admin:bag_secure_2026@postgres:5432/bag_counter_db
       NODE_ID: 1
       LOG_LEVEL: INFO
     command: ["python", "-m", "services.jobrunner.worker"]
@@ -103,8 +91,8 @@ services:
       migrate:
         condition: service_completed_successfully
     environment:
-      DATABASE_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
-      DATABASE_SYNC_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
+      DATABASE_URL: postgresql://bag_admin:bag_secure_2026@postgres:5432/bag_counter_db
+      DATABASE_SYNC_URL: postgresql://bag_admin:bag_secure_2026@postgres:5432/bag_counter_db
       NODE_ID: 1
       LOG_LEVEL: INFO
     command: ["python", "-m", "services.erp_relay.worker"]

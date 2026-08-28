@@ -35,8 +35,8 @@ services:
     # it trades some container IPC isolation for this to work at all.
     ipc: host
     environment:
-      DATABASE_URL: postgresql://cuval_admin:${POSTGRES_PASSWORD:-cuval_secure_2026}@${POSTGRES_HOST:-host.docker.internal}:5434/cuval_sayim_db
-      DATABASE_SYNC_URL: postgresql://cuval_admin:${POSTGRES_PASSWORD:-cuval_secure_2026}@${POSTGRES_HOST:-host.docker.internal}:5434/cuval_sayim_db
+      DATABASE_URL: postgresql://bag_admin:${POSTGRES_PASSWORD:-bag_secure_2026}@${POSTGRES_HOST:-host.docker.internal}:5434/bag_counter_db
+      DATABASE_SYNC_URL: postgresql://bag_admin:${POSTGRES_PASSWORD:-bag_secure_2026}@${POSTGRES_HOST:-host.docker.internal}:5434/bag_counter_db
       LOG_LEVEL: INFO
     command: ["python", "-m", "services.supervisor.manager"]
     volumes:
@@ -66,8 +66,8 @@ services:
     restart: always
     ipc: host  # see the comment on the supervisor service above
     environment:
-      DATABASE_URL: postgresql://cuval_admin:${POSTGRES_PASSWORD:-cuval_secure_2026}@${POSTGRES_HOST:-host.docker.internal}:5434/cuval_sayim_db
-      DATABASE_SYNC_URL: postgresql://cuval_admin:${POSTGRES_PASSWORD:-cuval_secure_2026}@${POSTGRES_HOST:-host.docker.internal}:5434/cuval_sayim_db
+      DATABASE_URL: postgresql://bag_admin:${POSTGRES_PASSWORD:-bag_secure_2026}@${POSTGRES_HOST:-host.docker.internal}:5434/bag_counter_db
+      DATABASE_SYNC_URL: postgresql://bag_admin:${POSTGRES_PASSWORD:-bag_secure_2026}@${POSTGRES_HOST:-host.docker.internal}:5434/bag_counter_db
       LINE_ID: ${LINE_ID:-1}
       LOG_LEVEL: INFO
     command: ["python", "-m", "services.inference.worker"]

@@ -86,7 +86,7 @@ def test_camera_feed_empty_source_reports_not_configured():
     feed = CameraFeed(camera_id=3)
     ok, msg = feed.connect("")
     assert ok is False
-    assert "yap" in msg.lower() or "kaynak" in msg.lower()
+    assert "source" in msg.lower() or "configured" in msg.lower()
 
 
 def _setup_line():

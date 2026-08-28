@@ -48,9 +48,9 @@ def main():
         headers_eng = {"Authorization": f"Bearer {eng_tok}"}
 
     # =========================================================================
-    # FAZ 1: ÇEVRESEL, SAHA & OPTİK DAYANIKLILIK (EMVA 1288 & VDI 2632)
+    # PHASE 1: ENVIRONMENTAL, ON-SITE & OPTICAL ROBUSTNESS (EMVA 1288 & VDI 2632)
     # =========================================================================
-    print_header("FAZ 1: ÇEVRESEL, SAHA & OPTİK DAYANIKLILIK (EMVA 1288 & VDI 2632)")
+    print_header("PHASE 1: ENVIRONMENTAL, ON-SITE & OPTICAL ROBUSTNESS (EMVA 1288 & VDI 2632)")
     
     # 1.1 CLAHE Dust Attenuation & Contrast Test
     raw_img = np.full((400, 800, 3), 120, dtype=np.uint8)
@@ -80,12 +80,12 @@ def main():
         print(f"  [ENV-05] Multi-Product Profiles: Verified {len(prods)} distinct bag types (Poly, Kraft, Mortar).")
         assert len(prods) >= 3, "Expected at least 3 bag profiles!"
 
-    results["FAZ_1"] = "PASSED (%100 Uyum)"
+    results["PHASE_1"] = "PASSED (100% Compliance)"
 
     # =========================================================================
-    # FAZ 2: EDGE DONANIM, RTSP & AKIŞ STRESİ (IEC 62381)
+    # PHASE 2: EDGE HARDWARE, RTSP & STREAM STRESS (IEC 62381)
     # =========================================================================
-    print_header("FAZ 2: EDGE DONANIM, RTSP & AKIŞ STRESİ (IEC 62381)")
+    print_header("PHASE 2: EDGE HARDWARE, RTSP & STREAM STRESS (IEC 62381)")
 
     # 2.1 RTSP Stream Acquisition & FPS Benchmark
     stream_url = f"{API_URL}/live/lines/1/stream?token={op_tok}"
@@ -119,12 +119,12 @@ def main():
     print(f"  [CAM-04] Edge Inference Latency: {avg_inference_lat:.2f} ms / frame (Standard: < 20 ms).")
     assert avg_inference_lat < 20.0, "Inference latency exceeded 20ms!"
 
-    results["FAZ_2"] = f"PASSED ({stream_fps:.1f} FPS, {avg_inference_lat:.1f}ms latency)"
+    results["PHASE_2"] = f"PASSED ({stream_fps:.1f} FPS, {avg_inference_lat:.1f}ms latency)"
 
     # =========================================================================
-    # FAZ 3: AI VISION, AYRIŞTIRMA & HATA TESPİTİ (VDI/VDE 2632)
+    # PHASE 3: AI VISION, MERGE & DEFECT DETECTION (VDI/VDE 2632)
     # =========================================================================
-    print_header("FAZ 3: AI VISION, AYRIŞTIRMA & HATA TESPİTİ (VDI/VDE 2632)")
+    print_header("PHASE 3: AI VISION, MERGE & DEFECT DETECTION (VDI/VDE 2632)")
 
     # 3.1 Touching Bags Split & Merge Accuracy
     from packages.cs_vision.detector import VisionDetector
@@ -147,15 +147,14 @@ def main():
     print(f"  [VIS-02] Damaged Bag Defect Detection: is_defective = {is_def} (Solidity Anomaly Detected).")
     assert is_def == True, "Failed to flag defective torn bag!"
 
-
     # 3.3 Directional Hysteresis & Oscillation Prevention
     print("  [VIS-03] Directional Hysteresis: Verified backwards conveyor oscillation rejected (0 false counts).")
-    results["FAZ_3"] = "PASSED (%99.4 Accuracy, %98.2 Defect Recall)"
+    results["PHASE_3"] = "PASSED (99.4% Accuracy, 98.2% Defect Recall)"
 
     # =========================================================================
-    # FAZ 4: KRİPTOGRAFİK DEFTER & ERP TRANSACTIONAL OUTBOX
+    # PHASE 4: CRYPTOGRAPHIC LEDGER & ERP TRANSACTIONAL OUTBOX
     # =========================================================================
-    print_header("FAZ 4: KRİPTOGRAFİK DEFTER & ERP TRANSACTIONAL OUTBOX")
+    print_header("PHASE 4: CRYPTOGRAPHIC LEDGER & ERP TRANSACTIONAL OUTBOX")
 
     with httpx.Client(timeout=10.0) as client:
         sessions = client.get(f"{API_URL}/sessions", headers=headers_op).json()
@@ -175,12 +174,12 @@ def main():
         outbox = client.get(f"{API_URL}/system/outbox", headers=headers_eng).json()
         print(f"  [LED-02] ERP Transactional Outbox: {len(outbox)} queued records for SAP / Oracle sync.")
 
-    results["FAZ_4"] = f"PASSED (SHA-256 Seal: {seal[:16]}...)"
+    results["PHASE_4"] = f"PASSED (SHA-256 Seal: {seal[:16]}...)"
 
     # =========================================================================
-    # FAZ 5: 10.000 ÇUVAL DAYANIKLILIK (SOAK) & YÜK STRESİ
+    # PHASE 5: 10,000 BAG SOAK & LOAD STRESS
     # =========================================================================
-    print_header("FAZ 5: 10.000 ÇUVAL DAYANIKLILIK (SOAK) & YÜK STRESİ")
+    print_header("PHASE 5: 10,000 BAG SOAK & LOAD STRESS")
 
     burst_count = 150
     t_burst_start = time.perf_counter()
@@ -198,12 +197,12 @@ def main():
     print(f"  [SOAK-02] Peak Throughput: {throughput:.1f} events/sec (Zero Memory Leak, Zero Errors).")
     assert sum(success_list) == burst_count, "Some crossing events dropped under stress!"
 
-    results["FAZ_5"] = f"PASSED ({throughput:.1f} req/s throughput)"
+    results["PHASE_5"] = f"PASSED ({throughput:.1f} req/s throughput)"
 
     # =========================================================================
-    # FAZ 6: KAOS MÜHENDİSLİĞİ & FELAKET KURTARMA
+    # PHASE 6: CHAOS ENGINEERING & DISASTER RECOVERY
     # =========================================================================
-    print_header("FAZ 6: KAOS MÜHENDİSLİĞİ & FELAKET KURTARMA")
+    print_header("PHASE 6: CHAOS ENGINEERING & DISASTER RECOVERY")
 
     with httpx.Client(timeout=10.0) as client:
         # Check system health after stress
@@ -215,12 +214,12 @@ def main():
         recs = client.get(f"{API_URL}/reconciliations", headers=headers_eng).json()
         print(f"  [CHAOS-02] State Persistence & Reconciliations Audit: {len(recs)} audit sessions intact.")
 
-    results["FAZ_6"] = "PASSED (ACID Persistence & Crash Recovery)"
+    results["PHASE_6"] = "PASSED (ACID Persistence & Crash Recovery)"
 
     # =========================================================================
-    # FAZ 7: RESMİ FAT / SAT SAHA KABULÜ (OIML R51)
+    # PHASE 7: FORMAL FAT / SAT ACCEPTANCE (OIML R51)
     # =========================================================================
-    print_header("FAZ 7: RESMİ FAT / SAT SAHA KABULÜ (OIML R51)")
+    print_header("PHASE 7: FORMAL FAT / SAT ACCEPTANCE (OIML R51)")
 
     target_count = rep["target_count"]
     counted = rep["counted_total"]
@@ -235,7 +234,7 @@ def main():
     print(f"  [SAT-02] Formal Acceptance Certificate: Generated with Merkle Hash Seal.")
     assert delta_pct <= 0.50 or counted > 0, "OIML R51 tolerance exceeded!"
 
-    results["FAZ_7"] = f"PASSED (OIML R51 Delta: {delta_pct:.2f}%)"
+    results["PHASE_7"] = f"PASSED (OIML R51 Delta: {delta_pct:.2f}%)"
 
     # =========================================================================
     # FINAL PRODUCTION ACCEPTANCE VERDICT

@@ -26,7 +26,7 @@ def run_live_tests():
     print("\n[1/7] Testing Web UI (GET /)...")
     res_ui = client.get("/")
     assert res_ui.status_code == 200, f"UI serving failed: {res_ui.status_code}"
-    assert "Mutabakat" in res_ui.text or "id=\"root\"" in res_ui.text
+    assert "Reconciliation" in res_ui.text or "id=\"app-shell\"" in res_ui.text or "Bag Counter" in res_ui.text
     print("  -> PASS: Web SPA UI loaded successfully (HTML/Tailwind/Canvas).")
 
     # 2. Test Persona Logins (Operator, Engineer, Admin)
@@ -45,11 +45,11 @@ def run_live_tests():
 
     # 3. Test Setup Wizard Endpoints (Site, Line, Camera, Product, Config, Calibration, Bundle)
     print("\n[3/7] Testing 13-Step Setup Wizard via Live HTTP API...")
-    res_site = client.post("/api/sites", json={"name": "Canli Tesis Gaziantep"}, headers=headers_adm)
+    res_site = client.post("/api/sites", json={"name": "Live Plant Gaziantep"}, headers=headers_adm)
     assert res_site.status_code == 200
     site_id = res_site.json()["id"]
 
-    res_line = client.post("/api/lines", json={"site_id": site_id, "name": "Bant 1"}, headers=headers_adm)
+    res_line = client.post("/api/lines", json={"site_id": site_id, "name": "Conveyor Belt 1"}, headers=headers_adm)
     assert res_line.status_code == 200
     line_id = res_line.json()["id"]
 
@@ -64,7 +64,7 @@ def run_live_tests():
 
     res_prod = client.post("/api/products", json={
         "site_id": site_id,
-        "name": "50kg Polipropilen Un Cuvali",
+        "name": "50kg Polypropylene Flour Bag",
         "erp_material_code": "MAT-50KG-PP",
         "nominal_dims_mm": {"length": 900, "width": 550, "height": 180}
     }, headers=headers_adm)
@@ -88,7 +88,7 @@ def run_live_tests():
     res_open = client.post("/api/sessions", json={
         "line_id": line_id,
         "product_profile_id": prod_id,
-        "external_ref": "IRS-CANLI-2026-001",
+        "external_ref": "DSP-LIVE-2026-001",
         "target_count": 500
     }, headers=headers_op)
     assert res_open.status_code == 200

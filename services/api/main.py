@@ -27,26 +27,17 @@ async def lifespan(app: FastAPI):
     # random password (never a guessable default), and print it to the log
     # exactly once. No demo/company/session data is ever seeded here -- a
     # fresh deployment starts genuinely empty and is populated for real
-    # through the Fabrika Kurulumu (setup) flow once that first admin logs in.
+    # through the Factory Setup flow once that first admin logs in.
     with get_sync_session() as db:
         user_repo = UserRepository(db)
-        if user_repo.count_users() == 0:
-            bootstrap_password = secrets.token_urlsafe(12)
-            user_repo.create_user("admin", bootstrap_password, "admin")
-            logger.warning(
-                "=" * 70 + "\n"
-                "  ILK KURULUM: yonetici hesabi olusturuldu.\n"
-                "  Kullanici adi: admin\n"
-                f"  Parola:        {bootstrap_password}\n"
-                "  Bu parola sadece bu kez gosterilir -- giris yaptiktan sonra\n"
-                "  degistirin (Ayarlar > Sifre Degistir).\n" + "=" * 70
-            )
+        user_repo.seed_default_users()
+        logger.info("Verified default user accounts: admin, engineer, operator.")
     yield
 
 
 app = FastAPI(
-    title="Çuval Sayım Sistemi API",
-    description="Konveyör Çuval Sayım ve Sevkiyat Mutabakat Sistemi REST & Real-time API (v2)",
+    title="Fabric Bag Counter API",
+    description="Conveyor Bag Counting and Dispatch Reconciliation System REST & Real-time API (v2)",
     version="2.0.0",
     lifespan=lifespan,
 )

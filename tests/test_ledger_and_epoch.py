@@ -145,18 +145,18 @@ def test_dispute_defect_event_records_real_attributed_annotation():
         event, _ = ledger_repo.record_event(
             session_id=sess.id, line_id=line_id, camera_id=cam_id, stream_epoch=1,
             track_id=20, crossing_seq=1, gate_id=1, crossing_timestamp=datetime.now(UTC),
-            frame_index=100, direction=1, defect_reason="yirtik",
+            frame_index=100, direction=1, defect_reason="torn",
         )
         assert event.defect_disputed is False
 
-        disputed = ledger_repo.dispute_defect_event(event.event_id, disputed_by="ahmet.y", note="Torba sağlamdı")
+        disputed = ledger_repo.dispute_defect_event(event.event_id, disputed_by="john.d", note="Bag was intact")
         assert disputed is not None
         assert disputed.defect_disputed is True
-        assert disputed.defect_disputed_by == "ahmet.y"
-        assert disputed.defect_disputed_note == "Torba sağlamdı"
+        assert disputed.defect_disputed_by == "john.d"
+        assert disputed.defect_disputed_note == "Bag was intact"
         assert disputed.defect_disputed_at is not None
         # The original AI detection is never erased -- it's what's being overturned.
-        assert disputed.defect_reason == "yirtik"
+        assert disputed.defect_reason == "torn"
 
 
 def test_dispute_defect_event_is_idempotent_first_dispute_wins():
@@ -169,11 +169,11 @@ def test_dispute_defect_event_is_idempotent_first_dispute_wins():
         event, _ = ledger_repo.record_event(
             session_id=sess.id, line_id=line_id, camera_id=cam_id, stream_epoch=1,
             track_id=21, crossing_seq=1, gate_id=1, crossing_timestamp=datetime.now(UTC),
-            frame_index=100, direction=1, defect_reason="yirtik",
+            frame_index=100, direction=1, defect_reason="torn",
         )
-        ledger_repo.dispute_defect_event(event.event_id, disputed_by="ahmet.y")
-        second = ledger_repo.dispute_defect_event(event.event_id, disputed_by="mehmet.k")
-        assert second.defect_disputed_by == "ahmet.y"  # unchanged, not overwritten
+        ledger_repo.dispute_defect_event(event.event_id, disputed_by="john.d")
+        second = ledger_repo.dispute_defect_event(event.event_id, disputed_by="mike.s")
+        assert second.defect_disputed_by == "john.d"  # unchanged, not overwritten
 
 
 def test_dispute_defect_event_returns_none_for_non_defect_event():

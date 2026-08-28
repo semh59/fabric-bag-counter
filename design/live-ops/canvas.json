@@ -13,15 +13,15 @@
     { "file": "System.dc.html", "x": 3120, "y": 2100, "w": 1440, "h": 700 }
   ],
   "annotations": [
-    { "id": "note-live", "x": 0, "y": -100, "w": 320, "text": "Canlı Sayım — operatör komuta ekranı" },
-    { "id": "note-sessions", "x": 1560, "y": -100, "w": 320, "text": "Oturumlar — sevkiyat ve defter yönetimi" },
-    { "id": "note-recon", "x": 3120, "y": -100, "w": 320, "text": "Mutabakat — denetim ve ayrışma çözümü" },
-    { "id": "note-setup", "x": 0, "y": 1020, "w": 480, "text": "Kamera Bağla → Kalibre Et → Ürün Profili → Gerçek Veriyle İnce Ayar: dağınık ayarlar/eğitim sekmeleri yerine tek akış." },
-    { "id": "note-wizard", "x": 1560, "y": 1020, "w": 320, "text": "Fabrika Kurulumu — tesis/hat/ürün topolojisi" },
-    { "id": "note-data", "x": 3120, "y": 1020, "w": 320, "text": "Veri & Sentetik — iş kuyruğu ve dataset kayıtları" },
-    { "id": "note-model", "x": 0, "y": 2000, "w": 380, "text": "Model Kayıt Defteri — taslak/gölge/üretim yaşam döngüsü" },
-    { "id": "note-lines", "x": 1560, "y": 2000, "w": 320, "text": "Hat Envanteri — filo genelinde kalibrasyon durumu" },
-    { "id": "note-system", "x": 3120, "y": 2000, "w": 320, "text": "Sistem — altyapı sağlığı ve iş kuyrukları" }
+    { "id": "note-live", "x": 0, "y": -100, "w": 320, "text": "Live Counting — Operator Command Center" },
+    { "id": "note-sessions", "x": 1560, "y": -100, "w": 320, "text": "Sessions — Dispatch & Ledger Management" },
+    { "id": "note-recon", "x": 3120, "y": -100, "w": 320, "text": "Reconciliation — Audit & Discrepancy Resolution" },
+    { "id": "note-setup", "x": 0, "y": 1020, "w": 480, "text": "Connect Camera → Calibrate → Product Profile → Fine-Tune on Real Data: unified single workflow." },
+    { "id": "note-wizard", "x": 1560, "y": 1020, "w": 320, "text": "Factory Setup — Facility, Line & Product Topology" },
+    { "id": "note-data", "x": 3120, "y": 1020, "w": 320, "text": "Data & Synthetic — Job Queue & Dataset Registry" },
+    { "id": "note-model", "x": 0, "y": 2000, "w": 380, "text": "Model Registry — Draft, Shadow & Production Lifecycle" },
+    { "id": "note-lines", "x": 1560, "y": 2000, "w": 320, "text": "Line Inventory — Fleetwide Calibration Status" },
+    { "id": "note-system", "x": 3120, "y": 2000, "w": 320, "text": "System — Infrastructure Health & Job Queues" }
   ],
   "launch": { "view": "canvas" }
 }

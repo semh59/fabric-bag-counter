@@ -3,7 +3,7 @@
 data/
 design/
 docs/
-EĞİTİM/
+TRAINING/
 web/.bin/
 __pycache__/
 *.pyc

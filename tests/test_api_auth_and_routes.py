@@ -129,23 +129,23 @@ def test_dispute_defect_event_route():
         json={"line_id": line_id, "product_profile_id": prof_id, "target_count": 10},
         headers=headers,
     ).json()["id"]
-    client.post(f"/api/sessions/{sess_id}/simulate_bag", json={"direction": 1, "defect_reason": "yirtik"}, headers=headers)
+    client.post(f"/api/sessions/{sess_id}/simulate_bag", json={"direction": 1, "defect_reason": "torn"}, headers=headers)
 
     events = client.get(f"/api/sessions/{sess_id}/events", headers=headers).json()
-    defect_event = next(e for e in events if e["defect_reason"] == "yirtik")
+    defect_event = next(e for e in events if e["defect_reason"] == "torn")
     assert defect_event["defect_disputed"] is False
 
     res = client.post(
         f"/api/events/{defect_event['event_id']}/dispute_defect",
-        json={"note": "Torba sağlamdı"},
+        json={"note": "Bag was intact"},
         headers=headers,
     )
     assert res.status_code == 200
     body = res.json()
     assert body["defect_disputed"] is True
     assert body["defect_disputed_by"] == "operator"
-    assert body["defect_disputed_note"] == "Torba sağlamdı"
-    assert body["defect_reason"] == "yirtik"  # original detection preserved
+    assert body["defect_disputed_note"] == "Bag was intact"
+    assert body["defect_reason"] == "torn"  # original detection preserved
 
 
 def test_dispute_nonexistent_event_returns_404():
@@ -174,4 +174,4 @@ def test_simulate_bag_400_without_real_camera_gate_bundle():
 
     res = client.post(f"/api/sessions/{sess_id}/simulate_bag", json={"direction": 1}, headers=headers)
     assert res.status_code == 400
-    assert "kamera" in res.json()["detail"] or "kapı" in res.json()["detail"] or "model dağıtımı" in res.json()["detail"]
+    assert "camera" in res.json()["detail"].lower() or "gate" in res.json()["detail"].lower() or "deployment" in res.json()["detail"].lower()

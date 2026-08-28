@@ -2,7 +2,7 @@
 @source "../index.html";
 
 /*
- * "Kontrol Odası" palette -- remaps the existing Tailwind color scales the
+ * "Control Room" palette -- remaps the existing Tailwind color scales the
  * app already uses throughout (slate/indigo/emerald/amber/rose) to a real
  * industrial-HMI palette (graphite neutrals, a steel-blue accent, semantic
  * color reserved for actual warnings/critical states -- see design/live-ops/

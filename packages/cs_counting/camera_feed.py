@@ -58,7 +58,7 @@ class CameraFeed:
         self.connected = False
 
         if source == "" or source is None:
-            self.last_error = "Kaynak yapılandırılmadı."
+            self.last_error = "Source not configured."
             return False, self.last_error
 
         cap = cv2.VideoCapture(source)
@@ -66,9 +66,9 @@ class CameraFeed:
             self.video_cap = cap
             self.connected = True
             self.last_error = None
-            return True, f"Bağlandı: {source}"
+            return True, f"Connected: {source}"
 
-        self.last_error = f"Bağlanılamadı: {source}"
+        self.last_error = f"Connection failed: {source}"
         return False, self.last_error
 
     def _placeholder_frame(self, text: str) -> np.ndarray:
@@ -100,11 +100,11 @@ class CameraFeed:
                 self._tick_fps()
             else:
                 self.connected = False
-                self.last_error = "Akıştan kare okunamadı."
+                self.last_error = "Could not read frame from stream."
 
         if frame is None:
             frame = self._placeholder_frame(
-                "SİNYAL YOK" if self.last_error is None else self.last_error
+                "NO SIGNAL" if self.last_error is None else self.last_error
             )
         else:
             self._draw_hud(frame)
@@ -119,13 +119,13 @@ class CameraFeed:
             if dt > 0:
                 inst_fps = 1.0 / dt
                 self._fps_ema = inst_fps if self._fps_ema is None else (0.9 * self._fps_ema + 0.1 * inst_fps)
-        self._last_frame_time = now
+            self._last_frame_time = now
 
     def _draw_hud(self, frame: np.ndarray) -> None:
         h, w = frame.shape[:2]
         cv2.rectangle(frame, (0, 0), (w, 24), (10, 14, 22), -1)
         fps_txt = f"{self._fps_ema:.1f} FPS" if self._fps_ema is not None else "—"
-        cv2.putText(frame, f"● CANLI  {self._label}", (8, 17), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (100, 240, 120), 1, cv2.LINE_AA)
+        cv2.putText(frame, f"● LIVE  {self._label}", (8, 17), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (100, 240, 120), 1, cv2.LINE_AA)
         cv2.putText(frame, fps_txt, (w - 90, 17), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (180, 200, 220), 1, cv2.LINE_AA)
 
 
@@ -142,16 +142,16 @@ def get_or_create_camera_feed(camera_id: int) -> CameraFeed:
     with get_sync_session() as db:
         cam = db.query(CameraORM).filter(CameraORM.id == camera_id).first()
         if cam is None:
-            feed.last_error = "Kamera bulunamadı."
+            feed.last_error = "Camera not found."
         else:
-            feed.set_label(f"KAM-{cam.id}")
+            feed.set_label(f"CAM-{cam.id}")
             if cam.enabled:
                 source = resolve_camera_source(cam.source_driver, cam.source_config)
                 ok, msg = feed.connect(source)
                 if not ok:
                     logger.info("Camera %s not connected on first use: %s", camera_id, msg)
             else:
-                feed.last_error = "Kamera devre dışı."
+                feed.last_error = "Camera disabled."
     _camera_feeds[camera_id] = feed
     return feed
 

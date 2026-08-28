@@ -1,4 +1,4 @@
-"""Deep Comprehensive End-to-End Test & Stress Suite for Cuval Sayim v2.0 Enterprise.
+"""Deep Comprehensive End-to-End Test & Stress Suite for Fabric Bag Counter v2.0 Enterprise.
 
 Covers:
 1. MJPEG Live Video Stream & OpenCV Computer Vision Frame Decoder
@@ -263,25 +263,25 @@ def test_playwright_e2e():
         print("  [OK] Real Browser: Live OpenCV AI Vision stream rendered.")
 
         # Test interactive buttons: Normal, Multi (+2), Defect
-        normal_btn = page.locator("button:has-text('+1 Normal Çuval')").first
+        normal_btn = page.locator("button:has-text('+1 Normal Bag')").first
         if normal_btn.is_visible():
             normal_btn.click()
             page.wait_for_timeout(400)
-            print("  [OK] Real Browser: '+1 Normal Çuval' triggered.")
+            print("  [OK] Real Browser: '+1 Normal Bag' triggered.")
 
-        multi_btn = page.locator("button:has-text('+2 Bitişik Çuval')").first
+        multi_btn = page.locator("button:has-text('+2 Merged Bags')").first
         if multi_btn.is_visible():
             multi_btn.click()
             page.wait_for_timeout(400)
-            print("  [OK] Real Browser: '+2 Bitişik Çuval' triggered (Split & Merge).")
+            print("  [OK] Real Browser: '+2 Merged Bags' triggered (Split & Merge).")
 
-        defect_btn = page.locator("button:has-text('+1 Hasarlı')").first
+        defect_btn = page.locator("button:has-text('+1 Damaged Bag')").first
         if defect_btn.is_visible():
             defect_btn.click()
             page.wait_for_timeout(400)
-            print("  [OK] Real Browser: '+1 Hasarlı / Patlak' defect alarm triggered.")
+            print("  [OK] Real Browser: '+1 Damaged Bag' defect alarm triggered.")
 
-        # Test interactive ribbon tools: Lazer Taşı, ROI, Kuşbakışı, Rapor
+        # Test interactive ribbon tools: Move Laser Line, ROI, Top-Down, Report
         page.locator("#drag-gate-btn").click()
         page.wait_for_timeout(300)
         print("  [OK] Real Browser: Draggable laser gate mode toggled.")
@@ -295,24 +295,24 @@ def test_playwright_e2e():
         print("  [OK] Real Browser: 4-Point Homography Perspective mode toggled.")
 
         # Test Dispatch Report Modal
-        rep_btn = page.locator("button:has-text('İrsaliye Raporu (PDF)')").first
+        rep_btn = page.locator("button:has-text('Dispatch Report (PDF)')").first
         rep_btn.click()
         page.wait_for_timeout(1000)
         assert page.locator("#dispatch-report-modal").is_visible(), "Dispatch report modal not visible!"
         print("  [OK] Real Browser: Official Dispatch & Reconciliation Manifest Modal opened with QR Seal.")
-        page.locator("button:has-text('Kapat')").last.click()
+        page.locator("button:has-text('Close')").last.click()
         page.wait_for_timeout(500)
 
         # Test persona switch: Admin
         page.locator("#role-btn-admin").click()
         page.wait_for_timeout(800)
-        page.locator("button:has-text('Kurulum Sihirbazı')").first.click()
+        page.locator("button:has-text('Setup Wizard')").first.click()
         page.wait_for_timeout(800)
-        assert page.locator("h2:has-text('Kurulum Sihirbazı')").is_visible()
+        assert page.locator("h2:has-text('Setup Wizard')").is_visible()
         print("  [OK] Real Browser: Admin role switched and Setup Wizard verified.")
 
         # Return to live & capture screenshot
-        page.locator("button:has-text('Canlı')").first.click()
+        page.locator("button:has-text('Live')").first.click()
         page.wait_for_timeout(1500)
         page.screenshot(path="artifacts/browser_live_verified.png", full_page=True)
         print("  [OK] Real Browser: Screenshot saved to artifacts/browser_live_verified.png.")

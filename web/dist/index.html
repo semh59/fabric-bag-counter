@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sayım Sistemi</title>
+  <title>Fabric Bag Counter</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -30,38 +30,25 @@
     input, select, textarea { background-color: #1e2227; border: 1px solid #363b41; color: #edf0f2; border-radius: 0.5rem; padding: 0.55rem 0.85rem; font-size: 0.875rem; transition: all 0.15s ease; font-family: inherit; }
     input:focus, select:focus, textarea:focus { outline: none; border-color: #5b9bd1; box-shadow: 0 0 0 2px rgba(91, 155, 209, 0.35); }
 
-    /* Alarm bar: persistent (ISA-18.2 style) -- a "no active alarms" state
-       is itself information worth showing, never hidden. Built from real
-       signals only (session.discrepancy_flag, real per-camera connection
-       status, real FPS) -- never a decorative placeholder. */
+    /* Alarm bar: persistent (ISA-18.2 style) */
     .alarm-bar { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 1rem; border-radius: 0.6rem; margin-bottom: 1rem; border: 1px solid #363b41; background: #1a1d22; }
     .alarm-bar.has-alarms { background: rgba(217, 155, 62, 0.12); border-color: #d99b3e; }
     .alarm-bar .list { display: flex; gap: 1.1rem; flex-wrap: wrap; font-size: 0.75rem; color: #edf0f2; flex: 1; }
     .alarm-bar.clean .list { color: #868d94; }
     .alarm-bar .list b { font-family: "IBM Plex Mono", monospace; }
 
-    /* Damage/defect log: each row is a real ledger event with a real,
-       attributed dispute action -- not a static list. Disputing never hides
-       or replaces the row; it adds the reviewer's verdict alongside the
-       original AI flag, so both stay visible in the audit trail. */
+    /* Damage/defect log */
     .defect-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 1rem; font-size: 0.8rem; border-bottom: 1px solid #292d33; }
     .defect-row:last-child { border-bottom: none; }
     .defect-row .t { font-family: "IBM Plex Mono", monospace; color: #868d94; font-size: 0.7rem; width: 3.6rem; flex-shrink: 0; }
     .defect-row .desc { flex: 1; color: #cdd1d5; }
     .defect-row .who { color: #868d94; }
 
-    /* Left rail navigation (desktop): reuses the exact same tab buttons
-       renderNav() already generates for the mobile bar -- stacking them
-       full-width/left-aligned here is a pure CSS change, no JS/markup
-       duplication needed. */
+    /* Left rail navigation (desktop) */
     #nav-menu-rail { display: flex; flex-direction: column; gap: 0.2rem; }
     #nav-menu-rail button { width: 100%; text-align: left; white-space: normal; }
 
-    /* Camera wall: one hero (the tile an operator actually watches) + a
-       scrollable thumbnail rail (awareness, not scrutiny). Past ~4 equal
-       tiles a flat grid either shrinks every feed to unreadable or pushes
-       the rest of the screen off-view -- click a thumbnail to promote it.
-       A grid toggle is offered for a start-of-shift sweep of every feed. */
+    /* Camera wall */
     .cam-wall { display: flex; gap: 0.875rem; align-items: flex-start; }
     .cam-wall.grid-mode { display: grid; gap: 0.875rem; }
     .cam-hero { flex: 1; min-width: 0; }
@@ -88,16 +75,13 @@
 
   <!-- ===================== MAIN APP SHELL ===================== -->
   <div id="app-shell" class="flex-1 flex min-h-screen">
-    <!-- Left Rail (desktop, lg and up): control-room style vertical
-         navigation, replacing the old horizontal top menu. Mobile keeps the
-         original top header + horizontal tab bar below (unchanged) since a
-         fixed side rail doesn't fit a narrow screen. -->
+    <!-- Left Rail (desktop, lg and up): control-room style vertical navigation -->
     <aside class="hidden lg:flex lg:flex-col w-60 flex-shrink-0 bg-slate-900 border-r border-slate-800 h-screen sticky top-0 overflow-y-auto">
       <div class="flex items-center space-x-2.5 cursor-pointer px-4 py-4 border-b border-slate-800" onclick="setTab('live')">
-        <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center font-black text-white text-sm shadow-md shadow-indigo-500/20 flex-shrink-0">CS</div>
+        <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center font-black text-white text-sm shadow-md shadow-indigo-500/20 flex-shrink-0">BC</div>
         <div class="min-w-0">
-          <div class="text-base font-extrabold tracking-tight text-white leading-tight">Sayım Sistemi</div>
-          <div class="text-[10px] text-slate-400 font-mono truncate" id="current-line-label-rail">Tesis ayarlanmadı</div>
+          <div class="text-base font-extrabold tracking-tight text-white leading-tight">Bag Counter</div>
+          <div class="text-[10px] text-slate-400 font-mono truncate" id="current-line-label-rail">Facility not configured</div>
         </div>
       </div>
 
@@ -105,45 +89,44 @@
 
       <div class="border-t border-slate-800 p-3 space-y-2">
         <div class="flex items-center justify-between gap-2">
-          <button onclick="toggleAudio()" id="audio-toggle-btn-rail" class="flex-1 p-2 bg-slate-800/80 hover:bg-slate-700 rounded-lg border border-slate-700 text-slate-300 text-xs flex items-center justify-center space-x-1.5 transition" title="Sayım ses efektini aç/kapat">
+          <button onclick="toggleAudio()" id="audio-toggle-btn-rail" class="flex-1 p-2 bg-slate-800/80 hover:bg-slate-700 rounded-lg border border-slate-700 text-slate-300 text-xs flex items-center justify-center space-x-1.5 transition" title="Toggle counting sound effect">
             <span id="audio-icon-rail">🔊</span>
-            <span class="text-[11px]" id="audio-label-rail">Ses Açık</span>
+            <span class="text-[11px]" id="audio-label-rail">Sound On</span>
           </button>
         </div>
         <div class="flex items-center space-x-2 bg-slate-800/60 px-3 py-1.5 rounded-lg border border-slate-700/50">
           <span id="health-dot-rail" class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span class="text-xs text-slate-300 font-medium" id="live-indicator-rail">Sistem Canlı</span>
+          <span class="text-xs text-slate-300 font-medium" id="live-indicator-rail">System Online</span>
         </div>
         <div id="user-box-rail" class="flex flex-col space-y-2"></div>
       </div>
     </aside>
 
-    <!-- Main column: mobile top bar + page content. On desktop the mobile
-         header is hidden and the rail above takes over navigation. -->
+    <!-- Main column: mobile top bar + page content -->
     <div class="flex-1 flex flex-col min-w-0 min-h-screen">
       <!-- Top Navigation Header (mobile / below-lg only) -->
       <header class="lg:hidden bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-3 sticky top-0 z-40 flex items-center justify-between shadow-xl">
         <div class="flex items-center space-x-2.5 cursor-pointer min-w-0" onclick="setTab('live')">
-          <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center font-black text-white text-sm shadow-md shadow-indigo-500/20 flex-shrink-0">CS</div>
+          <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center font-black text-white text-sm shadow-md shadow-indigo-500/20 flex-shrink-0">BC</div>
           <div class="min-w-0">
-            <div class="text-base font-extrabold tracking-tight text-white leading-tight">Sayım Sistemi</div>
-            <div class="text-[10px] text-slate-400 font-mono truncate" id="current-line-label">Tesis ayarlanmadı</div>
+            <div class="text-base font-extrabold tracking-tight text-white leading-tight">Bag Counter</div>
+            <div class="text-[10px] text-slate-400 font-mono truncate" id="current-line-label">Facility not configured</div>
           </div>
         </div>
 
         <!-- Right Controls -->
         <div class="flex items-center space-x-2 flex-shrink-0">
-          <button onclick="toggleAudio()" id="audio-toggle-btn" class="p-2 bg-slate-800/80 hover:bg-slate-700 rounded-lg border border-slate-700 text-slate-300 text-xs flex items-center space-x-1.5 transition" title="Sayım ses efektini aç/kapat">
+          <button onclick="toggleAudio()" id="audio-toggle-btn" class="p-2 bg-slate-800/80 hover:bg-slate-700 rounded-lg border border-slate-700 text-slate-300 text-xs flex items-center space-x-1.5 transition" title="Toggle counting sound effect">
             <span id="audio-icon">🔊</span>
-            <span class="hidden sm:inline text-[11px]" id="audio-label">Ses Açık</span>
+            <span class="hidden sm:inline text-[11px]" id="audio-label">Sound On</span>
           </button>
 
           <div class="flex items-center space-x-2 bg-slate-800/60 px-3 py-1.5 rounded-lg border border-slate-700/50">
             <span id="health-dot" class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span class="text-xs text-slate-300 font-medium hidden sm:inline" id="live-indicator">Sistem Canlı</span>
+            <span class="text-xs text-slate-300 font-medium hidden sm:inline" id="live-indicator">System Online</span>
           </div>
 
-          <!-- Authenticated User Box (populated by renderUserBox()) -->
+          <!-- Authenticated User Box -->
           <div id="user-box" class="border-l border-slate-700 pl-2 flex items-center space-x-2"></div>
         </div>
       </header>
@@ -162,10 +145,10 @@
       <div class="flex justify-between items-center pb-4 border-b border-slate-800">
         <div>
           <h3 class="text-lg font-bold text-white flex items-center space-x-2">
-            <span>📜 Sayım Defteri (Count Event Ledger)</span>
+            <span>📜 Count Event Ledger</span>
             <span class="text-xs text-indigo-400 font-mono" id="ledger-modal-sess-title"></span>
           </h3>
-          <p class="text-xs text-slate-400">Tek hakikat kaynağı: Salt-eklemeli (append-only) değişmez olay kayıtları (§5.5).</p>
+          <p class="text-xs text-slate-400">Single source of truth: Append-only immutable event records (§5.5).</p>
         </div>
         <button onclick="document.getElementById('ledger-modal').classList.add('hidden')" class="text-slate-400 hover:text-white text-lg">✕</button>
       </div>
@@ -173,8 +156,8 @@
         <div class="text-center py-10"><div class="spinner"></div></div>
       </div>
       <div class="pt-4 border-t border-slate-800 flex justify-between items-center text-xs text-slate-400">
-        <span id="ledger-modal-count-summary">Toplam: 0 Olay</span>
-        <button onclick="document.getElementById('ledger-modal').classList.add('hidden')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-medium">Kapat</button>
+        <span id="ledger-modal-count-summary">Total: 0 Events</span>
+        <button onclick="document.getElementById('ledger-modal').classList.add('hidden')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-medium">Close</button>
       </div>
     </div>
   </div>
@@ -184,58 +167,58 @@
     <div class="glass-card max-w-xl w-full p-6 shadow-2xl border border-slate-700">
       <div class="flex justify-between items-center pb-3 border-b border-slate-800 mb-4">
         <h3 class="text-base font-bold text-white flex items-center space-x-2">
-          <span>📦 Yeni Çuval / Ürün Profili Tanımla (§5.2)</span>
+          <span>📦 Define New Bag / Product Profile (§5.2)</span>
         </h3>
         <button onclick="document.getElementById('bag-modal').classList.add('hidden')" class="text-slate-400 hover:text-white">✕</button>
       </div>
       <div class="space-y-3.5 text-xs">
         <div>
-          <label class="text-slate-400 font-semibold block mb-1">Ürün / Çuval Adı</label>
-          <input type="text" id="modal-bag-name" placeholder="Örn: 50kg Süper Kraft Çimento" class="w-full">
+          <label class="text-slate-400 font-semibold block mb-1">Product / Bag Name</label>
+          <input type="text" id="modal-bag-name" placeholder="e.g. 50kg Portland Cement Bag" class="w-full">
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="text-slate-400 font-semibold block mb-1">ERP Malzeme Kodu</label>
-            <input type="text" id="modal-bag-erp" placeholder="MAT-CIM-50" class="w-full font-mono">
+            <label class="text-slate-400 font-semibold block mb-1">ERP Material Code</label>
+            <input type="text" id="modal-bag-erp" placeholder="MAT-CEM-50" class="w-full font-mono">
           </div>
           <div>
-            <label class="text-slate-400 font-semibold block mb-1">Nominal Ağırlık (kg)</label>
+            <label class="text-slate-400 font-semibold block mb-1">Nominal Weight (kg)</label>
             <input type="number" id="modal-bag-weight" value="50" class="w-full">
           </div>
         </div>
         <div class="grid grid-cols-3 gap-3">
           <div>
-            <label class="text-slate-400 font-semibold block mb-1">Genişlik (W mm)</label>
+            <label class="text-slate-400 font-semibold block mb-1">Width (W mm)</label>
             <input type="number" id="modal-bag-w" value="480" class="w-full">
           </div>
           <div>
-            <label class="text-slate-400 font-semibold block mb-1">Uzunluk (L mm)</label>
+            <label class="text-slate-400 font-semibold block mb-1">Length (L mm)</label>
             <input type="number" id="modal-bag-l" value="650" class="w-full">
           </div>
           <div>
-            <label class="text-slate-400 font-semibold block mb-1">Kalınlık (H mm)</label>
+            <label class="text-slate-400 font-semibold block mb-1">Thickness (H mm)</label>
             <input type="number" id="modal-bag-h" value="130" class="w-full">
           </div>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="text-slate-400 font-semibold block mb-1">Çuval Rengi / Malzemesi</label>
+            <label class="text-slate-400 font-semibold block mb-1">Bag Color / Material</label>
             <select id="modal-bag-color" class="w-full">
-              <option value="kraft_yellow">Sarı Kraft Torba</option>
-              <option value="poly_white">Beyaz Polietilen / Dokuma</option>
-              <option value="mortar_gray">Gri Kuru Harç Torbası</option>
-              <option value="red_special">Kırmızı Özel Harç</option>
+              <option value="kraft_yellow">Yellow Kraft Bag</option>
+              <option value="poly_white">White Polyethylene / Woven</option>
+              <option value="mortar_gray">Gray Dry Mortar Bag</option>
+              <option value="red_special">Red Special Mix</option>
             </select>
           </div>
           <div>
-            <label class="text-slate-400 font-semibold block mb-1">Alan Toleransı (±%)</label>
+            <label class="text-slate-400 font-semibold block mb-1">Area Tolerance (±%)</label>
             <input type="number" id="modal-bag-tol" value="6.0" class="w-full">
           </div>
         </div>
       </div>
       <div class="mt-6 pt-4 border-t border-slate-800 flex justify-end space-x-2">
-        <button onclick="document.getElementById('bag-modal').classList.add('hidden')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl">İptal</button>
-        <button onclick="saveNewBagProfile()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-md">Kaydet & Aktif Et</button>
+        <button onclick="document.getElementById('bag-modal').classList.add('hidden')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl">Cancel</button>
+        <button onclick="saveNewBagProfile()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-md">Save & Activate</button>
       </div>
     </div>
   </div>
@@ -248,20 +231,20 @@
     let auth = { token: null, username: null, role: null };
     let activeTab = 'live';
     let sseSource = null;
-    let selectedLineId = null; // which line's video/session the Live screen shows -- null = default to the first line
-    let auxCamHeroId = null;   // which non-counting camera is promoted to the big tile in "Diğer Kameralar"
+    let selectedLineId = null;
+    let auxCamHeroId = null;
     let auxCamGridMode = false;
-    let currentOtherCameras = []; // the camera list renderAuxCamWall's onclick handlers operate on
+    let currentOtherCameras = [];
 
     // Live Feed Mode: 'stream' (Real OpenCV MJPEG) or 'canvas' (60 FPS Simulator)
     let feedMode = 'stream';
 
     // Conveyor & Belt Settings State
-    let beltSpeedFactor = 2.5; // 1.0 to 5.0
-    let opticalGateX = 480;    // 150 to 650 px
-    let beltDirection = 1;     // +1: Left to Right, -1: Right to Left
+    let beltSpeedFactor = 2.5;
+    let opticalGateX = 480;
+    let beltDirection = 1;
     let activeBagColor = 'kraft_yellow';
-    let activeBagLabel = '50kg Çimento';
+    let activeBagLabel = '50kg Cement';
 
     // Simulation animation state (for canvas mode)
     let isAutoSimRunning = true;
@@ -290,11 +273,6 @@
       return data;
     }
 
-    // Escapes any API- or user-supplied string before it is interpolated into
-    // an innerHTML template literal, to prevent stored/reflected XSS from
-    // names, refs, notes and other free-text fields coming back from the API.
-    // Numbers/booleans/fixed enum values from trusted internal computation
-    // don't strictly need this, but it's harmless to apply broadly.
     function escapeHtml(value) {
       if (value === null || value === undefined) return '';
       const div = document.createElement('div');
@@ -322,12 +300,8 @@
     }
 
     // ===================== AUTH & LOGIN =====================
-    // Real authentication: the only way to become operator/engineer/admin is
-    // to submit real credentials to POST /auth/login. There is no
-    // client-side password map and no one-click role bypass.
-
     function renderUserBox() {
-      const roleLabels = { operator: '👷 Operatör', engineer: '👨‍🔬 Mühendis', admin: '👑 Yönetici' };
+      const roleLabels = { operator: '👷 Operator', engineer: '👨‍🔬 Engineer', admin: '👑 Admin' };
 
       const el = document.getElementById('user-box');
       if (el) {
@@ -337,7 +311,7 @@
             <span class="badge bg-indigo-500/20 text-indigo-300 text-[10px]">${escapeHtml(roleLabels[auth.role] || auth.role)}</span>
           </div>
           <button onclick="logout()" class="px-2.5 py-1.5 bg-slate-800 hover:bg-rose-900/40 text-xs font-semibold rounded-lg border border-slate-700 text-slate-300 hover:text-rose-300 transition">
-            Çıkış
+            Logout
           </button>
         ` : '';
       }
@@ -350,7 +324,7 @@
             <span class="badge bg-indigo-500/20 text-indigo-300 text-[10px] flex-shrink-0">${escapeHtml(roleLabels[auth.role] || auth.role)}</span>
           </div>
           <button onclick="logout()" class="w-full px-2.5 py-1.5 bg-slate-800 hover:bg-rose-900/40 text-xs font-semibold rounded-lg border border-slate-700 text-slate-300 hover:text-rose-300 transition">
-            Çıkış
+            Logout
           </button>
         ` : '';
       }
@@ -367,11 +341,11 @@
       if (errEl) errEl.classList.add('hidden');
 
       if (!username || !password) {
-        if (errEl) { errEl.textContent = 'Kullanıcı adı ve parola giriniz.'; errEl.classList.remove('hidden'); }
+        if (errEl) { errEl.textContent = 'Please enter username and password.'; errEl.classList.remove('hidden'); }
         return;
       }
 
-      if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Giriş yapılıyor...'; }
+      if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Logging in...'; }
       try {
         const data = await api('/auth/login', {
           method: 'POST',
@@ -384,14 +358,14 @@
         renderScreen();
         checkHealth();
         refreshFacilityLabel();
-        toast(`Hoş geldiniz, ${auth.username}`, 'success');
+        toast(`Welcome, ${auth.username}`, 'success');
       } catch (e) {
         if (errEl) {
-          errEl.textContent = e.detail || 'Giriş başarısız. Kullanıcı adı veya parola hatalı.';
+          errEl.textContent = e.detail || 'Login failed. Incorrect username or password.';
           errEl.classList.remove('hidden');
         }
       } finally {
-        if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Giriş Yap'; }
+        if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Login'; }
       }
     }
 
@@ -410,21 +384,21 @@
       c.innerHTML = `
         <div class="max-w-md mx-auto mt-10 md:mt-20">
           <div class="glass-card p-8 shadow-2xl border border-slate-700">
-            <h2 class="text-xl font-black text-white tracking-tight mb-1">Giriş Yap</h2>
-            <p class="text-xs text-slate-400 mb-6">Sayım Sistemi'ne erişmek için hesap bilgilerinizi giriniz.</p>
+            <h2 class="text-xl font-black text-white tracking-tight mb-1">Login</h2>
+            <p class="text-xs text-slate-400 mb-6">Enter your credentials to access the Bag Counter System.</p>
 
             <div class="space-y-3.5">
               <div>
-                <label class="text-xs text-slate-400 font-semibold block mb-1">Kullanıcı Adı</label>
-                <input type="text" id="login-username" autocomplete="username" class="w-full" placeholder="kullanici.adi">
+                <label class="text-xs text-slate-400 font-semibold block mb-1">Username</label>
+                <input type="text" id="login-username" autocomplete="username" class="w-full" placeholder="username">
               </div>
               <div>
-                <label class="text-xs text-slate-400 font-semibold block mb-1">Parola</label>
+                <label class="text-xs text-slate-400 font-semibold block mb-1">Password</label>
                 <input type="password" id="login-password" autocomplete="current-password" class="w-full" placeholder="••••••••" onkeydown="if(event.key === 'Enter') doLogin()">
               </div>
               <div id="login-error" class="hidden text-xs text-rose-400 font-medium"></div>
               <button id="login-submit-btn" onclick="doLogin()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg transition">
-                Giriş Yap
+                Login
               </button>
             </div>
           </div>
@@ -434,9 +408,6 @@
       if (usernameEl) usernameEl.focus();
     }
 
-    // Restore a previously saved session on launch (still a real, previously
-    // issued JWT -- never a fabricated/bypassed one). Any 401 from the API
-    // later (e.g. an expired token) routes back through logout()/api().
     (function init() {
       const saved = localStorage.getItem('cs_auth');
       if (saved) {
@@ -460,29 +431,29 @@
     // ===================== NAVIGATION TABS =====================
     const MENUS = {
       operator: [
-        { id: 'live', label: '📊 Canlı Sayım' },
-        { id: 'sessions', label: '📋 Oturumlar' },
-        { id: 'settings', label: '🔧 Bant & Kamera Ayarları' },
-        { id: 'system', label: '⚙️ Sistem' },
+        { id: 'live', label: '📊 Live Counting' },
+        { id: 'sessions', label: '📋 Sessions' },
+        { id: 'settings', label: '🔧 Belt & Camera Settings' },
+        { id: 'system', label: '⚙️ System' },
       ],
       engineer: [
-        { id: 'live', label: '📊 Canlı' },
-        { id: 'sessions', label: '📋 Oturumlar' },
-        { id: 'reconciliation', label: '⚖️ Mutabakat' },
-        { id: 'data', label: '📁 Veri & Sentetik' },
-        { id: 'training', label: '🧠 Model & Eğitim' },
-        { id: 'settings', label: '🔧 Bant & Kalibrasyon' },
-        { id: 'system', label: '⚙️ Sistem' },
+        { id: 'live', label: '📊 Live' },
+        { id: 'sessions', label: '📋 Sessions' },
+        { id: 'reconciliation', label: '⚖️ Reconciliation' },
+        { id: 'data', label: '📁 Data & Synthetic' },
+        { id: 'training', label: '🧠 Model & Training' },
+        { id: 'settings', label: '🔧 Belt & Calibration' },
+        { id: 'system', label: '⚙️ System' },
       ],
       admin: [
-        { id: 'live', label: '📊 Canlı' },
-        { id: 'sessions', label: '📋 Oturumlar' },
-        { id: 'reconciliation', label: '⚖️ Mutabakat' },
-        { id: 'wizard', label: '🧙 Kurulum Sihirbazı' },
-        { id: 'data', label: '📁 Veri & Sentetik' },
-        { id: 'training', label: '🧠 Model & Eğitim' },
-        { id: 'settings', label: '🔧 Bant & Kalibrasyon' },
-        { id: 'system', label: '⚙️ Sistem' },
+        { id: 'live', label: '📊 Live' },
+        { id: 'sessions', label: '📋 Sessions' },
+        { id: 'reconciliation', label: '⚖️ Reconciliation' },
+        { id: 'wizard', label: '🧙 Setup Wizard' },
+        { id: 'data', label: '📁 Data & Synthetic' },
+        { id: 'training', label: '🧠 Model & Training' },
+        { id: 'settings', label: '🔧 Belt & Calibration' },
+        { id: 'system', label: '⚙️ System' },
       ]
     };
 
@@ -517,13 +488,19 @@
       renderScreen();
     }
 
+    const CAMERA_ROLE_LABELS = {
+      counting: 'Counting Camera',
+      vehicle_watchdog: 'Vehicle Watchdog',
+      auxiliary: 'Auxiliary / Monitoring'
+    };
+
     function auxCamTileHtml(cam) {
       const label = CAMERA_ROLE_LABELS[cam.role] || cam.role;
       const badge = cam.role === 'vehicle_watchdog' ? '<span class="primary-cam-badge">' + escapeHtml(label) + '</span>' : '<span class="aux-cam-badge">' + escapeHtml(label) + '</span>';
       return `<div class="cam-thumb-inner" style="background:#1a1d22;border:1px solid #363b41;border-radius:0.6rem;overflow:hidden;">
-        <img src="${API}/cameras/${cam.id}/stream" alt="KAM-${cam.id}" style="width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#101215;">
+        <img src="${API}/cameras/${cam.id}/stream" alt="CAM-${cam.id}" style="width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#101215;">
         <div style="padding:0.5rem 0.65rem;display:flex;align-items:center;justify-content:space-between;font-size:0.7rem;">
-          <span style="font-weight:700;color:#cdd1d5;">KAM-${cam.id}</span>${badge}
+          <span style="font-weight:700;color:#cdd1d5;">CAM-${cam.id}</span>${badge}
         </div>
       </div>`;
     }
@@ -547,9 +524,9 @@
       } else {
         wall.style.gridTemplateColumns = '';
         thumbsEl.innerHTML = cameras.filter(c => c.id !== auxCamHeroId).map(cam => `
-          <div class="cam-thumb" onclick="promoteAuxCam(${cam.id})" title="Büyütmek için tıklayın">
-            <img src="${API}/cameras/${cam.id}/stream" alt="KAM-${cam.id}">
-            <div class="th-label">KAM-${cam.id} · ${escapeHtml(CAMERA_ROLE_LABELS[cam.role] || cam.role)}</div>
+          <div class="cam-thumb" onclick="promoteAuxCam(${cam.id})" title="Click to enlarge">
+            <img src="${API}/cameras/${cam.id}/stream" alt="CAM-${cam.id}">
+            <div class="th-label">CAM-${cam.id} · ${escapeHtml(CAMERA_ROLE_LABELS[cam.role] || cam.role)}</div>
           </div>
         `).join('');
         requestAnimationFrame(() => {
@@ -560,7 +537,7 @@
             const div = document.createElement('div');
             div.id = 'aux-cam-thumbs-more';
             div.className = 'cam-thumbs-more';
-            div.textContent = '↓ kaydırın — daha fazla kamera var';
+            div.textContent = '↓ scroll for more cameras';
             wrap.appendChild(div);
           }
         });
@@ -575,21 +552,21 @@
     function toggleAuxCamGrid() {
       auxCamGridMode = !auxCamGridMode;
       const btn = document.getElementById('aux-cam-grid-toggle');
-      if (btn) btn.textContent = auxCamGridMode ? '▤ Öne Çıkan Görünüm' : '⊞ Izgara Görünümü';
+      if (btn) btn.textContent = auxCamGridMode ? '▤ Featured View' : '⊞ Grid View';
       const more = document.getElementById('aux-cam-thumbs-more');
       if (more) more.remove();
       renderAuxCamWall(currentOtherCameras);
     }
 
     async function disputeDefectEvent(eventId) {
-      const note = prompt('Bu hasar tespiti neden yanlıştı? (isteğe bağlı not)');
-      if (note === null) return; // cancelled
+      const note = prompt('Why was this defect detection disputed? (optional note)');
+      if (note === null) return;
       try {
         await api(`/events/${eventId}/dispute_defect`, { method: 'POST', body: JSON.stringify({ note: note || null }) });
-        toast('İtiraz kaydedildi', 'success');
+        toast('Dispute recorded', 'success');
         renderScreen();
       } catch (e) {
-        toast(e.detail || 'İtiraz kaydedilemedi', 'error');
+        toast(e.detail || 'Could not record dispute', 'error');
       }
     }
 
@@ -600,10 +577,10 @@
       try {
         await api('/system/health');
         ids.forEach(id => { const el = document.getElementById(id); if (el) el.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse'; });
-        labelIds.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = 'Sistem Canlı'; });
+        labelIds.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = 'System Online'; });
       } catch {
         ids.forEach(id => { const el = document.getElementById(id); if (el) el.className = 'w-2.5 h-2.5 rounded-full bg-rose-500'; });
-        labelIds.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = 'Bağlantı Yok'; });
+        labelIds.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = 'No Connection'; });
       }
     }
     setInterval(() => { if (auth.token) checkHealth(); }, 12000);
@@ -613,10 +590,10 @@
       if (els.length === 0 || !auth.token) return;
       try {
         const sites = await api('/sites');
-        const label = (sites && sites.length > 0) ? sites[0].name : 'Tesis ayarlanmadı';
+        const label = (sites && sites.length > 0) ? sites[0].name : 'Facility not configured';
         els.forEach(el => { el.textContent = label; });
       } catch {
-        els.forEach(el => { el.textContent = 'Tesis ayarlanmadı'; });
+        els.forEach(el => { el.textContent = 'Facility not configured'; });
       }
     }
 
@@ -640,13 +617,13 @@
         case 'training': renderTraining(c); break;
         case 'settings': renderSettings(c); break;
         case 'system': renderSystem(c); break;
-        default: c.innerHTML = '<div class="text-slate-400 text-center py-20">Bilinmeyen ekran</div>';
+        default: c.innerHTML = '<div class="text-slate-400 text-center py-20">Unknown Screen</div>';
       }
     }
 
     // ===================== 1. LIVE COUNTING SCREEN =====================
     async function renderLive(c) {
-      c.innerHTML = '<div class="text-center py-20"><div class="spinner !w-8 !h-8"></div><div class="text-slate-400 mt-4 text-sm font-medium">Canlı OpenCV AI görüntü akışı bağlanıyor...</div></div>';
+      c.innerHTML = '<div class="text-center py-20"><div class="spinner !w-8 !h-8"></div><div class="text-slate-400 mt-4 text-sm font-medium">Connecting live OpenCV AI video stream...</div></div>';
       try {
         const [lines, sessions, products] = await Promise.all([
           api('/lines'),
@@ -658,21 +635,18 @@
           c.innerHTML = `
             <div class="glass-card p-10 text-center max-w-xl mx-auto my-12 shadow-2xl">
               <div class="text-4xl mb-4">🏭</div>
-              <h2 class="text-2xl font-bold text-white mb-2">Tanımlı Hat Bulunmuyor</h2>
+              <h2 class="text-2xl font-bold text-white mb-2">No Lines Configured</h2>
               <p class="text-slate-400 text-sm mb-6">${auth.role === 'admin'
-                ? 'Fabrika topolojisini (tesis, hat, kamera) tanımlamak için Kurulum Sihirbazı\'nı kullanın.'
-                : 'Fabrika topolojisi henüz tanımlanmamış. Bir yönetici hesabından Kurulum Sihirbazı ile hat ve kamera tanımlanması gerekiyor.'}</p>
+                ? 'Use the Setup Wizard to define factory topology (site, line, camera).'
+                : 'Factory topology is not defined yet. An administrator must define lines and cameras using the Setup Wizard.'}</p>
               ${auth.role === 'admin' ? `
                 <button onclick="setTab('wizard')" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg transition">
-                  🧙 Kurulum Sihirbazına Git
+                  🧙 Go to Setup Wizard
                 </button>` : ''}
             </div>`;
           return;
         }
 
-        // Which line's video/session this screen shows -- sticky across
-        // re-renders via selectedLineId, defaulting to (and falling back to,
-        // if a previously selected line no longer exists) the first line.
         if (!selectedLineId || !lines.some(l => l.id === selectedLineId)) {
           selectedLineId = lines[0].id;
         }
@@ -691,11 +665,6 @@
           </select>
         ` : '';
 
-        // Only this line's own active session -- previously this picked the
-        // first active session across ANY line while the video panel below
-        // always showed lines[0], so with more than one line open at once
-        // the counter and the camera feed could silently belong to two
-        // different lines.
         const activeSessions = sessions.filter(s => s.line_id === lineId && (s.status === 'open' || s.status === 'counting' || s.status === 'paused'));
         let session = activeSessions[0];
 
@@ -704,32 +673,27 @@
             ${lines.length > 1 ? `<div class="flex justify-end mb-3">${lineSwitcher}</div>` : ''}
             <div class="glass-card p-10 text-center max-w-xl mx-auto my-12 shadow-2xl">
               <div class="text-4xl mb-4">📦</div>
-              <h2 class="text-2xl font-bold text-white mb-2">Aktif Sayım Oturumu Yok</h2>
-              <p class="text-slate-400 text-sm mb-6">${escapeHtml(currentLine ? currentLine.name : '')} için canlı konveyör sayımını başlatmak üzere hemen yeni bir oturum açın.</p>
+              <h2 class="text-2xl font-bold text-white mb-2">No Active Counting Session</h2>
+              <p class="text-slate-400 text-sm mb-6">Start a new session to begin live conveyor counting on ${escapeHtml(currentLine ? currentLine.name : '')}.</p>
               <button onclick="quickStartSession(${lineId}, ${products[0] ? products[0].id : 1})" class="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition">
-                ▶ Hızlı Oturum Başlat (200 Çuval)
+                ▶ Quick Start Session (200 Bags)
               </button>
             </div>`;
           return;
         }
 
-        const currentProduct = products.find(p => p.id === session.product_profile_id) || products[0] || { name: '50kg Polipropilen Çimento Çuvalı' };
+        const currentProduct = products.find(p => p.id === session.product_profile_id) || products[0] || { name: '50kg Portland Cement Bag' };
         activeBagLabel = currentProduct.name;
         const target = session.target_count || 200;
         const count = session.counted_total || 0;
         const areaEst = session.area_estimate_total ? Number(session.area_estimate_total).toFixed(1) : (count * 0.998).toFixed(1);
         const pct = Math.min(100, Math.round((count / target) * 100));
         const dims = currentProduct.nominal_dims_mm || {};
-        const dimsLabel = (dims.width && dims.length && dims.height) ? `${dims.width} x ${dims.length} x ${dims.height} mm` : 'Belirtilmemiş';
+        const dimsLabel = (dims.width && dims.length && dims.height) ? `${dims.width} x ${dims.length} x ${dims.height} mm` : 'Unspecified';
 
-        // Real alarm bar (ISA-18.2 style, always shown -- never faked): only
-        // conditions the backend actually reports. session.discrepancy_flag
-        // is the system's own real double-integral mismatch flag; per-camera
-        // status comes from the already-tracked in-memory feed state (cheap,
-        // no new connection opened per poll).
         const alarms = [];
         if (session.discrepancy_flag) {
-          alarms.push('Bu oturumda sayım ayrışması tespit edildi — Mutabakat ekranını kontrol edin.');
+          alarms.push('Count discrepancy detected for this session — check the Reconciliation screen.');
         }
         if (otherCameras.length > 0) {
           try {
@@ -737,20 +701,20 @@
             statuses.forEach((s, i) => {
               if (!s || !s.known) return;
               const cam = otherCameras[i];
-              if (!s.connected) alarms.push(`KAM-${cam.id} bağlı değil${s.last_error ? ' (' + escapeHtml(s.last_error) + ')' : ''}.`);
-              else if (s.fps !== null && s.fps < 5) alarms.push(`KAM-${cam.id} sinyali zayıf (${s.fps.toFixed(1)} FPS).`);
+              if (!s.connected) alarms.push(`CAM-${cam.id} not connected${s.last_error ? ' (' + escapeHtml(s.last_error) + ')' : ''}.`);
+              else if (s.fps !== null && s.fps < 5) alarms.push(`CAM-${cam.id} low FPS signal (${s.fps.toFixed(1)} FPS).`);
             });
           } catch {}
         }
         const alarmBarHtml = `
           <div class="alarm-bar ${alarms.length > 0 ? 'has-alarms' : 'clean'}">
             <span>${alarms.length > 0 ? '⚠' : '●'}</span>
-            <div class="list">${alarms.length > 0 ? alarms.map(a => `<span>${a}</span>`).join('') : '<span>Aktif uyarı yok</span>'}</div>
+            <div class="list">${alarms.length > 0 ? alarms.map(a => `<span>${a}</span>`).join('') : '<span>No active warnings (Nominal)</span>'}</div>
           </div>
         `;
 
         c.innerHTML = `
-          ${lines.length > 1 ? `<div class="flex items-center justify-between mb-3"><span class="text-xs text-slate-400 font-semibold">Hat: <span class="text-slate-200">${escapeHtml(currentLine ? currentLine.name : '')}</span></span>${lineSwitcher}</div>` : ''}
+          ${lines.length > 1 ? `<div class="flex items-center justify-between mb-3"><span class="text-xs text-slate-400 font-semibold">Line: <span class="text-slate-200">${escapeHtml(currentLine ? currentLine.name : '')}</span></span>${lineSwitcher}</div>` : ''}
           ${alarmBarHtml}
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- Left Card: Digital LED Counter & Bag Selector -->
@@ -759,10 +723,10 @@
                 <div class="flex items-center justify-between mb-3">
                   <div class="flex items-center space-x-2">
                     <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
-                    <span class="text-xs font-bold text-slate-300 uppercase tracking-wider">Oturum #${session.id}</span>
+                    <span class="text-xs font-bold text-slate-300 uppercase tracking-wider">Session #${session.id}</span>
                   </div>
                   <span id="live-status-badge" class="badge ${session.status === 'paused' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}">
-                    ${session.status === 'paused' ? '⏸ DURAKLATILDI' : '🟢 SAYIM CANLI'}
+                    ${session.status === 'paused' ? '⏸ PAUSED' : '🟢 COUNTING ACTIVE'}
                   </span>
                 </div>
 
@@ -770,8 +734,8 @@
                 <div class="text-center my-5">
                   <div class="text-8xl font-black text-white tracking-tight digital-font drop-shadow-md" id="live-count">${count}</div>
                   <div class="text-xs text-slate-400 mt-2 font-medium">
-                    Hedef: <span class="font-bold text-slate-100">${target} Çuval</span> 
-                    <span class="text-indigo-400 ml-1">(%<span id="live-pct">${pct}</span>)</span>
+                    Target: <span class="font-bold text-slate-100">${target} Bags</span> 
+                    <span class="text-indigo-400 ml-1">(<span id="live-pct">${pct}</span>%)</span>
                   </div>
                 </div>
 
@@ -783,8 +747,8 @@
                 <!-- Product / Bag Selector Dropdown (§5.2) -->
                 <div class="bg-slate-800/80 rounded-2xl p-4 border border-indigo-500/30 mb-4 text-xs space-y-2.5">
                   <div class="flex justify-between items-center">
-                    <span class="text-indigo-300 font-bold uppercase tracking-wider text-[11px]">📦 Çuval / Ürün Profili:</span>
-                    <button onclick="openNewBagModal()" class="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold underline">+ Yeni Ekle</button>
+                    <span class="text-indigo-300 font-bold uppercase tracking-wider text-[11px]">📦 Bag / Product Profile:</span>
+                    <button onclick="openNewBagModal()" class="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold underline">+ Add New</button>
                   </div>
                   <select id="live-bag-selector" onchange="changeActiveBagProfile(${session.id}, this.value)" class="w-full bg-slate-900 border-indigo-500/50 font-medium text-xs">
                     ${products.map(p => `<option value="${p.id}" ${p.id === session.product_profile_id ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}
@@ -792,11 +756,11 @@
 
                   <div class="pt-2 border-t border-slate-700/60 text-[11px] text-slate-400 space-y-1">
                     <div class="flex justify-between">
-                      <span>ERP Malzeme:</span>
-                      <span class="font-mono text-slate-200" id="bag-erp-label">${escapeHtml(currentProduct.erp_material_code || 'Belirtilmemiş')}</span>
+                      <span>ERP Material:</span>
+                      <span class="font-mono text-slate-200" id="bag-erp-label">${escapeHtml(currentProduct.erp_material_code || 'Unspecified')}</span>
                     </div>
                     <div class="flex justify-between">
-                      <span>Nominal Boyut:</span>
+                      <span>Nominal Dimensions:</span>
                       <span class="font-mono text-slate-200" id="bag-dim-label">${escapeHtml(dimsLabel)}</span>
                     </div>
                   </div>
@@ -806,7 +770,7 @@
               <!-- Area-Integral Estimator -->
               <div class="border-t border-slate-800 pt-4 grid grid-cols-1 gap-3 text-center">
                 <div class="bg-slate-800/40 p-2.5 rounded-xl border border-slate-700/40">
-                  <div class="text-[10px] text-slate-400 font-semibold uppercase">Alan-İntegrali</div>
+                  <div class="text-[10px] text-slate-400 font-semibold uppercase">Area-Integral Estimate</div>
                   <div class="text-xl font-bold text-slate-100 digital-font mt-0.5" id="live-area">${areaEst}</div>
                 </div>
               </div>
@@ -819,18 +783,18 @@
                 <div>
                   <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
                     <div class="flex items-center space-x-2">
-                      <span class="text-sm font-bold text-slate-200">Kamera 1 — Canlı AI Görüntü Analizi</span>
+                      <span class="text-sm font-bold text-slate-200">Camera 1 — Live AI Vision Analytics</span>
                       <span class="badge bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px]">RF-DETR + ByteTrack</span>
                     </div>
                     <div class="flex items-center space-x-2">
                       <select id="camera-source-select" onchange="switchCameraSource(${lineId}, this.value)" class="text-xs bg-slate-800 border-indigo-500/40 py-1 px-2.5 rounded-lg font-semibold text-slate-200 cursor-pointer">
-                        <option value="demo">🏭 Simüle Konveyör (OpenCV AI)</option>
-                        <option value="0">📷 Yerel Web Kamerası (#0)</option>
-                        <option value="1">📷 İkincil USB Kamera (#1)</option>
-                        <option value="rtsp">🌐 Fabrika IP Kamerası (RTSP)</option>
+                        <option value="demo">🏭 Simulated Conveyor (OpenCV AI)</option>
+                        <option value="0">📷 Local Webcam (#0)</option>
+                        <option value="1">📷 Secondary USB Camera (#1)</option>
+                        <option value="rtsp">🌐 Factory IP Camera (RTSP)</option>
                       </select>
                       <button onclick="toggleFeedMode(${lineId}, ${session.id})" id="feed-mode-toggle" class="text-[11px] px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700">
-                        ${feedMode === 'stream' ? '🎬 Canlı Akış' : '🎨 60 FPS Canvas'}
+                        ${feedMode === 'stream' ? '🎬 Live Stream' : '🎨 60 FPS Canvas'}
                       </button>
                       <span class="text-emerald-400 font-bold text-xs" id="live-fps">— FPS</span>
                     </div>
@@ -840,27 +804,27 @@
                   <div class="flex flex-wrap items-center gap-1.5 p-2 bg-slate-900/90 rounded-xl border border-slate-800 text-[11px] mb-2.5">
                     <button onclick="toggleWebRTC()" id="webrtc-btn" class="px-2.5 py-1 rounded ${isWebRTCActive ? 'bg-rose-600 text-white animate-pulse' : 'bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/30'} flex items-center space-x-1 font-semibold transition">
                       <span>📷</span>
-                      <span id="webrtc-label">${isWebRTCActive ? 'Kamerayı Durdur' : 'Kameramı Aç (WebRTC)'}</span>
+                      <span id="webrtc-label">${isWebRTCActive ? 'Stop Camera' : 'Start Camera (WebRTC)'}</span>
                     </button>
                     <button onclick="toggleGateDrag()" id="drag-gate-btn" class="px-2.5 py-1 rounded ${isDraggingGateEnabled ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300'} border border-slate-700 font-semibold flex items-center space-x-1 transition">
                       <span>↔️</span>
-                      <span>Lazer Taşı</span>
+                      <span>Move Laser Line</span>
                     </button>
                     <button onclick="toggleRoiDraw(${lineId})" id="roi-draw-btn" class="px-2.5 py-1 rounded ${roiDrawMode ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300'} border border-slate-700 font-semibold flex items-center space-x-1 transition">
                       <span>✏️</span>
-                      <span>Sayım Alanı (ROI)</span>
+                      <span>Counting Area (ROI)</span>
                     </button>
                     <button onclick="togglePerspectiveWarp(${lineId})" id="warp-btn" class="px-2.5 py-1 rounded ${perspectiveMode ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-300'} border border-slate-700 font-semibold flex items-center space-x-1 transition">
                       <span>📐</span>
-                      <span>Kuşbakışı (4-Nokta)</span>
+                      <span>Top-Down (4-Point)</span>
                     </button>
                     <button onclick="toggleAudioFeedback()" id="audio-toggle-btn-live" class="px-2.5 py-1 rounded ${soundEnabled ? 'bg-teal-600/30 text-teal-300 border-teal-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'} border font-semibold flex items-center space-x-1 transition">
                       <span id="audio-icon-live">${soundEnabled ? '🔊' : '🔇'}</span>
-                      <span id="audio-label-live">${soundEnabled ? 'Ses Açık' : 'Sessiz'}</span>
+                      <span id="audio-label-live">${soundEnabled ? 'Sound On' : 'Muted'}</span>
                     </button>
                     <button onclick="openDispatchReportModal(${session.id})" class="px-2.5 py-1 rounded bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/30 font-semibold flex items-center space-x-1 ml-auto transition">
                       <span>📄</span>
-                      <span>İrsaliye Raporu (PDF)</span>
+                      <span>Dispatch Report (PDF)</span>
                     </button>
                   </div>
 
@@ -880,54 +844,54 @@
                   <div class="flex flex-wrap items-center gap-2">
                     <button onclick="triggerSimPass(${session.id}, 1, 'normal')" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-xl shadow-md active:scale-95 transition flex items-center space-x-1.5">
                       <span>⚡</span>
-                      <span>+1 Normal Çuval</span>
+                      <span>+1 Normal Bag</span>
                     </button>
 
-                    <button onclick="triggerSimPass(${session.id}, 2, 'multi')" class="px-3.5 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold rounded-xl shadow-md active:scale-95 transition flex items-center space-x-1.5" title="Bitişik yapışık 2 çuval ayrıştırma">
+                    <button onclick="triggerSimPass(${session.id}, 2, 'multi')" class="px-3.5 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold rounded-xl shadow-md active:scale-95 transition flex items-center space-x-1.5" title="Disambiguate 2 overlapping/merged bags">
                       <span>📦</span>
-                      <span>+2 Bitişik Çuval</span>
+                      <span>+2 Merged Bags</span>
                     </button>
 
-                    <button onclick="triggerSimPass(${session.id}, 1, 'defect')" class="px-3.5 py-2 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-xs font-bold rounded-xl shadow-md active:scale-95 transition flex items-center space-x-1.5" title="Yırtık/patlak çuval defekt alarmı">
+                    <button onclick="triggerSimPass(${session.id}, 1, 'defect')" class="px-3.5 py-2 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-xs font-bold rounded-xl shadow-md active:scale-95 transition flex items-center space-x-1.5" title="Defect alarm for torn/damaged bag">
                       <span>🚨</span>
-                      <span>+1 Hasarlı / Patlak</span>
+                      <span>+1 Damaged Bag</span>
                     </button>
 
                     <button onclick="promptUploadVideo(${lineId})" class="px-3 py-2 bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-200 text-xs font-bold rounded-xl transition flex items-center space-x-1.5">
                       <span>📁</span>
-                      <span>Video Yükle</span>
+                      <span>Upload Video</span>
                     </button>
 
-                    <button onclick="triggerSimPass(${session.id}, -1, 'rollback')" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-medium rounded-xl transition" title="Geriye dönük yanlış/çift sayımı düzelt">
-                      <span>🔁 -1 Geri Al</span>
+                    <button onclick="triggerSimPass(${session.id}, -1, 'rollback')" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-medium rounded-xl transition" title="Correct double-count or rollback">
+                      <span>🔁 -1 Rollback</span>
                     </button>
                   </div>
 
                   <div class="flex items-center space-x-2">
                     ${session.status === 'paused' ? `
                       <button onclick="sessionAction(${session.id}, 'resume')" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-sm transition">
-                        ▶ Devam Et
+                        ▶ Resume
                       </button>
                     ` : `
                       <button onclick="sessionAction(${session.id}, 'pause')" class="px-3.5 py-2 bg-amber-600/30 hover:bg-amber-600/50 text-amber-300 border border-amber-500/40 text-xs font-bold rounded-xl transition">
-                        ⏸ Duraklat
+                        ⏸ Pause
                       </button>
                     `}
                     <button onclick="confirmCloseSession(${session.id})" class="px-3.5 py-2 bg-rose-600/25 hover:bg-rose-600/40 text-rose-300 border border-rose-500/40 text-xs font-bold rounded-xl transition">
-                      ⏹ Oturumu Kapat
+                      ⏹ Close Session
                     </button>
                   </div>
                 </div>
               </div>
 
               ${otherCameras.length > 0 ? `
-                <!-- Diğer Kameralar: gerçek, ayrı canlı akışlar (sayaç kamerası hariç) -->
+                <!-- Other Cameras -->
                 <div class="glass-card p-5 border border-slate-700/80 shadow-xl">
                   <div class="flex items-center justify-between mb-3">
-                    <div class="text-sm font-bold text-slate-100">Diğer Kameralar</div>
+                    <div class="text-sm font-bold text-slate-100">Other Cameras</div>
                     <div class="flex items-center gap-2">
-                      <span class="text-[11px] text-slate-500">${otherCameras.length} kamera • izleme amaçlı, sayıma dahil değil</span>
-                      ${otherCameras.length > 2 ? `<button onclick="toggleAuxCamGrid()" id="aux-cam-grid-toggle" class="text-[11px] px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700">⊞ Izgara Görünümü</button>` : ''}
+                      <span class="text-[11px] text-slate-500">${otherCameras.length} camera(s) • monitoring only, not counting</span>
+                      ${otherCameras.length > 2 ? `<button onclick="toggleAuxCamGrid()" id="aux-cam-grid-toggle" class="text-[11px] px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700">⊞ Grid View</button>` : ''}
                     </div>
                   </div>
                   ${otherCameras.length > 2 ? `
@@ -939,9 +903,9 @@
                     <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                       ${otherCameras.map(cam => `
                         <div class="bg-slate-950 rounded-xl border border-slate-700/70 overflow-hidden">
-                          <img src="${API}/cameras/${cam.id}/stream" alt="KAM-${cam.id}" class="w-full aspect-video object-cover block bg-slate-900">
+                          <img src="${API}/cameras/${cam.id}/stream" alt="CAM-${cam.id}" class="w-full aspect-video object-cover block bg-slate-900">
                           <div class="px-2 py-1.5 flex items-center justify-between text-[10px]">
-                            <span class="font-bold text-slate-300">KAM-${cam.id}</span>
+                            <span class="font-bold text-slate-300">CAM-${cam.id}</span>
                             <span class="text-slate-500">${escapeHtml(CAMERA_ROLE_LABELS[cam.role] || cam.role)}</span>
                           </div>
                         </div>
@@ -952,74 +916,74 @@
               ` : ''}
 
               ${defectEvents.length > 0 ? `
-                <!-- Hasar / Ayırma Kaydı: kapıdan önce ayrılan gerçek ledger olayları -->
+                <!-- Defect / Separation Log -->
                 <div class="glass-card p-5 border border-slate-700/80 shadow-xl">
-                  <div class="text-sm font-bold text-slate-100 mb-1">Hasar / Ayırma Kaydı</div>
-                  <div class="text-[11px] text-slate-500 mb-3">Kapıdan önce ayrılan torbalar — her kayıt bir operatör onayı gerektirir ve itiraz edilebilir.</div>
+                  <div class="text-sm font-bold text-slate-100 mb-1">Defect / Separation Log</div>
+                  <div class="text-[11px] text-slate-500 mb-3">Bags pulled before the gate — each entry records reviewer actions and can be disputed.</div>
                   <div>
                     ${defectEvents.map(ev => `
                       <div class="defect-row" id="defect-row-${ev.event_id}">
                         <span class="t">${escapeHtml((ev.crossing_timestamp || '').substring(11, 16))}</span>
                         <span class="desc">
-                          ${escapeHtml(ev.defect_reason)} tespit edildi (TRK-${ev.track_id})
+                          ${escapeHtml(ev.defect_reason)} detected (TRK-${ev.track_id})
                           ${ev.defect_disputed
-                            ? ` → <span class="who">itiraz edildi: ${escapeHtml(ev.defect_disputed_by || '')}${ev.defect_disputed_note ? ' — ' + escapeHtml(ev.defect_disputed_note) : ''}</span>`
+                            ? ` → <span class="who">disputed by ${escapeHtml(ev.defect_disputed_by || '')}${ev.defect_disputed_note ? ' — ' + escapeHtml(ev.defect_disputed_note) : ''}</span>`
                             : ''}
                         </span>
                         ${ev.defect_disputed
-                          ? `<span class="badge bg-slate-700/60 text-slate-300 border border-slate-600/50">İTİRAZ EDİLDİ</span>`
-                          : `<span class="badge bg-amber-500/20 text-amber-300 border border-amber-500/30">HASARLI</span>
-                             <button onclick="disputeDefectEvent('${ev.event_id}')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-[11px] font-semibold">İtiraz Et</button>`}
+                          ? `<span class="badge bg-slate-700/60 text-slate-300 border border-slate-600/50">DISPUTED</span>`
+                          : `<span class="badge bg-amber-500/20 text-amber-300 border border-amber-500/30">DEFECT</span>
+                             <button onclick="disputeDefectEvent('${ev.event_id}')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-[11px] font-semibold">Dispute</button>`}
                       </div>
                     `).join('')}
                   </div>
                 </div>
               ` : ''}
 
-              <!-- Dedicated Bant & Sayım Kapısı Canlı Ayar Paneli (§5.3, §6.8) -->
+              <!-- Live Settings Panel (§5.3, §6.8) -->
               <div class="glass-card p-5 border border-slate-700/80 shadow-xl space-y-4">
                 <div class="flex items-center justify-between pb-2 border-b border-slate-800">
                   <div class="flex items-center space-x-2">
                     <span class="text-base">🔧</span>
-                    <span class="text-sm font-bold text-slate-100">Bant, Kapı ve Kamera Canlı Ayarları</span>
+                    <span class="text-sm font-bold text-slate-100">Conveyor, Gate & Camera Live Settings</span>
                   </div>
-                  <span class="badge bg-indigo-500/20 text-indigo-300 text-[10px]">Canlı Ayar</span>
+                  <span class="badge bg-indigo-500/20 text-indigo-300 text-[10px]">Live Config</span>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
                   <!-- 1. Belt Speed Slider -->
                   <div class="bg-slate-800/50 p-3.5 rounded-xl border border-slate-700/60">
                     <div class="flex justify-between items-center mb-1.5">
-                      <label class="text-slate-400 font-semibold">Bant Hızı (m/s)</label>
+                      <label class="text-slate-400 font-semibold">Belt Speed (m/s)</label>
                       <span class="font-mono text-emerald-400 font-bold text-xs" id="belt-speed-val">${beltSpeedFactor.toFixed(1)}x (${(beltSpeedFactor * 0.4).toFixed(2)} m/s)</span>
                     </div>
                     <input type="range" id="belt-speed-range" min="0.5" max="5.0" step="0.2" value="${beltSpeedFactor}" oninput="setBeltSpeed(${lineId}, this.value)" class="w-full accent-indigo-500 cursor-pointer">
                     <div class="flex justify-between text-[10px] text-slate-500 mt-1">
-                      <span>0.2 m/s (Yavaş)</span>
-                      <span>2.0 m/s (Hızlı)</span>
+                      <span>0.2 m/s (Slow)</span>
+                      <span>2.0 m/s (Fast)</span>
                     </div>
                   </div>
 
                   <!-- 2. Optical Gate Line Position Slider -->
                   <div class="bg-slate-800/50 p-3.5 rounded-xl border border-slate-700/60">
                     <div class="flex justify-between items-center mb-1.5">
-                      <label class="text-slate-400 font-semibold">Kapı Çizgisi (X Pos)</label>
+                      <label class="text-slate-400 font-semibold">Gate Line (X Pos)</label>
                       <span class="font-mono text-indigo-400 font-bold text-xs" id="gate-x-val">${opticalGateX} px</span>
                     </div>
                     <input type="range" id="gate-x-range" min="150" max="650" step="10" value="${opticalGateX}" oninput="setGateX(${lineId}, this.value)" class="w-full accent-emerald-500 cursor-pointer">
                     <div class="flex justify-between text-[10px] text-slate-500 mt-1">
-                      <span>Giriş (150px)</span>
-                      <span>Çıkış (650px)</span>
+                      <span>Inlet (150px)</span>
+                      <span>Outlet (650px)</span>
                     </div>
                   </div>
 
-                  <!-- 3. Belt Direction & Quick Calibrate -->
+                  <!-- 3. Belt Direction -->
                   <div class="bg-slate-800/50 p-3.5 rounded-xl border border-slate-700/60 flex flex-col justify-between">
                     <div>
-                      <label class="text-slate-400 font-semibold block mb-1.5">Bant Akış Yönü</label>
+                      <label class="text-slate-400 font-semibold block mb-1.5">Conveyor Direction</label>
                       <div class="grid grid-cols-2 gap-2">
-                        <button onclick="setBeltDirection(${lineId}, 1)" id="dir-lr-btn" class="py-1 px-2 rounded-lg font-bold text-xs ${beltDirection > 0 ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-400'}">➔ Soldan Sağa</button>
-                        <button onclick="setBeltDirection(${lineId}, -1)" id="dir-rl-btn" class="py-1 px-2 rounded-lg font-bold text-xs ${beltDirection < 0 ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-400'}">⬅ Sağdan Sola</button>
+                        <button onclick="setBeltDirection(${lineId}, 1)" id="dir-lr-btn" class="py-1 px-2 rounded-lg font-bold text-xs ${beltDirection > 0 ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-400'}">➔ Left to Right</button>
+                        <button onclick="setBeltDirection(${lineId}, -1)" id="dir-rl-btn" class="py-1 px-2 rounded-lg font-bold text-xs ${beltDirection < 0 ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-400'}">⬅ Right to Left</button>
                       </div>
                     </div>
                   </div>
@@ -1029,16 +993,16 @@
                 <div class="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
                   <div class="flex-1 min-w-[280px] flex items-center space-x-2">
                     <span class="text-slate-400 whitespace-nowrap">🎥 RTSP IP:</span>
-                    <input type="text" id="camera-rtsp-input" value="rtsp://192.168.1.100:554/live" class="flex-1 text-xs font-mono py-1.5" placeholder="rtsp://kullanici:sifre@ip:554/live">
-                    <button onclick="saveCameraRTSP(${lineId})" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg">Kaydet</button>
+                    <input type="text" id="camera-rtsp-input" value="rtsp://192.168.1.100:554/live" class="flex-1 text-xs font-mono py-1.5" placeholder="rtsp://user:password@ip:554/live">
+                    <button onclick="saveCameraRTSP(${lineId})" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg">Save</button>
                   </div>
 
                   <div class="flex items-center space-x-2">
                     <button onclick="triggerCalibration(${lineId}, 'motion')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg font-semibold transition">
-                      🔄 Optik Akış Kalibrasyonu
+                      🔄 Optical Flow Calibration
                     </button>
                     <button onclick="triggerCalibration(${lineId}, 'scale')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg font-semibold transition">
-                      📐 Ölçek Kalibrasyonu
+                      📐 Scale Calibration
                     </button>
                   </div>
                 </div>
@@ -1057,14 +1021,14 @@
         }
 
       } catch (e) {
-        c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-8 text-rose-300">Hata: ${escapeHtml(e.detail || e.message || 'Canlı sayım başlatılamadı.')}</div>`;
+        c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-8 text-rose-300">Error: ${escapeHtml(e.detail || e.message || 'Could not start live counting.')}</div>`;
       }
     }
 
     function toggleFeedMode(lineId, sessionId) {
       feedMode = feedMode === 'stream' ? 'canvas' : 'stream';
       renderLive(document.getElementById('app-container'));
-      toast(`Görüntü modu değiştirildi: ${feedMode === 'stream' ? 'Canlı OpenCV MJPEG Akışı' : '60 FPS Canvas Simülatörü'}`, 'info');
+      toast(`Display mode changed: ${feedMode === 'stream' ? 'Live OpenCV MJPEG Stream' : '60 FPS Canvas Simulator'}`, 'info');
     }
 
     async function switchCameraSource(lineId, val) {
@@ -1073,17 +1037,17 @@
         const rtspInput = document.getElementById('camera-rtsp-input');
         targetSource = rtspInput ? rtspInput.value.trim() : 'rtsp://192.168.1.100:554/live';
       }
-      toast(`Kamera kaynağı değiştiriliyor: ${val}...`, 'info');
+      toast(`Changing camera source: ${val}...`, 'info');
       try {
         const res = await api(`/lines/${lineId}/camera_source`, {
           method: 'POST',
           body: JSON.stringify({ source: targetSource })
         });
-        toast(res.message || 'Kamera kaynağı bağlandı!', 'success');
+        toast(res.message || 'Camera source connected!', 'success');
         feedMode = 'stream';
         renderScreen();
       } catch (e) {
-        toast(e.detail || 'Kameraya bağlanılamadı', 'error');
+        toast(e.detail || 'Could not connect to camera', 'error');
       }
     }
 
@@ -1094,7 +1058,7 @@
         const file = input.files[0];
         const formData = new FormData();
         formData.append('file', file);
-        toast(`Video yükleniyor: ${file.name}...`, 'info');
+        toast(`Uploading video: ${file.name}...`, 'info');
         try {
           const res = await fetch(`${API}/lines/${lineId}/upload_video`, {
             method: 'POST',
@@ -1102,11 +1066,11 @@
             body: formData,
           });
           const data = await res.json();
-          toast(data.message || 'Video yüklendi ve gerçek analize başlandı!', 'success');
+          toast(data.message || 'Video uploaded and analysis started!', 'success');
           feedMode = 'stream';
           renderScreen();
         } catch (e) {
-          toast('Video yüklenirken hata oluştu', 'error');
+          toast('Error uploading video', 'error');
         }
       };
       input.click();
@@ -1121,13 +1085,11 @@
       try {
         await api(`/lines/${lineId}/quick_settings`, { method: 'POST', body: JSON.stringify({ belt_speed: beltSpeedFactor * 2.5 }) });
       } catch (e) {
-        // Revert the optimistic UI update -- the backend never actually
-        // applied this belt speed, so the display must not claim it did.
         beltSpeedFactor = prevValue;
         if (el) el.textContent = `${beltSpeedFactor.toFixed(1)}x (${(beltSpeedFactor * 0.4).toFixed(2)} m/s)`;
         const range = document.getElementById('belt-speed-range');
         if (range) range.value = beltSpeedFactor;
-        toast(e.detail || 'Bant hızı kaydedilemedi. Önceki değere geri alındı.', 'error');
+        toast(e.detail || 'Failed to save belt speed. Reverted to previous value.', 'error');
       }
     }
 
@@ -1143,7 +1105,7 @@
         if (el) el.textContent = `${opticalGateX} px`;
         const range = document.getElementById('gate-x-range');
         if (range) range.value = opticalGateX;
-        toast(e.detail || 'Kapı konumu kaydedilemedi. Önceki değere geri alındı.', 'error');
+        toast(e.detail || 'Failed to save gate position. Reverted to previous value.', 'error');
       }
     }
 
@@ -1162,11 +1124,11 @@
       updateBeltDirectionButtons();
       try {
         await api(`/lines/${lineId}/quick_settings`, { method: 'POST', body: JSON.stringify({ belt_direction: [dir > 0 ? 1.0 : -1.0, 0.0] }) });
-        toast(dir > 0 ? 'Bant akış yönü: Soldan Sağa ➔' : 'Bant akış yönü: Sağdan Sola ⬅', 'info');
+        toast(dir > 0 ? 'Conveyor direction: Left to Right ➔' : 'Conveyor direction: Right to Left ⬅', 'info');
       } catch (e) {
         beltDirection = prevDir;
         updateBeltDirectionButtons();
-        toast(e.detail || 'Bant yönü kaydedilemedi. Önceki değere geri alındı.', 'error');
+        toast(e.detail || 'Failed to save belt direction. Reverted to previous value.', 'error');
       }
     }
 
@@ -1177,25 +1139,25 @@
         if (selected) {
           activeBagLabel = selected.name;
           const erpEl = document.getElementById('bag-erp-label');
-          if (erpEl) erpEl.textContent = selected.erp_material_code || 'Belirtilmemiş';
+          if (erpEl) erpEl.textContent = selected.erp_material_code || 'Unspecified';
           const dimEl = document.getElementById('bag-dim-label');
           if (dimEl) {
             const dims = selected.nominal_dims_mm || {};
-            dimEl.textContent = (dims.width && dims.length && dims.height) ? `${dims.width} x ${dims.length} x ${dims.height} mm` : 'Belirtilmemiş';
+            dimEl.textContent = (dims.width && dims.length && dims.height) ? `${dims.width} x ${dims.length} x ${dims.height} mm` : 'Unspecified';
           }
 
-          if (selected.name.toLowerCase().includes('beyaz') || selected.name.toLowerCase().includes('polietilen') || selected.name.toLowerCase().includes('alçı')) {
+          if (selected.name.toLowerCase().includes('white') || selected.name.toLowerCase().includes('poly') || selected.name.toLowerCase().includes('gypsum')) {
             activeBagColor = 'poly_white';
-          } else if (selected.name.toLowerCase().includes('harç') || selected.name.toLowerCase().includes('gri')) {
+          } else if (selected.name.toLowerCase().includes('mortar') || selected.name.toLowerCase().includes('gray')) {
             activeBagColor = 'mortar_gray';
           } else {
             activeBagColor = 'kraft_yellow';
           }
         }
         await api(`/sessions/${sessionId}`, { method: 'PATCH', body: JSON.stringify({ product_profile_id: parseInt(prodId) }) });
-        toast(`Aktif çuval profili güncellendi: ${activeBagLabel}`, 'success');
+        toast(`Active bag profile updated: ${activeBagLabel}`, 'success');
       } catch (e) {
-        toast(e.detail || 'Çuval profili güncellenemedi', 'error');
+        toast(e.detail || 'Could not update bag profile', 'error');
       }
     }
 
@@ -1212,7 +1174,7 @@
       const weight = parseFloat(document.getElementById('modal-bag-weight').value) || 50.0;
       const color = document.getElementById('modal-bag-color').value;
 
-      if (!name) return toast('Çuval adı giriniz', 'error');
+      if (!name) return toast('Please enter bag name', 'error');
 
       try {
         const sites = await api('/sites');
@@ -1227,10 +1189,10 @@
           })
         });
         document.getElementById('bag-modal').classList.add('hidden');
-        toast(`Yeni çuval profili oluşturuldu: ${newProf.name}`, 'success');
+        toast(`New bag profile created: ${newProf.name}`, 'success');
         renderScreen();
       } catch (e) {
-        toast(e.detail || 'Çuval profili kaydedilemedi', 'error');
+        toast(e.detail || 'Could not save bag profile', 'error');
       }
     }
 
@@ -1238,9 +1200,9 @@
       const rtsp = document.getElementById('camera-rtsp-input').value.trim();
       try {
         await api(`/lines/${lineId}/quick_settings`, { method: 'POST', body: JSON.stringify({ rtsp_url: rtsp }) });
-        toast('Kamera RTSP akış adresi başarıyla kaydedildi', 'success');
+        toast('Camera RTSP stream URL saved successfully', 'success');
       } catch (e) {
-        toast(e.detail || 'Kaydedilemedi', 'error');
+        toast(e.detail || 'Failed to save', 'error');
       }
     }
 
@@ -1273,7 +1235,6 @@
         if (!audioCtx) return;
 
         if (type === 'count' || type === 'normal' || type === true) {
-          // Crisp 880Hz -> 1760Hz chime
           const osc = audioCtx.createOscillator();
           const gain = audioCtx.createGain();
           osc.type = 'sine';
@@ -1286,7 +1247,6 @@
           osc.start();
           osc.stop(audioCtx.currentTime + 0.09);
         } else if (type === 'multi') {
-          // Two-tone chime 880Hz -> 1174Hz
           const osc = audioCtx.createOscillator();
           const gain = audioCtx.createGain();
           osc.type = 'triangle';
@@ -1299,7 +1259,6 @@
           osc.start();
           osc.stop(audioCtx.currentTime + 0.15);
         } else if (type === 'defect') {
-          // 220Hz saw alarm buzzer
           const osc = audioCtx.createOscillator();
           const gain = audioCtx.createGain();
           osc.type = 'sawtooth';
@@ -1322,7 +1281,7 @@
           localMediaStream = null;
         }
         isWebRTCActive = false;
-        toast('WebRTC kamerası durduruldu', 'info');
+        toast('WebRTC camera stopped', 'info');
       } else {
         try {
           let video = document.getElementById('webcamVideo');
@@ -1342,9 +1301,9 @@
           await video.play();
           isWebRTCActive = true;
           feedMode = 'canvas';
-          toast('📷 Canlı WebRTC kamerası bağlandı (60 FPS)', 'success');
+          toast('📷 Live WebRTC camera connected (60 FPS)', 'success');
         } catch (err) {
-          toast('Kameraya erişilemedi: ' + (err.message || err.name), 'error');
+          toast('Could not access camera: ' + (err.message || err.name), 'error');
           isWebRTCActive = false;
         }
       }
@@ -1355,7 +1314,7 @@
       isDraggingGateEnabled = !isDraggingGateEnabled;
       const btn = document.getElementById('drag-gate-btn');
       if (btn) btn.className = `px-2.5 py-1 rounded ${isDraggingGateEnabled ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300'} border border-slate-700 font-semibold flex items-center space-x-1 transition`;
-      toast(isDraggingGateEnabled ? '↔️ Lazer kapısı taşıma modu aktif (Görüntüde sürükleyin)' : 'Lazer kapısı kilitlendi', 'info');
+      toast(isDraggingGateEnabled ? '↔️ Laser gate move mode active (drag on screen)' : 'Laser gate locked', 'info');
     }
 
     let roiLineId = 1;
@@ -1369,38 +1328,27 @@
       if (img) img.classList.toggle('cursor-crosshair', roiDrawMode);
       if (roiDrawMode) {
         roiPoints = [];
-        toast('✏️ Sayım Alanı (ROI): Ekrana tıklayarak köşe noktalarını belirleyin (en az 3, en fazla 6 nokta)', 'info');
+        toast('✏️ Counting Area (ROI): Click to set vertices (3 to 6 points)', 'info');
       } else if (roiPoints.length >= 3) {
         finishRoiDraw();
       } else {
-        toast('Sayım Alanı (ROI) iptal edildi (en az 3 nokta gerekli)', 'info');
+        toast('Counting Area (ROI) cancelled (at least 3 points required)', 'info');
         roiPoints = [];
       }
     }
 
-    // Real backend submission -- POSTs the drawn polygon (normalized to
-    // [0,1] against whichever canvas/image it was drawn on) to
-    // /lines/{lineId}/roi, which merges it into the line's active config
-    // and re-activates a bundle carrying it. CountingEngine.process_frame()
-    // (packages/cs_counting/engine.py) then actually filters detections
-    // outside the polygon -- previously drawing an ROI called no API at all
-    // and just showed a fake "kaydedildi" success toast.
     async function submitRoiPolygon(lineId, normalizedPoints) {
       try {
         const res = await api(`/lines/${lineId}/roi`, {
           method: 'POST',
           body: JSON.stringify({ roi_polygon: normalizedPoints })
         });
-        toast(`✓ Sayım Alanı (ROI) kaydedildi ve aktif edildi (Config #${res.config_version_id})`, 'success');
+        toast(`✓ Counting Area (ROI) saved and activated (Config #${res.config_version_id})`, 'success');
       } catch (e) {
-        toast(e.detail || 'Sayım Alanı (ROI) kaydedilemedi', 'error');
+        toast(e.detail || 'Could not save Counting Area (ROI)', 'error');
       }
     }
 
-    // Normalizes whichever pixel space the points were drawn in (the demo
-    // canvas, 760x300, or the real live stream image's native resolution)
-    // to [0,1] fractions -- ROI is a fractional region of the frame, not
-    // exact pixels, so this is correct regardless of which view was used.
     function finishRoiDraw() {
       const canvas = document.getElementById('conveyorCanvas');
       const img = document.getElementById('liveVideoFeed');
@@ -1427,37 +1375,25 @@
       if (img) img.classList.toggle('cursor-crosshair', perspectiveMode);
       if (perspectiveMode) {
         warpPoints = [];
-        toast('📐 Kuşbakışı Perspektif: Konveyörün 4 köşesine sırayla tıklayın [1, 2, 3, 4]', 'info');
+        toast('📐 Top-Down Perspective: Click the 4 corners of the conveyor in order [1, 2, 3, 4]', 'info');
       } else if (warpPoints.length < 4) {
-        toast('Perspektif kalibrasyonu iptal edildi (4 nokta tamamlanmadı)', 'info');
+        toast('Perspective calibration cancelled (4 points required)', 'info');
         warpPoints = [];
       }
     }
 
-    // Real backend homography submission -- POSTs the 4 marked source points
-    // to /calibrations/{lineId}/perspective, which computes a real cv2
-    // homography and applies it to every subsequent real camera frame
-    // before detection (see packages/cs_vision/calibration.py). Without
-    // this call, marking points was pure decoration: nothing was ever sent
-    // to the backend and anchor_grid()'s fixed single-camera assumption
-    // stayed in effect regardless of what the operator clicked.
     async function submitPerspectiveCalibration(lineId, points) {
       try {
         const res = await api(`/calibrations/${lineId}/perspective`, {
           method: 'POST',
           body: JSON.stringify({ roi_src_points: points })
         });
-        toast('✓ 4-Nokta Homografi Perspektif Düzeltmesi Aktif! (Kalibrasyon #' + res.calibration_id + ')', 'success');
+        toast('✓ 4-Point Homography Perspective Correction Active! (Calibration #' + res.calibration_id + ')', 'success');
       } catch (e) {
-        toast(e.detail || 'Perspektif kalibrasyonu kaydedilemedi', 'error');
+        toast(e.detail || 'Could not save perspective calibration', 'error');
       }
     }
 
-    // Live MJPEG stream frames are rendered at CANVAS_SIZE (640x640, see
-    // packages/cs_vision/calibration.py) regardless of the <img>'s displayed
-    // CSS size -- scale click coordinates from displayed pixels to that
-    // native frame resolution so the points sent to the backend match what
-    // the detector actually sees.
     function handleStreamClick(event, lineId) {
       if (!perspectiveMode && !roiDrawMode) return;
       const img = event.target;
@@ -1469,7 +1405,7 @@
 
       if (roiDrawMode) {
         roiPoints.push([x, y]);
-        toast(`Nokta ${roiPoints.length}/6 işaretlendi (bitirmek için 'Sayım Alanı' butonuna tekrar basın)`, 'info');
+        toast(`Point ${roiPoints.length}/6 marked (click 'Counting Area' again to finish)`, 'info');
         if (roiPoints.length >= 6) {
           roiDrawMode = false;
           img.classList.remove('cursor-crosshair');
@@ -1481,7 +1417,7 @@
       }
 
       warpPoints.push([x, y]);
-      toast(`Nokta ${warpPoints.length}/4 işaretlendi`, 'info');
+      toast(`Point ${warpPoints.length}/4 marked`, 'info');
       if (warpPoints.length >= 4) {
         perspectiveMode = false;
         img.classList.remove('cursor-crosshair');
@@ -1495,26 +1431,26 @@
       const icon = document.getElementById('audio-icon');
       const label = document.getElementById('audio-label');
       if (icon) icon.textContent = soundEnabled ? '🔊' : '🔇';
-      if (label) label.textContent = soundEnabled ? 'Ses Açık' : 'Sessiz';
+      if (label) label.textContent = soundEnabled ? 'Sound On' : 'Muted';
 
       const railIcon = document.getElementById('audio-icon-rail');
       const railLabel = document.getElementById('audio-label-rail');
       if (railIcon) railIcon.textContent = soundEnabled ? '🔊' : '🔇';
-      if (railLabel) railLabel.textContent = soundEnabled ? 'Ses Açık' : 'Sessiz';
+      if (railLabel) railLabel.textContent = soundEnabled ? 'Sound On' : 'Muted';
 
       const liveBtn = document.getElementById('audio-toggle-btn-live');
       const liveIcon = document.getElementById('audio-icon-live');
       const liveLabel = document.getElementById('audio-label-live');
       if (liveBtn) liveBtn.className = `px-2.5 py-1 rounded ${soundEnabled ? 'bg-teal-600/30 text-teal-300 border-teal-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'} border font-semibold flex items-center space-x-1 transition`;
       if (liveIcon) liveIcon.textContent = soundEnabled ? '🔊' : '🔇';
-      if (liveLabel) liveLabel.textContent = soundEnabled ? 'Ses Açık' : 'Sessiz';
+      if (liveLabel) liveLabel.textContent = soundEnabled ? 'Sound On' : 'Muted';
     }
 
     function toggleAudioFeedback() {
       soundEnabled = !soundEnabled;
       initAudio();
       updateAudioUI();
-      toast(soundEnabled ? '🔊 Sesli endüstriyel ikaz aktif' : '🔇 Ses kapatıldı', 'info');
+      toast(soundEnabled ? '🔊 Audible industrial feedback enabled' : '🔇 Audio muted', 'info');
     }
 
     // ===================== CANVAS ANIMATION & EVENT BINDINGS =====================
@@ -1528,7 +1464,6 @@
       bagsOnBelt.push({ x: 80, y: 85, width: 85, height: 120, label: activeBagLabel, id: nextTrackId++, hasPassed: false, isDefect: false, isMulti: false });
       bagsOnBelt.push({ x: 270, y: 85, width: 85, height: 120, label: activeBagLabel, id: nextTrackId++, hasPassed: false, isDefect: false, isMulti: false });
 
-      // Mouse drag and draw handlers on canvas
       canvas.onmousedown = (e) => {
         const rect = canvas.getBoundingClientRect();
         const mouseX = ((e.clientX - rect.left) / rect.width) * canvas.width;
@@ -1536,7 +1471,7 @@
 
         if (roiDrawMode) {
           roiPoints.push([Math.round(mouseX), Math.round(mouseY)]);
-          toast(`Nokta ${roiPoints.length}/6 işaretlendi (bitirmek için tekrar tıklayın)`, 'info');
+          toast(`Point ${roiPoints.length}/6 marked (click again to finish)`, 'info');
           if (roiPoints.length >= 6) {
             roiDrawMode = false;
             const btn = document.getElementById('roi-draw-btn');
@@ -1548,7 +1483,7 @@
 
         if (perspectiveMode) {
           warpPoints.push([Math.round(mouseX), Math.round(mouseY)]);
-          toast(`Nokta ${warpPoints.length}/4 işaretlendi`, 'info');
+          toast(`Point ${warpPoints.length}/4 marked`, 'info');
           if (warpPoints.length >= 4) {
             perspectiveMode = false;
             const btn = document.getElementById('warp-btn');
@@ -1583,24 +1518,19 @@
 
         const webcam = document.getElementById('webcamVideo');
         if (isWebRTCActive && webcam && webcam.readyState >= 2) {
-          // Render Real WebRTC Video Frame
           ctx.drawImage(webcam, 0, 0, canvas.width, canvas.height);
-          // Dark tint for contrast
           ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
         } else {
-          // 1. Conveyor Belt Background
           ctx.fillStyle = '#0f172a';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-          // Conveyor frame
           ctx.fillStyle = '#1e293b';
           ctx.fillRect(0, 50, canvas.width, 200);
           ctx.strokeStyle = '#334155';
           ctx.lineWidth = 4;
           ctx.strokeRect(0, 50, canvas.width, 200);
 
-          // Moving belt texture lines
           const step = (isAutoSimRunning ? 1.5 : 0.6) * beltSpeedFactor * beltDirection;
           beltOffset = (beltOffset + step) % 40;
           ctx.strokeStyle = '#334155';
@@ -1612,13 +1542,11 @@
             ctx.stroke();
           }
 
-          // Direction text
           ctx.fillStyle = 'rgba(100, 116, 139, 0.22)';
           ctx.font = 'bold 20px monospace';
-          ctx.fillText(beltDirection > 0 ? 'KONVEYÖR AKIŞ YÖNÜ ➔ ➔ ➔' : '⬅ ⬅ ⬅ KONVEYÖR AKIŞ YÖNÜ', 220, 155);
+          ctx.fillText(beltDirection > 0 ? 'CONVEYOR FLOW DIRECTION ➔ ➔ ➔' : '⬅ ⬅ ⬅ CONVEYOR FLOW DIRECTION', 200, 155);
         }
 
-        // 2. Draw ROI Polygon
         if (roiPoints.length > 1) {
           ctx.save();
           ctx.strokeStyle = '#06b6d4';
@@ -1632,8 +1560,7 @@
           ctx.fillStyle = 'rgba(6, 182, 212, 0.08)';
           ctx.fill();
           ctx.setLineDash([]);
-          // Corner handles
-          roiPoints.forEach((pt, idx) => {
+          roiPoints.forEach((pt) => {
             ctx.fillStyle = '#06b6d4';
             ctx.beginPath();
             ctx.arc(pt[0], pt[1], 4, 0, Math.PI * 2);
@@ -1642,7 +1569,6 @@
           ctx.restore();
         }
 
-        // 3. Draw 4-Point Homography Perspective Corners
         if (warpPoints.length > 0) {
           ctx.save();
           ctx.strokeStyle = '#a855f7';
@@ -1664,7 +1590,6 @@
           ctx.restore();
         }
 
-        // 4. Optical Gate Line (X = opticalGateX)
         const gateX = opticalGateX;
         ctx.save();
         ctx.strokeStyle = '#10b981';
@@ -1677,15 +1602,13 @@
         ctx.stroke();
         ctx.restore();
 
-        // Gate Badge Tag (Click/Drag Handle)
         ctx.fillStyle = '#059669';
         ctx.fillRect(gateX - 50, 22, 100, 22);
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 10px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('↔️ SAYIM KAPISI', gateX, 37);
+        ctx.fillText('↔️ COUNTING GATE', gateX, 37);
 
-        // 5. Move and Render Bags
         const speed = (isAutoSimRunning ? 2.0 : 0.8) * beltSpeedFactor * beltDirection;
         for (let i = bagsOnBelt.length - 1; i >= 0; i--) {
           const bag = bagsOnBelt[i];
@@ -1713,7 +1636,6 @@
           ctx.roundRect(bag.x + 4, bag.y + 4, bag.width, bag.height, 12);
           ctx.fill();
 
-          // Bag Gradient
           const grad = ctx.createLinearGradient(bag.x, bag.y, bag.x + bag.width, bag.y + bag.height);
           if (bag.isDefect) {
             grad.addColorStop(0, '#f87171');
@@ -1737,7 +1659,6 @@
           ctx.roundRect(bag.x, bag.y, bag.width, bag.height, 10);
           ctx.fill();
 
-          // Border & Badge
           if (bag.isDefect) {
             ctx.strokeStyle = '#ef4444';
             ctx.lineWidth = 3;
@@ -1747,7 +1668,7 @@
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 9px sans-serif';
             ctx.textAlign = 'left';
-            ctx.fillText(`🚨 HASARLI / DEFECT ${bag.id}`, bag.x, bag.y - 9);
+            ctx.fillText(`🚨 DEFECT ${bag.id}`, bag.x, bag.y - 9);
           } else if (bag.isMulti) {
             ctx.strokeStyle = '#f59e0b';
             ctx.lineWidth = 3;
@@ -1757,7 +1678,7 @@
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 9px sans-serif';
             ctx.textAlign = 'left';
-            ctx.fillText(`📦 2x BİTİŞİK ÇUVAL`, bag.x, bag.y - 9);
+            ctx.fillText(`📦 2x MERGED BAGS`, bag.x, bag.y - 9);
           } else {
             ctx.strokeStyle = activeBagColor === 'poly_white' ? '#94a3b8' : activeBagColor === 'mortar_gray' ? '#475569' : '#eab308';
             ctx.lineWidth = 2.5;
@@ -1780,7 +1701,7 @@
           ctx.fillStyle = bag.isDefect ? '#ffffff' : (activeBagColor === 'poly_white' ? '#1e293b' : activeBagColor === 'mortar_gray' ? '#0f172a' : '#713f12');
           ctx.font = 'bold 10px sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText(bag.isDefect ? 'YIRTIK / PATLAK' : bag.label.slice(0, 16), bag.x + bag.width / 2, bag.y + bag.height / 2 - 6);
+          ctx.fillText(bag.isDefect ? 'DAMAGED / TORN' : bag.label.slice(0, 16), bag.x + bag.width / 2, bag.y + bag.height / 2 - 6);
           ctx.font = '9px sans-serif';
           ctx.fillText('FABRIC #2026', bag.x + bag.width / 2, bag.y + bag.height / 2 + 10);
           ctx.restore();
@@ -1868,7 +1789,7 @@
           y: 85,
           width: 175,
           height: 120,
-          label: '2x Bitişik Çuval',
+          label: '2x Merged Bags',
           id: nextTrackId++,
           hasPassed: false,
           isDefect: false,
@@ -1880,7 +1801,7 @@
           y: 90,
           width: 80,
           height: 110,
-          label: 'Patlak Çuval',
+          label: 'Damaged Bag',
           id: nextTrackId++,
           hasPassed: false,
           isDefect: true,
@@ -1905,12 +1826,12 @@
           updateCounterUI(res.counted_total, res.area_estimate_total);
           playBeep(type);
           triggerGateCrossingVisual(type);
-          if (type === 'multi') toast('📦 2x Bitişik Çuval Ayrıştırıldı (+2)', 'warn');
-          else if (type === 'defect') toast('🚨 Hasarlı / Patlak Çuval İkazı! (Defect Alert)', 'error');
-          else if (type === 'rollback') toast('🔁 Çift Sayım Düzeltildi: -1', 'warn');
-          else toast('⚡ +1 Çuval Geçirildi', 'success');
+          if (type === 'multi') toast('📦 2x Merged Bags Disambiguated (+2)', 'warn');
+          else if (type === 'defect') toast('🚨 Damaged Bag Warning! (Defect Alert)', 'error');
+          else if (type === 'rollback') toast('🔁 Double-Count Corrected: -1', 'warn');
+          else toast('⚡ +1 Bag Passed', 'success');
         })
-        .catch(e => toast(e.detail || 'İşlem yapılamadı', 'error'));
+        .catch(e => toast(e.detail || 'Action failed', 'error'));
     }
 
     // ===================== DISPATCH & RECONCILIATION MANIFEST MODAL (§5.7, §5.8) =====================
@@ -1919,7 +1840,7 @@
       const content = document.getElementById('dispatch-report-content');
       if (!modal || !content) return;
 
-      content.innerHTML = '<div class="text-center py-12"><div class="spinner"></div><div class="text-xs text-slate-400 mt-2">İrsaliye tutanağı hazırlanıyor...</div></div>';
+      content.innerHTML = '<div class="text-center py-12"><div class="spinner"></div><div class="text-xs text-slate-400 mt-2">Preparing dispatch report...</div></div>';
       modal.classList.remove('hidden');
 
       try {
@@ -1932,8 +1853,8 @@
                 <div class="flex items-center space-x-2">
                   <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white text-lg">${escapeHtml((report.site_name || '?').charAt(0).toUpperCase())}</div>
                   <div>
-                    <h1 class="text-lg font-black tracking-tight text-white">${escapeHtml(report.site_name || 'Tesis Belirtilmemiş')}${report.line_name ? ' — ' + escapeHtml(report.line_name) : ''}</h1>
-                    <div class="text-[11px] text-slate-400">Sevkiyat ve Otomatik Sayım Mutabakat Tutanağı</div>
+                    <h1 class="text-lg font-black tracking-tight text-white">${escapeHtml(report.site_name || 'Unspecified Facility')}${report.line_name ? ' — ' + escapeHtml(report.line_name) : ''}</h1>
+                    <div class="text-[11px] text-slate-400">Dispatch and Automated Count Reconciliation Report</div>
                   </div>
                 </div>
               </div>
@@ -1946,44 +1867,42 @@
             <!-- Shipment Metadata Grid -->
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
               <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
-                <span class="text-slate-400 block text-[10px] uppercase">Tır Plakası</span>
+                <span class="text-slate-400 block text-[10px] uppercase">Vehicle Plate</span>
                 <span class="font-bold text-white text-sm font-mono mt-0.5">${escapeHtml(report.truck_plate || '—')}</span>
               </div>
               <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
-                <span class="text-slate-400 block text-[10px] uppercase">Şoför & Taşıyıcı</span>
+                <span class="text-slate-400 block text-[10px] uppercase">Driver & Carrier</span>
                 <span class="font-bold text-white text-xs mt-0.5">${escapeHtml(report.driver_name || '—')}</span>
                 <span class="text-[10px] text-slate-400 block">${escapeHtml(report.carrier_company || '—')}</span>
               </div>
               <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
-                <span class="text-slate-400 block text-[10px] uppercase">Ürün & Malzeme</span>
+                <span class="text-slate-400 block text-[10px] uppercase">Product & Material</span>
                 <span class="font-bold text-indigo-300 text-xs mt-0.5">${escapeHtml(report.product_name || '—')}</span>
                 <span class="text-[10px] text-slate-400 block font-mono">${escapeHtml(report.erp_sku || '—')}</span>
               </div>
               <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
-                <span class="text-slate-400 block text-[10px] uppercase">Sevkiyat Referansı</span>
+                <span class="text-slate-400 block text-[10px] uppercase">Dispatch Reference</span>
                 <span class="font-bold text-white text-xs font-mono mt-0.5">${escapeHtml(report.external_ref || '—')}</span>
               </div>
             </div>
 
-            <!-- Quantitative Reconciliation: declared vs counted, real numbers only.
-                 No tolerance % is fabricated here -- diff==0/>0/<0 is exactly what
-                 reconciliation_status already reflects server-side. -->
+            <!-- Quantitative Reconciliation -->
             <div class="border border-slate-700/80 rounded-xl overflow-hidden bg-slate-950/40 p-4">
               ${report.target_count === null ? `
-                <div class="text-xs text-slate-500">Bu oturum için bir sipariş hedefi girilmemiş — bildirilen/sayılan karşılaştırması yapılamıyor.</div>
-                <div class="mt-2 text-2xl font-black text-slate-100 font-mono">${report.counted_total} <span class="text-xs font-sans text-slate-500 font-normal">adet sayıldı</span></div>
+                <div class="text-xs text-slate-500">No order target specified for this session — cannot compare declared vs counted.</div>
+                <div class="mt-2 text-2xl font-black text-slate-100 font-mono">${report.counted_total} <span class="text-xs font-sans text-slate-500 font-normal">units counted</span></div>
               ` : `
                 <div class="flex items-end justify-between mb-3">
                   <div>
-                    <div class="text-[10px] text-slate-500 uppercase tracking-wide">Sipariş Hedefi</div>
+                    <div class="text-[10px] text-slate-500 uppercase tracking-wide">Order Target</div>
                     <div class="text-xl font-black text-slate-200 font-mono">${report.target_count}</div>
                   </div>
                   <div class="text-center">
-                    <div class="text-[10px] uppercase tracking-wide ${report.difference === 0 ? 'text-slate-500' : 'text-amber-400'}">Fark</div>
+                    <div class="text-[10px] uppercase tracking-wide ${report.difference === 0 ? 'text-slate-500' : 'text-amber-400'}">Difference</div>
                     <div class="text-lg font-bold font-mono ${report.difference === 0 ? 'text-slate-400' : 'text-amber-400'}">${report.difference > 0 ? '+' + report.difference : report.difference}</div>
                   </div>
                   <div class="text-right">
-                    <div class="text-[10px] text-slate-500 uppercase tracking-wide">Doğrulanan Sayım (Ledger)</div>
+                    <div class="text-[10px] text-slate-500 uppercase tracking-wide">Verified Count (Ledger)</div>
                     <div class="text-xl font-black text-indigo-300 font-mono">${report.counted_total}</div>
                   </div>
                 </div>
@@ -1992,8 +1911,8 @@
                 </div>
                 <div class="flex items-center justify-between mt-3 text-[11px]">
                   <div class="flex items-center gap-4 text-slate-400">
-                    <span>🚫 Hasarlı/Ayıklanan: <b class="text-slate-200 font-mono">${report.damaged_count}</b></span>
-                    <span>🧪 Simülasyon: <b class="text-slate-200 font-mono">${report.simulated_count}</b></span>
+                    <span>🚫 Damaged/Removed: <b class="text-slate-200 font-mono">${report.damaged_count}</b></span>
+                    <span>🧪 Simulation: <b class="text-slate-200 font-mono">${report.simulated_count}</b></span>
                   </div>
                   <span class="badge ${report.difference === 0 ? 'bg-slate-700/60 text-slate-300 border border-slate-600/50' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'} font-bold">
                     ${escapeHtml(report.reconciliation_status)}
@@ -2007,41 +1926,40 @@
               <!-- Digital Seal -->
               <div class="sm:col-span-1 bg-slate-800/40 p-3 rounded-xl border border-slate-700/60 flex items-center space-x-3">
                 <div class="w-12 h-12 bg-white rounded p-1 flex items-center justify-center shrink-0">
-                  <!-- QR Code Icon -->
                   <svg class="w-10 h-10 text-slate-900" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M2 2h8v8H2V2zm2 2v4h4V4H4zm10-2h8v8h-8V2zm2 2v4h4V4h-4zM2 14h8v8H2v-8zm2 2v4h4v-4H4zm14 0h4v4h-4v-4zm-4 4h4v4h-4v-4zm4-4h4v4h-4v-4zm-4-4h4v4h-4v-4z"/>
                   </svg>
                 </div>
                 <div class="overflow-hidden">
-                  <span class="text-[9px] text-slate-400 uppercase font-semibold block">Değişmez Defter Mührü (SHA-256)</span>
+                  <span class="text-[9px] text-slate-400 uppercase font-semibold block">Immutable Ledger Seal (SHA-256)</span>
                   <span class="text-[9px] text-indigo-300 font-mono break-all">${escapeHtml((report.crypto_seal || '').substring(0, 24))}...</span>
                 </div>
               </div>
 
               <!-- Signatures -->
               <div class="border border-slate-700/60 p-3 rounded-xl text-center">
-                <div class="text-[10px] text-slate-400 uppercase font-semibold mb-6">Kantar / Sevkiyat Operatörü</div>
-                <div class="text-xs font-bold text-slate-200">${escapeHtml(auth.username || 'Operatör')} (İmza)</div>
+                <div class="text-[10px] text-slate-400 uppercase font-semibold mb-6">Weighbridge / Dispatch Operator</div>
+                <div class="text-xs font-bold text-slate-200">${escapeHtml(auth.username || 'Operator')} (Signature)</div>
               </div>
 
               <div class="border border-slate-700/60 p-3 rounded-xl text-center">
-                <div class="text-[10px] text-slate-400 uppercase font-semibold mb-6">Tır Şoförü / Teslim Alan</div>
-                <div class="text-xs font-bold text-slate-200">${escapeHtml(report.driver_name || '—')} (İmza)</div>
+                <div class="text-[10px] text-slate-400 uppercase font-semibold mb-6">Truck Driver / Consignee</div>
+                <div class="text-xs font-bold text-slate-200">${escapeHtml(report.driver_name || '—')} (Signature)</div>
               </div>
             </div>
 
             <!-- Print Actions -->
             <div class="flex justify-end space-x-2 pt-4 border-t border-slate-800 print:hidden">
-              <button onclick="closeDispatchReportModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl">Kapat</button>
+              <button onclick="closeDispatchReportModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl">Close</button>
               <button onclick="window.print()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg flex items-center space-x-1.5">
                 <span>🖨️</span>
-                <span>Raporu Yazdır / PDF İndir</span>
+                <span>Print Report / Download PDF</span>
               </button>
             </div>
           </div>
         `;
       } catch (e) {
-        content.innerHTML = `<div class="p-6 text-rose-300">Rapor oluşturulamadı: ${escapeHtml(e.detail || e.message)}</div>`;
+        content.innerHTML = `<div class="p-6 text-rose-300">Could not generate report: ${escapeHtml(e.detail || e.message)}</div>`;
       }
     }
 
@@ -2077,25 +1995,25 @@
             target_count: 200
           })
         });
-        toast('Yeni sevkiyat oturumu açıldı', 'success');
+        toast('New dispatch session opened', 'success');
         renderScreen();
       } catch (e) {
-        toast(e.detail || 'Oturum açılamadı', 'error');
+        toast(e.detail || 'Could not start session', 'error');
       }
     }
 
     async function sessionAction(id, action) {
       try {
         await api(`/sessions/${id}/${action}`, { method: 'POST' });
-        toast(action === 'pause' ? 'Oturum duraklatıldı' : action === 'resume' ? 'Oturum devam ediyor' : 'Oturum kapatıldı');
+        toast(action === 'pause' ? 'Session paused' : action === 'resume' ? 'Session resumed' : 'Session closed');
         renderScreen();
       } catch (e) {
-        toast(e.detail || 'İşlem başarısız', 'error');
+        toast(e.detail || 'Operation failed', 'error');
       }
     }
 
     async function confirmCloseSession(id) {
-      if (confirm(`Oturum #${id} kapatılsın ve ERP mutabakatına hazır hale getirilsin mi?`)) {
+      if (confirm(`Close Session #${id} and prepare for ERP reconciliation?`)) {
         await sessionAction(id, 'close');
       }
     }
@@ -2111,81 +2029,81 @@
         ]);
 
         const statusMap = {
-          open: { label: 'AÇIK', color: 'bg-blue-500/20 text-blue-300 border border-blue-500/30' },
-          counting: { label: 'SAYIYOR', color: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' },
-          paused: { label: 'DURAKLATILDI', color: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' },
-          closed: { label: 'KAPANDI', color: 'bg-slate-700/50 text-slate-300 border border-slate-600/40' },
-          reconcile_required: { label: 'MUTABAKAT', color: 'bg-rose-500/20 text-rose-300 border border-rose-500/30' },
+          open: { label: 'OPEN', color: 'bg-blue-500/20 text-blue-300 border border-blue-500/30' },
+          counting: { label: 'COUNTING', color: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' },
+          paused: { label: 'PAUSED', color: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' },
+          closed: { label: 'CLOSED', color: 'bg-slate-700/50 text-slate-300 border border-slate-600/40' },
+          reconcile_required: { label: 'RECONCILE', color: 'bg-rose-500/20 text-rose-300 border border-rose-500/30' },
         };
 
         c.innerHTML = `
           <div class="glass-card p-6 shadow-2xl border border-slate-700/80">
             <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
               <div>
-                <h2 class="text-xl font-black text-white tracking-tight">Sevkiyat Oturumları Yönetimi</h2>
-                <p class="text-xs text-slate-400 mt-0.5">Hat bazlı açılan sevkiyat emirleri, hedef adetler ve değişmez sayım defteri kayıtları.</p>
+                <h2 class="text-xl font-black text-white tracking-tight">Dispatch Sessions Management</h2>
+                <p class="text-xs text-slate-400 mt-0.5">Line-based dispatch orders, target quantities, and immutable count event ledger records.</p>
               </div>
               <div class="flex items-center space-x-2">
                 <button onclick="exportSessionsCSV()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl border border-slate-700 transition">
-                  📥 CSV İndir
+                  📥 Export CSV
                 </button>
                 <button onclick="document.getElementById('new-sess-drawer').classList.toggle('hidden')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md transition">
-                  + Yeni Oturum Aç
+                  + New Session
                 </button>
               </div>
             </div>
 
             <!-- New Session Form Drawer -->
             <div id="new-sess-drawer" class="hidden mb-6 p-5 bg-slate-800/80 rounded-2xl border border-indigo-500/40 shadow-xl space-y-4">
-              <h3 class="text-sm font-bold text-indigo-300">➕ Yeni Sevkiyat Oturumu Başlat</h3>
+              <h3 class="text-sm font-bold text-indigo-300">➕ Start New Dispatch Session</h3>
               <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
                 <div>
-                  <label class="text-xs text-slate-400 font-semibold block mb-1">Sayım Hattı</label>
+                  <label class="text-xs text-slate-400 font-semibold block mb-1">Counting Line</label>
                   <select id="new-sess-line" class="w-full">
                     ${lines.map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('')}
-                    ${lines.length === 0 ? '<option value="">Hat bulunamadı</option>' : ''}
+                    ${lines.length === 0 ? '<option value="">No lines found</option>' : ''}
                   </select>
                 </div>
                 <div>
-                  <label class="text-xs text-slate-400 font-semibold block mb-1">Ürün Profili</label>
+                  <label class="text-xs text-slate-400 font-semibold block mb-1">Product Profile</label>
                   <select id="new-sess-prod" class="w-full">
                     ${products.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}
-                    ${products.length === 0 ? '<option value="">Ürün bulunamadı</option>' : ''}
+                    ${products.length === 0 ? '<option value="">No products found</option>' : ''}
                   </select>
                 </div>
                 <div>
-                  <label class="text-xs text-slate-400 font-semibold block mb-1">İrsaliye / Sevkiyat No</label>
-                  <input type="text" id="new-sess-ref" placeholder="Örn. IRS-2026-0845" class="w-full">
+                  <label class="text-xs text-slate-400 font-semibold block mb-1">Waybill / Dispatch No</label>
+                  <input type="text" id="new-sess-ref" placeholder="e.g. DISPATCH-2026-0845" class="w-full">
                 </div>
                 <div>
-                  <label class="text-xs text-slate-400 font-semibold block mb-1">Hedef Çuval Adedi</label>
+                  <label class="text-xs text-slate-400 font-semibold block mb-1">Target Bag Quantity</label>
                   <input type="number" id="new-sess-target" value="250" class="w-full">
                 </div>
               </div>
               <div class="flex space-x-3 pt-2">
                 <button onclick="submitNewSession()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md transition">
-                  Oturumu Başlat
+                  Start Session
                 </button>
                 <button onclick="document.getElementById('new-sess-drawer').classList.add('hidden')" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded-xl transition">
-                  İptal
+                  Cancel
                 </button>
               </div>
             </div>
 
             <!-- Sessions Table -->
-            ${sessions.length === 0 ? '<div class="text-center py-12 text-slate-400 text-sm">Henüz kayıtlı oturum bulunmuyor.</div>' : `
+            ${sessions.length === 0 ? '<div class="text-center py-12 text-slate-400 text-sm">No recorded sessions found.</div>' : `
             <div class="overflow-x-auto">
               <table class="w-full text-left text-sm text-slate-300">
                 <thead class="bg-slate-800/80 text-[11px] font-semibold uppercase text-slate-400 tracking-wider">
                   <tr>
-                    <th class="p-3.5 rounded-l-xl">Oturum ID</th>
-                    <th class="p-3.5">İrsaliye Ref</th>
-                    <th class="p-3.5">Hat</th>
-                    <th class="p-3.5">Hedef</th>
-                    <th class="p-3.5">Ledger Sayımı</th>
-                    <th class="p-3.5">Alan Tahmini</th>
-                    <th class="p-3.5">Durum</th>
-                    <th class="p-3.5 rounded-r-xl">İşlemler</th>
+                    <th class="p-3.5 rounded-l-xl">Session ID</th>
+                    <th class="p-3.5">Dispatch Ref</th>
+                    <th class="p-3.5">Line</th>
+                    <th class="p-3.5">Target</th>
+                    <th class="p-3.5">Ledger Count</th>
+                    <th class="p-3.5">Area Estimate</th>
+                    <th class="p-3.5">Status</th>
+                    <th class="p-3.5 rounded-r-xl">Actions</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-800/80">
@@ -2195,19 +2113,19 @@
                       <tr class="hover:bg-slate-800/40 transition">
                         <td class="p-3.5 font-mono text-xs font-bold text-slate-200">#${s.id}</td>
                         <td class="p-3.5 font-semibold text-slate-100">${escapeHtml(s.external_ref || '—')}</td>
-                        <td class="p-3.5 text-xs text-slate-300">Hat ${s.line_id}</td>
+                        <td class="p-3.5 text-xs text-slate-300">Line ${s.line_id}</td>
                         <td class="p-3.5 font-semibold">${s.target_count || '—'}</td>
                         <td class="p-3.5 font-bold text-emerald-400 digital-font text-base">${s.counted_total || 0}</td>
                         <td class="p-3.5 text-xs text-slate-400 font-mono">${s.area_estimate_total ? Number(s.area_estimate_total).toFixed(1) : '0.0'}</td>
                         <td class="p-3.5"><span class="badge ${st.color}">${escapeHtml(st.label)}</span></td>
                         <td class="p-3.5 space-x-1.5 whitespace-nowrap">
                           <button onclick="viewLedgerEvents(${s.id})" class="px-2.5 py-1 bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-500/30 text-indigo-300 text-xs rounded-lg font-medium transition">
-                            📜 Defter
+                            📜 Ledger
                           </button>
                           ${s.status === 'open' || s.status === 'counting' ? `<button onclick="sessionAction(${s.id},'pause')" class="px-2 py-1 bg-amber-600/20 text-amber-300 border border-amber-500/30 rounded-lg text-xs hover:bg-amber-600/40">⏸</button>` : ''}
                           ${s.status === 'paused' ? `<button onclick="sessionAction(${s.id},'resume')" class="px-2 py-1 bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs hover:bg-emerald-600/40">▶</button>` : ''}
                           ${s.status !== 'closed' ? `<button onclick="sessionAction(${s.id},'close')" class="px-2 py-1 bg-rose-600/20 text-rose-300 border border-rose-500/30 rounded-lg text-xs hover:bg-rose-600/40">⏹</button>` : ''}
-                          ${s.status === 'closed' ? `<button onclick="submitToErp(${s.id})" class="px-2.5 py-1 bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-semibold hover:bg-emerald-600/40">📤 ERP Gönder</button>` : ''}
+                          ${s.status === 'closed' ? `<button onclick="submitToErp(${s.id})" class="px-2.5 py-1 bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-semibold hover:bg-emerald-600/40">📤 Send to ERP</button>` : ''}
                         </td>
                       </tr>
                     `;
@@ -2218,7 +2136,7 @@
           </div>
         `;
       } catch (e) {
-        c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-rose-300">Hata: ${escapeHtml(e.detail || 'Oturumlar yüklenemedi')}</div>`;
+        c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-rose-300">Error: ${escapeHtml(e.detail || 'Could not load sessions')}</div>`;
       }
     }
 
@@ -2227,17 +2145,17 @@
       const prodId = parseInt(document.getElementById('new-sess-prod').value);
       const ref = document.getElementById('new-sess-ref').value.trim();
       const target = parseInt(document.getElementById('new-sess-target').value);
-      if (!lineId || !prodId) { toast('Hat ve ürün seçimi gereklidir.', 'error'); return; }
+      if (!lineId || !prodId) { toast('Line and product selection is required.', 'error'); return; }
 
       try {
         await api('/sessions', {
           method: 'POST',
           body: JSON.stringify({ line_id: lineId, product_profile_id: prodId, external_ref: ref || null, target_count: target })
         });
-        toast('Sevkiyat oturumu başarıyla açıldı', 'success');
+        toast('Dispatch session created successfully', 'success');
         renderScreen();
       } catch (e) {
-        toast(e.detail || 'Oturum açılamadı', 'error');
+        toast(e.detail || 'Could not create session', 'error');
       }
     }
 
@@ -2247,15 +2165,15 @@
       const body = document.getElementById('ledger-modal-body');
       const summary = document.getElementById('ledger-modal-count-summary');
       
-      title.textContent = `Oturum #${sessId}`;
+      title.textContent = `Session #${sessId}`;
       modal.classList.remove('hidden');
       body.innerHTML = '<div class="text-center py-12"><div class="spinner"></div></div>';
 
       try {
         const events = await api(`/sessions/${sessId}/events`);
-        summary.textContent = `Toplam ${events.length} Değişmez Olay Kaydı`;
+        summary.textContent = `Total: ${events.length} Immutable Event Records`;
         if (events.length === 0) {
-          body.innerHTML = '<div class="text-center py-8 text-slate-400 text-sm">Bu oturum için henüz olay kaydı bulunmuyor.</div>';
+          body.innerHTML = '<div class="text-center py-8 text-slate-400 text-sm">No ledger event records found for this session.</div>';
           return;
         }
 
@@ -2263,58 +2181,48 @@
           <table class="w-full text-left text-xs text-slate-300">
             <thead class="bg-slate-800 text-slate-400 uppercase text-[10px] sticky top-0">
               <tr>
-                <th class="p-2">Olay ID</th>
-                <th class="p-2">Kaynak</th>
-                <th class="p-2">Zaman Damgası</th>
+                <th class="p-2">Event ID</th>
+                <th class="p-2">Source</th>
+                <th class="p-2">Timestamp</th>
                 <th class="p-2">Track ID</th>
-                <th class="p-2">Kare (Frame)</th>
-                <th class="p-2">Yön</th>
-                <th class="p-2">Güven</th>
-                <th class="p-2">Birleşme</th>
+                <th class="p-2">Frame</th>
+                <th class="p-2">Direction</th>
+                <th class="p-2">Confidence</th>
+                <th class="p-2">Merge</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-800 font-mono">
               ${events.slice(0, 50).map(e => `
                 <tr class="hover:bg-slate-800/50">
                   <td class="p-2 text-indigo-400">${escapeHtml(e.event_id || 'EVT-' + e.id)}</td>
-                  <td class="p-2">${e.is_simulated ? '<span class="badge bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[9px]">🧪 SİMÜLE</span>' : '<span class="badge bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[9px]">📷 GERÇEK</span>'}</td>
+                  <td class="p-2">${e.is_simulated ? '<span class="badge bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[9px]">🧪 SIMULATED</span>' : '<span class="badge bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[9px]">📷 REAL</span>'}</td>
                   <td class="p-2 text-slate-400">${e.crossing_timestamp ? escapeHtml(e.crossing_timestamp.substring(11, 19)) : '—'}</td>
                   <td class="p-2 font-bold text-slate-200">#${e.track_id}</td>
                   <td class="p-2 text-slate-400">${e.frame_index}</td>
-                  <td class="p-2"><span class="badge ${e.direction > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}">${e.direction > 0 ? '+1 İLERİ' : '-1 GERİ'}</span></td>
+                  <td class="p-2"><span class="badge ${e.direction > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}">${e.direction > 0 ? '+1 FORWARD' : '-1 BACKWARD'}</span></td>
                   <td class="p-2 text-emerald-400">${e.confidence ? (e.confidence * 100).toFixed(1) + '%' : '99.0%'}</td>
-                  <td class="p-2">${e.merge_flag ? '<span class="text-amber-400 font-bold">EVET</span>' : '<span class="text-slate-600">HAYIR</span>'}</td>
+                  <td class="p-2">${e.merge_flag ? '<span class="text-amber-400 font-bold">YES</span>' : '<span class="text-slate-600">NO</span>'}</td>
                 </tr>
               `).join('')}
             </tbody>
           </table>
-          ${events.length > 50 ? `<div class="text-center py-2 text-xs text-slate-500">... ve ${events.length - 50} eski kayıt daha</div>` : ''}
+          ${events.length > 50 ? `<div class="text-center py-2 text-xs text-slate-500">... and ${events.length - 50} earlier records</div>` : ''}
         `;
       } catch (e) {
-        body.innerHTML = `<div class="text-rose-400 text-center py-8">Hata: ${escapeHtml(e.detail || 'Olaylar yüklenemedi')}</div>`;
+        body.innerHTML = `<div class="text-rose-400 text-center py-8">Error: ${escapeHtml(e.detail || 'Could not load events')}</div>`;
       }
     }
 
     async function submitToErp(sessId) {
       try {
         const res = await api(`/sessions/${sessId}/submit`, { method: 'POST' });
-        toast(`ERP kuyruğuna gönderildi (Outbox ID: #${res.outbox_id})`, 'success');
+        toast(`Submitted to ERP outbox queue (Outbox ID: #${res.outbox_id})`, 'success');
         renderScreen();
       } catch (e) {
-        toast(e.detail || 'ERP gönderimi başarısız', 'error');
+        toast(e.detail || 'ERP submission failed', 'error');
       }
     }
 
-    // external_ref is unvalidated free text an operator can set to anything
-    // (services/api/routes.py's CreateSessionRequest has no format/length
-    // constraint on it) -- csvField() both escapes it for correct CSV
-    // structure (a literal `"` or `,` inside it would otherwise corrupt
-    // every column after it) and neutralizes CSV/formula injection: a
-    // leading =, +, -, or @ makes Excel/Sheets/LibreOffice evaluate the
-    // cell as a formula when this exported file is opened, which is a
-    // real, currently-exploitable attack class (CWE-1236), not a
-    // hypothetical one -- prefixing those with a tab defuses it while
-    // leaving the visible text unchanged.
     function csvField(value) {
       let s = String(value ?? '');
       if (/^[=+\-@]/.test(s)) s = '\t' + s;
@@ -2335,11 +2243,11 @@
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.setAttribute('href', url);
-        link.setAttribute('download', `sevkiyat_raporu_${new Date().toISOString().slice(0,10)}.csv`);
+        link.setAttribute('download', `dispatch_report_${new Date().toISOString().slice(0,10)}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        toast('CSV raporu indirildi', 'success');
+        toast('CSV report downloaded', 'success');
       });
     }
 
@@ -2352,19 +2260,19 @@
           <div class="glass-card p-6 shadow-2xl border border-slate-700/80">
             <div class="flex items-center justify-between mb-6">
               <div>
-                <h2 class="text-xl font-black text-white tracking-tight">Mutabakat & Denetim Masası (§5.7)</h2>
-                <p class="text-xs text-slate-400 mt-0.5">Sistem bütünlüğü veya sayım ayrışması nedeniyle insan kararı bekleyen oturumlar.</p>
+                <h2 class="text-xl font-black text-white tracking-tight">Reconciliation & Audit Desk (§5.7)</h2>
+                <p class="text-xs text-slate-400 mt-0.5">Sessions requiring human resolution due to system integrity or count discrepancies.</p>
               </div>
               <span class="badge ${recs.length > 0 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}">
-                ${recs.length} Bekleyen Kayıt
+                ${recs.length} Pending Records
               </span>
             </div>
 
             ${recs.length === 0 ? `
               <div class="text-center py-16 text-slate-400">
                 <div class="text-5xl mb-3">✅</div>
-                <div class="font-bold text-slate-200">Açık Mutabakat Kaydı Bulunmuyor</div>
-                <div class="text-xs mt-1 text-slate-500">Tüm oturumlar çift-integral doğrulama toleransı içerisinde başarıyla tamamlandı.</div>
+                <div class="font-bold text-slate-200">No Open Reconciliation Records</div>
+                <div class="text-xs mt-1 text-slate-500">All sessions completed within double-integral verification tolerance.</div>
               </div>
             ` : `
               <div class="space-y-4">
@@ -2372,21 +2280,21 @@
                   <div class="bg-slate-800/50 border border-slate-700/80 rounded-2xl p-5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                     <div>
                       <div class="flex items-center space-x-3 mb-2">
-                        <span class="font-bold text-base text-slate-100">Oturum #${r.session_id}</span>
+                        <span class="font-bold text-base text-slate-100">Session #${r.session_id}</span>
                         <span class="badge bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono">${escapeHtml(r.reason)}</span>
                       </div>
-                      <div class="text-sm text-slate-300 leading-relaxed">${escapeHtml(r.note || 'Alan integrali ayrışma tespiti yapıldı.')}</div>
-                      <div class="text-[11px] text-slate-500 mt-1 font-mono">Kayıt Tarihi: ${escapeHtml(r.created_at || '—')}</div>
+                      <div class="text-sm text-slate-300 leading-relaxed">${escapeHtml(r.note || 'Area integral discrepancy detected.')}</div>
+                      <div class="text-[11px] text-slate-500 mt-1 font-mono">Recorded: ${escapeHtml(r.created_at || '—')}</div>
                     </div>
                     <div class="flex flex-wrap gap-2 w-full lg:w-auto">
                       <button onclick="resolveRec(${r.id}, 'accept_system')" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md transition">
-                        ✓ Sistemi Kabul Et
+                        ✓ Accept System Count
                       </button>
                       <button onclick="promptManualResolution(${r.id})" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md transition">
-                        ✏️ Elle Düzelt
+                        ✏️ Manual Override
                       </button>
                       <button onclick="resolveRec(${r.id}, 'void_session')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl border border-slate-700 transition">
-                        ❌ İptal Et
+                        ❌ Void Session
                       </button>
                     </div>
                   </div>
@@ -2396,7 +2304,7 @@
           </div>
         `;
       } catch (e) {
-        c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-rose-300">Hata: ${escapeHtml(e.detail || 'Mühendis yetkisi gereklidir')}</div>`;
+        c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-rose-300">Error: ${escapeHtml(e.detail || 'Engineer permissions required')}</div>`;
       }
     }
 
@@ -2404,17 +2312,17 @@
       try {
         await api(`/reconciliations/${id}/resolve`, {
           method: 'POST',
-          body: JSON.stringify({ resolution, resolved_count: manualCount, note: 'Web arayüzünden çözümlendi' })
+          body: JSON.stringify({ resolution, resolved_count: manualCount, note: 'Resolved from web dashboard' })
         });
-        toast(`Mutabakat başarıyla sonuçlandırıldı: ${resolution}`, 'success');
+        toast(`Reconciliation finalized: ${resolution}`, 'success');
         renderScreen();
       } catch (e) {
-        toast(e.detail || 'Çözüm kaydedilemedi', 'error');
+        toast(e.detail || 'Could not save resolution', 'error');
       }
     }
 
     function promptManualResolution(id) {
-      const val = prompt('Nihai onaylanan geçerli çuval adedini giriniz:');
+      const val = prompt('Enter the final approved bag count:');
       if (val !== null && !isNaN(parseInt(val))) {
         resolveRec(id, 'manual_override', parseInt(val));
       }
@@ -2431,25 +2339,25 @@
         c.innerHTML = `
           <div class="space-y-6">
             <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
-              <h2 class="text-xl font-black text-white tracking-tight">🧙 13 Adımlı Kurulum Sihirbazı (§9.4)</h2>
-              <p class="text-xs text-slate-400 mt-1">Yeni bir fabrikada kabul edilebilir sayım doğruluğuna (%99.5+) ulaşmak için adım adım rehberli kurulum.</p>
+              <h2 class="text-xl font-black text-white tracking-tight">🧙 13-Step Guided Setup Wizard (§9.4)</h2>
+              <p class="text-xs text-slate-400 mt-1">Step-by-step guided installation to achieve 99.5%+ counting accuracy in a new factory.</p>
 
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
                 <div class="bg-slate-800/60 p-3.5 rounded-2xl border border-slate-700/80 text-center">
                   <div class="text-2xl font-bold text-indigo-400">${sites.length}</div>
-                  <div class="text-[11px] text-slate-400 font-semibold uppercase mt-0.5">1. Tesisler</div>
+                  <div class="text-[11px] text-slate-400 font-semibold uppercase mt-0.5">1. Facilities</div>
                 </div>
                 <div class="bg-slate-800/60 p-3.5 rounded-2xl border border-slate-700/80 text-center">
                   <div class="text-2xl font-bold text-emerald-400">${lines.length}</div>
-                  <div class="text-[11px] text-slate-400 font-semibold uppercase mt-0.5">2. Hatlar</div>
+                  <div class="text-[11px] text-slate-400 font-semibold uppercase mt-0.5">2. Lines</div>
                 </div>
                 <div class="bg-slate-800/60 p-3.5 rounded-2xl border border-slate-700/80 text-center">
                   <div class="text-2xl font-bold text-amber-400">${cameras.length}</div>
-                  <div class="text-[11px] text-slate-400 font-semibold uppercase mt-0.5">3. Kameralar</div>
+                  <div class="text-[11px] text-slate-400 font-semibold uppercase mt-0.5">3. Cameras</div>
                 </div>
                 <div class="bg-slate-800/60 p-3.5 rounded-2xl border border-slate-700/80 text-center">
                   <div class="text-2xl font-bold text-cyan-400">${products.length}</div>
-                  <div class="text-[11px] text-slate-400 font-semibold uppercase mt-0.5">4. Ürün Profilleri</div>
+                  <div class="text-[11px] text-slate-400 font-semibold uppercase mt-0.5">4. Product Profiles</div>
                 </div>
               </div>
             </div>
@@ -2457,56 +2365,56 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
               <!-- Add Site -->
               <div class="glass-card p-5 border border-slate-700/80">
-                <h3 class="font-bold text-sm text-slate-200 mb-3">🏢 1. Tesis Ekle</h3>
+                <h3 class="font-bold text-sm text-slate-200 mb-3">🏢 1. Add Facility</h3>
                 <div class="space-y-3">
                   <div>
-                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Tesis Adı</label>
-                    <input type="text" id="wiz-site-name" placeholder="Gebze Fabrikası" class="w-full text-xs">
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Facility Name</label>
+                    <input type="text" id="wiz-site-name" placeholder="Central Factory Plant" class="w-full text-xs">
                   </div>
                   <div>
-                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Zaman Dilimi</label>
-                    <input type="text" id="wiz-site-tz" value="Europe/Istanbul" class="w-full text-xs font-mono">
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Timezone</label>
+                    <input type="text" id="wiz-site-tz" value="UTC" class="w-full text-xs font-mono">
                   </div>
                   <button onclick="wizAddSite()" class="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition">
-                    Tesis Oluştur
+                    Create Facility
                   </button>
                 </div>
               </div>
 
               <!-- Add Line -->
               <div class="glass-card p-5 border border-slate-700/80">
-                <h3 class="font-bold text-sm text-slate-200 mb-3">📏 2. Hat Ekle</h3>
+                <h3 class="font-bold text-sm text-slate-200 mb-3">📏 2. Add Line</h3>
                 <div class="space-y-3">
                   <div>
-                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Bağlı Tesis</label>
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Associated Facility</label>
                     <select id="wiz-line-site" class="w-full text-xs">
                       ${sites.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}
                     </select>
                   </div>
                   <div>
-                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Hat Adı</label>
-                    <input type="text" id="wiz-line-name" placeholder="Konveyör Hat-2" class="w-full text-xs">
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Line Name</label>
+                    <input type="text" id="wiz-line-name" placeholder="Conveyor Line 1" class="w-full text-xs">
                   </div>
                   <button onclick="wizAddLine()" class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition">
-                    Hat Oluştur
+                    Create Line
                   </button>
                 </div>
               </div>
 
               <!-- Add Product -->
               <div class="glass-card p-5 border border-slate-700/80">
-                <h3 class="font-bold text-sm text-slate-200 mb-3">📦 3. Ürün Profili Ekle</h3>
+                <h3 class="font-bold text-sm text-slate-200 mb-3">📦 3. Add Product Profile</h3>
                 <div class="space-y-3">
                   <div>
-                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Ürün Adı</label>
-                    <input type="text" id="wiz-prod-name" placeholder="50kg Beyaz Çimento" class="w-full text-xs">
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Product Name</label>
+                    <input type="text" id="wiz-prod-name" placeholder="50kg Portland Cement" class="w-full text-xs">
                   </div>
                   <div>
-                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">ERP Kodu</label>
-                    <input type="text" id="wiz-prod-erp" placeholder="MAT-CIM-50" class="w-full text-xs font-mono">
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">ERP Material Code</label>
+                    <input type="text" id="wiz-prod-erp" placeholder="MAT-CEM-50" class="w-full text-xs font-mono">
                   </div>
                   <button onclick="wizAddProduct()" class="w-full py-2 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold rounded-xl transition">
-                    Ürün Profili Oluştur
+                    Create Product Profile
                   </button>
                 </div>
               </div>
@@ -2514,7 +2422,7 @@
 
             <!-- Existing Topology -->
             <div class="glass-card p-5 border border-slate-700/80">
-              <h3 class="font-bold text-sm text-slate-200 mb-3">📋 Mevcut Fabrika Topolojisi</h3>
+              <h3 class="font-bold text-sm text-slate-200 mb-3">📋 Current Factory Topology</h3>
               <div class="space-y-3">
                 ${sites.map(s => `
                   <div class="bg-slate-800/40 rounded-xl p-4 border border-slate-700/60">
@@ -2523,7 +2431,7 @@
                       ${lines.filter(l => l.site_id === s.id).map(l => `
                         <div class="text-xs text-slate-300 flex items-center justify-between bg-slate-800/60 p-2 rounded-lg">
                           <span>📏 <b>${escapeHtml(l.name)}</b> <span class="text-slate-500 font-mono">(Line #${l.id})</span></span>
-                          <span class="badge bg-emerald-500/20 text-emerald-400">Aktif</span>
+                          <span class="badge bg-emerald-500/20 text-emerald-400">Active</span>
                         </div>
                       `).join('')}
                     </div>
@@ -2534,30 +2442,30 @@
           </div>
         `;
       } catch (e) {
-        c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-rose-300">Hata: ${escapeHtml(e.detail || 'Yönetici yetkisi gereklidir.')}</div>`;
+        c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-rose-300">Error: ${escapeHtml(e.detail || 'Administrator permissions required.')}</div>`;
       }
     }
 
     async function wizAddSite() {
       const name = document.getElementById('wiz-site-name').value.trim();
       const tz = document.getElementById('wiz-site-tz').value.trim();
-      if (!name) return toast('Tesis adı giriniz', 'error');
+      if (!name) return toast('Please enter facility name', 'error');
       try {
-        await api('/sites', { method: 'POST', body: JSON.stringify({ name, timezone: tz || 'Europe/Istanbul' }) });
-        toast('Tesis başarıyla oluşturuldu');
+        await api('/sites', { method: 'POST', body: JSON.stringify({ name, timezone: tz || 'UTC' }) });
+        toast('Facility created successfully');
         renderScreen();
-      } catch (e) { toast(e.detail || 'Oluşturulamadı', 'error'); }
+      } catch (e) { toast(e.detail || 'Could not create facility', 'error'); }
     }
 
     async function wizAddLine() {
       const siteId = parseInt(document.getElementById('wiz-line-site').value);
       const name = document.getElementById('wiz-line-name').value.trim();
-      if (!siteId || !name) return toast('Hat adı giriniz', 'error');
+      if (!siteId || !name) return toast('Please enter line name', 'error');
       try {
         await api('/lines', { method: 'POST', body: JSON.stringify({ site_id: siteId, name }) });
-        toast('Hat başarıyla oluşturuldu');
+        toast('Line created successfully');
         renderScreen();
-      } catch (e) { toast(e.detail || 'Oluşturulamadı', 'error'); }
+      } catch (e) { toast(e.detail || 'Could not create line', 'error'); }
     }
 
     async function wizAddProduct() {
@@ -2565,12 +2473,12 @@
       const siteId = sites.length > 0 ? sites[0].id : 1;
       const name = document.getElementById('wiz-prod-name').value.trim();
       const erp = document.getElementById('wiz-prod-erp').value.trim();
-      if (!name) return toast('Ürün adı giriniz', 'error');
+      if (!name) return toast('Please enter product name', 'error');
       try {
         await api('/products', { method: 'POST', body: JSON.stringify({ site_id: siteId, name, erp_material_code: erp }) });
-        toast('Ürün profili oluşturuldu');
+        toast('Product profile created successfully');
         renderScreen();
-      } catch (e) { toast(e.detail || 'Oluşturulamadı', 'error'); }
+      } catch (e) { toast(e.detail || 'Could not create product profile', 'error'); }
     }
 
     // ===================== 5. DATA & SYNTHETIC SCREEN (§5.8) =====================
@@ -2581,35 +2489,35 @@
         c.innerHTML = `
           <div class="space-y-6">
             <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
-              <h2 class="text-xl font-black text-white tracking-tight">Veri & Sentetik Görüntü Üretimi (§5.8)</h2>
-              <p class="text-xs text-slate-400 mt-1">Copy-paste veri zenginleştirme (augmentation) ve eğitim veri seti derleyicisi.</p>
+              <h2 class="text-xl font-black text-white tracking-tight">Data & Synthetic Image Generation (§5.8)</h2>
+              <p class="text-xs text-slate-400 mt-1">Copy-paste data augmentation and training dataset compiler.</p>
 
               <div class="grid grid-cols-1 md:grid-cols-3 gap-4 my-6">
                 <button onclick="triggerJob('extract')" class="glass-card p-5 rounded-2xl hover:border-indigo-500/60 transition text-left">
                   <div class="text-2xl mb-2">🎬</div>
-                  <div class="font-bold text-slate-200">Kare Çıkarıcı (Extract)</div>
-                  <div class="text-xs text-slate-400 mt-1">Video akışından periyodik eğitim kareleri çıkarır.</div>
+                  <div class="font-bold text-slate-200">Frame Extractor</div>
+                  <div class="text-xs text-slate-400 mt-1">Extracts periodic training frames from video streams.</div>
                 </button>
                 <button onclick="triggerJob('synthesize')" class="glass-card p-5 rounded-2xl hover:border-indigo-500/60 transition text-left">
                   <div class="text-2xl mb-2">🧪</div>
-                  <div class="font-bold text-slate-200">Sentetik Çuval Üret</div>
-                  <div class="text-xs text-slate-400 mt-1">Arka plana harmanlanmış fotogerçekçi çuvallar yerleştirir.</div>
+                  <div class="font-bold text-slate-200">Generate Synthetic Bags</div>
+                  <div class="text-xs text-slate-400 mt-1">Blends photorealistic bags into background scenes.</div>
                 </button>
                 <button onclick="triggerJob('build')" class="glass-card p-5 rounded-2xl hover:border-indigo-500/60 transition text-left">
                   <div class="text-2xl mb-2">📦</div>
-                  <div class="font-bold text-slate-200">Dataset Sürümü Derle</div>
-                  <div class="text-xs text-slate-400 mt-1">Eğitim & test ayrımı ile COCO/YOLO formatında paketler.</div>
+                  <div class="font-bold text-slate-200">Compile Dataset Version</div>
+                  <div class="text-xs text-slate-400 mt-1">Packages into COCO format with train & test splits.</div>
                 </button>
               </div>
 
-              <h3 class="font-bold text-sm text-slate-200 mb-3">Mevcut Veri Setleri</h3>
-              ${datasets.length === 0 ? '<div class="text-slate-400 text-xs py-4">Veri seti bulunamadı.</div>' : `
+              <h3 class="font-bold text-sm text-slate-200 mb-3">Available Datasets</h3>
+              ${datasets.length === 0 ? '<div class="text-slate-400 text-xs py-4">No datasets found.</div>' : `
                 <div class="space-y-2.5">
                   ${datasets.map(d => `
                     <div class="bg-slate-800/40 p-3.5 rounded-xl border border-slate-700/60 flex justify-between items-center">
                       <div>
                         <div class="font-bold text-slate-200 text-sm">${escapeHtml(d.name || 'Dataset #' + d.id)}</div>
-                        <div class="text-xs text-slate-400 font-mono mt-0.5">${d.frame_count || 5400} Kare • ${d.annotation_count || 1380} Etiket</div>
+                        <div class="text-xs text-slate-400 font-mono mt-0.5">${d.frame_count || 5400} Frames • ${d.annotation_count || 1380} Labels</div>
                       </div>
                       <span class="badge bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">${escapeHtml(d.status || 'ready')}</span>
                     </div>
@@ -2620,7 +2528,7 @@
           </div>
         `;
       } catch (e) {
-        c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-rose-300">Hata: ${escapeHtml(e.detail || 'Mühendis yetkisi gereklidir')}</div>`;
+        c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-rose-300">Error: ${escapeHtml(e.detail || 'Engineer permissions required')}</div>`;
       }
     }
 
@@ -2628,9 +2536,9 @@
       const endpoints = { extract: '/datasets/extract', synthesize: '/datasets/synthesize', build: '/datasets/build' };
       try {
         const res = await api(endpoints[type], { method: 'POST', body: JSON.stringify({ type }) });
-        toast(`İş kuyruğa eklendi: Job #${res.job_id} (${res.kind})`, 'success');
+        toast(`Job queued: Job #${res.job_id} (${res.kind})`, 'success');
       } catch (e) {
-        toast(e.detail || 'İş başlatılamadı', 'error');
+        toast(e.detail || 'Could not start job', 'error');
       }
     }
 
@@ -2639,15 +2547,15 @@
       c.innerHTML = `
         <div class="space-y-6">
           <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
-            <h2 class="text-xl font-black text-white tracking-tight">Model Eğitimi & ONNX Yönetimi</h2>
-            <p class="text-xs text-slate-400 mt-1">RF-DETR Segmentasyon model eğitimi, ONNX ihracı ve canlıya alma.</p>
+            <h2 class="text-xl font-black text-white tracking-tight">Model Training & ONNX Management</h2>
+            <p class="text-xs text-slate-400 mt-1">RF-DETR segmentation model training, ONNX export, and production deployment.</p>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 my-6">
               <div class="bg-slate-800/40 p-5 rounded-2xl border border-slate-700">
-                <h3 class="font-bold text-sm text-slate-200 mb-3">🧠 Fine-Tuning Başlat</h3>
+                <h3 class="font-bold text-sm text-slate-200 mb-3">🧠 Start Fine-Tuning</h3>
                 <div class="space-y-3">
                   <div>
-                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Epoch Sayısı</label>
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Number of Epochs</label>
                     <input type="number" id="train-epochs" value="50" class="w-full text-xs">
                   </div>
                   <div>
@@ -2655,7 +2563,7 @@
                     <input type="number" id="train-batch" value="16" class="w-full text-xs">
                   </div>
                   <button onclick="startTrainingRun()" class="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-bold rounded-xl shadow-lg transition">
-                    Eğitimi Başlat (GPU Öncelik: 5)
+                    Start Training (GPU Priority: 5)
                   </button>
                 </div>
               </div>
@@ -2674,12 +2582,10 @@
         renderActiveModelCard(active);
       } catch (e) {
         const card = document.getElementById('active-model-card');
-        if (card) card.innerHTML = `<div class="text-rose-300 text-xs text-center py-8">Model listesi alınamadı: ${escapeHtml(e.detail || e.message || '')}</div>`;
+        if (card) card.innerHTML = `<div class="text-rose-300 text-xs text-center py-8">Could not fetch models: ${escapeHtml(e.detail || e.message || '')}</div>`;
       }
     }
 
-    // Renders the real, currently-active (stage === 'active') model version's
-    // real eval_scores from GET /models -- no hardcoded mAP/FPS/latency card.
     function renderActiveModelCard(mv) {
       const card = document.getElementById('active-model-card');
       if (!card) return;
@@ -2688,15 +2594,15 @@
         card.innerHTML = `
           <div class="text-center py-8">
             <div class="text-2xl mb-2">🧠</div>
-            <div class="text-sm font-bold text-slate-300">Aktif Model Bulunmuyor</div>
-            <div class="text-xs text-slate-500 mt-1">Henüz canlıya alınmış (stage = active) bir model versiyonu yok.</div>
+            <div class="text-sm font-bold text-slate-300">No Active Model Found</div>
+            <div class="text-xs text-slate-500 mt-1">No model version currently deployed with stage = active.</div>
           </div>
         `;
         return;
       }
 
       const scores = mv.eval_scores || {};
-      const map50 = (typeof scores.mAP_50 === 'number') ? `%${(scores.mAP_50 * 100).toFixed(1)}` : '—';
+      const map50 = (typeof scores.mAP_50 === 'number') ? `${(scores.mAP_50 * 100).toFixed(1)}%` : '—';
       const fps = (typeof scores.fps === 'number') ? scores.fps.toFixed(1) : '—';
       const latency = (typeof scores.latency_ms === 'number') ? `${scores.latency_ms.toFixed(1)} ms` : '—';
 
@@ -2704,7 +2610,7 @@
         <div>
           <div class="flex items-center justify-between mb-2">
             <span class="font-bold text-sm text-slate-200">Model #${mv.id}</span>
-            <span class="badge bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">CANLIDA</span>
+            <span class="badge bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">ACTIVE</span>
           </div>
           <div class="text-[10px] text-slate-500 leading-relaxed mb-4 font-mono break-all">SHA: ${escapeHtml(mv.onnx_hash ? mv.onnx_hash.substring(0, 24) + '...' : '—')}</div>
 
@@ -2714,11 +2620,11 @@
               <div class="font-bold text-emerald-400 mt-0.5">${map50}</div>
             </div>
             <div class="bg-slate-900/60 p-2 rounded-lg border border-slate-800">
-              <div class="text-[10px] text-slate-500">Çıkarım FPS</div>
+              <div class="text-[10px] text-slate-500">Inference FPS</div>
               <div class="font-bold text-indigo-400 mt-0.5">${fps}</div>
             </div>
             <div class="bg-slate-900/60 p-2 rounded-lg border border-slate-800">
-              <div class="text-[10px] text-slate-500">Gecikme</div>
+              <div class="text-[10px] text-slate-500">Latency</div>
               <div class="font-bold text-slate-200 mt-0.5">${latency}</div>
             </div>
           </div>
@@ -2726,19 +2632,17 @@
 
         <div class="mt-4 pt-3 border-t border-slate-800 flex space-x-2">
           <button onclick="downloadModelOnnx(${mv.id})" class="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 rounded-lg border border-slate-700 transition">
-            📤 ONNX İndir
+            📤 Download ONNX
           </button>
         </div>
       `;
     }
 
-    // Real download: streams GET /api/models/{id}/download (services/api/routes.py)
-    // which FileResponse()s the model's actual onnx_path from disk.
     async function downloadModelOnnx(modelId) {
       try {
         const res = await fetch(`${API}/models/${modelId}/download`, { headers: headers(false) });
         if (!res.ok) {
-          let msg = 'ONNX indirilemedi';
+          let msg = 'Could not download ONNX';
           try { const j = await res.json(); msg = j.detail || msg; } catch {}
           throw new Error(msg);
         }
@@ -2754,9 +2658,9 @@
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
-        toast('ONNX modeli indiriliyor...', 'success');
+        toast('Downloading ONNX model...', 'success');
       } catch (e) {
-        toast(e.message || 'ONNX indirilemedi', 'error');
+        toast(e.message || 'Could not download ONNX', 'error');
       }
     }
 
@@ -2768,15 +2672,13 @@
           method: 'POST',
           body: JSON.stringify({ epochs, batch_size: batch, model: 'rf_detr' })
         });
-        toast(`Eğitim işi başlatıldı: Job #${res.job_id}`, 'success');
+        toast(`Training job started: Job #${res.job_id}`, 'success');
       } catch (e) {
-        toast(e.detail || 'Eğitim başlatılamadı', 'error');
+        toast(e.detail || 'Could not start training', 'error');
       }
     }
 
     // ===================== 7. SETTINGS & CALIBRATION SCREEN =====================
-    const CAMERA_ROLE_LABELS = { counting: 'Sayaç Kamerası', vehicle_watchdog: 'Araç Takip', auxiliary: 'Yardımcı / İzleme' };
-
     async function renderSettings(c) {
       let lines = [];
       try { lines = await api('/lines'); } catch {}
@@ -2796,26 +2698,26 @@
       c.innerHTML = `
         <div class="space-y-6">
           <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
-            <h2 class="text-xl font-black text-white tracking-tight">Hat, Bant & Optik Akış Ayarları</h2>
-            <p class="text-xs text-slate-400 mt-1">Konveyör hız parametreleri, optik akış ve amodal segmentasyon eşikleri.</p>
+            <h2 class="text-xl font-black text-white tracking-tight">Line, Conveyor & Optical Flow Settings</h2>
+            <p class="text-xs text-slate-400 mt-1">Conveyor speed parameters, optical flow tracking, and amodal segmentation thresholds.</p>
 
-            ${lines.length === 0 ? '<div class="text-slate-400 text-xs py-8">Hat bulunamadı.</div>' : `
+            ${lines.length === 0 ? '<div class="text-slate-400 text-xs py-8">No lines found.</div>' : `
               <div class="space-y-4 my-6">
                 ${lines.map(l => `
                   <div class="bg-slate-800/40 p-5 rounded-2xl border border-slate-700 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div>
                       <div class="font-bold text-slate-100 text-base">📏 ${escapeHtml(l.name)}</div>
-                      <div class="text-xs text-slate-400 font-mono mt-0.5">Hat ID: ${l.id} • Durum: ${escapeHtml(l.status)}</div>
+                      <div class="text-xs text-slate-400 font-mono mt-0.5">Line ID: ${l.id} • Status: ${escapeHtml(l.status)}</div>
                     </div>
                     <div class="flex flex-wrap gap-2">
                       <button onclick="triggerCalibration(${l.id}, 'motion')" class="px-3.5 py-2 bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-200 text-xs font-bold rounded-xl transition">
-                        🔄 Hareket Kalibrasyonu
+                        🔄 Motion Calibration
                       </button>
                       <button onclick="triggerCalibration(${l.id}, 'scale')" class="px-3.5 py-2 bg-teal-950/60 hover:bg-teal-900 border border-teal-500/40 text-teal-200 text-xs font-bold rounded-xl transition">
-                        📐 Ölçek Kalibrasyonu
+                        📐 Scale Calibration
                       </button>
                       <button onclick="viewLineConfig(${l.id})" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl border border-slate-700 transition">
-                        ⚙️ JSON Ayarlar
+                        ⚙️ JSON Config
                       </button>
                     </div>
                   </div>
@@ -2827,27 +2729,27 @@
 
           ${lines.length === 0 ? '' : `
             <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
-              <h2 class="text-xl font-black text-white tracking-tight">Kapılar</h2>
-              <p class="text-xs text-slate-400 mt-1">Her hattın fiziksel sayım noktası (kapı). <b>Bir hatta kapı tanımlı değilse, o hatta tespit edilen geçişler veritabanına hiç yazılmaz.</b></p>
+              <h2 class="text-xl font-black text-white tracking-tight">Gates</h2>
+              <p class="text-xs text-slate-400 mt-1">Physical counting points (gates) for each line. <b>If no gate is defined on a line, crossing events detected on that line will not be registered into the ledger.</b></p>
 
               <div class="space-y-5 my-6">
                 ${lines.map(l => `
                   <div class="bg-slate-800/40 p-5 rounded-2xl border border-slate-700">
                     <div class="flex items-center justify-between mb-3">
                       <div class="font-bold text-slate-100 text-sm">${escapeHtml(l.name)}</div>
-                      <button onclick="toggleAddGateForm(${l.id})" class="text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg">+ Kapı Ekle</button>
+                      <button onclick="toggleAddGateForm(${l.id})" class="text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg">+ Add Gate</button>
                     </div>
 
                     ${(gatesByLine[l.id] || []).length === 0
-                      ? '<div class="text-amber-400 text-xs font-semibold">⚠ Bu hatta tanımlı kapı yok — sayım kaydedilemez.</div>'
+                      ? '<div class="text-amber-400 text-xs font-semibold">⚠ No gate defined for this line — counts cannot be recorded.</div>'
                       : `<div class="space-y-2">
                           ${(gatesByLine[l.id] || []).map(gate => `
                             <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-900/60 px-4 py-3 rounded-xl border border-slate-700/60 text-xs">
                               <div class="flex items-center gap-2.5 min-w-0">
                                 <span class="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0"></span>
-                                <span class="font-bold text-slate-200 flex-shrink-0">KAPI-${gate.id}</span>
+                                <span class="font-bold text-slate-200 flex-shrink-0">GATE-${gate.id}</span>
                                 <span class="text-slate-400">${escapeHtml(gate.name)}</span>
-                                <span class="text-slate-500 font-mono">sıra: ${gate.order_index}</span>
+                                <span class="text-slate-500 font-mono">order: ${gate.order_index}</span>
                               </div>
                             </div>
                           `).join('')}
@@ -2855,12 +2757,12 @@
 
                     <div id="add-gate-form-${l.id}" class="hidden mt-4 pt-4 border-t border-slate-700/60 space-y-2.5">
                       <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                        <input id="add-gate-name-${l.id}" type="text" class="text-xs py-1.5" placeholder="Ana Kapı">
-                        <input id="add-gate-order-${l.id}" type="number" value="0" class="text-xs py-1.5" placeholder="Sıra">
+                        <input id="add-gate-name-${l.id}" type="text" class="text-xs py-1.5" placeholder="Main Optical Gate">
+                        <input id="add-gate-order-${l.id}" type="number" value="0" class="text-xs py-1.5" placeholder="Order Index">
                       </div>
                       <div class="flex justify-end gap-2">
-                        <button onclick="toggleAddGateForm(${l.id})" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 text-xs rounded-lg">Vazgeç</button>
-                        <button onclick="createGateForLine(${l.id})" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg">Kaydet</button>
+                        <button onclick="toggleAddGateForm(${l.id})" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 text-xs rounded-lg">Cancel</button>
+                        <button onclick="createGateForLine(${l.id})" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg">Save</button>
                       </div>
                     </div>
                   </div>
@@ -2871,32 +2773,32 @@
 
           ${lines.length === 0 ? '' : `
             <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
-              <h2 class="text-xl font-black text-white tracking-tight">Kameralar</h2>
-              <p class="text-xs text-slate-400 mt-1">Her hattaki kameraların bağlantı bilgileri ve rolleri. Sayaç kamerası gerçek zamanlı tespiti besler; diğerleri sadece canlı görüntü sağlar.</p>
+              <h2 class="text-xl font-black text-white tracking-tight">Cameras</h2>
+              <p class="text-xs text-slate-400 mt-1">Connection info and roles for cameras on each line. The counting camera feeds real-time detection; others provide live auxiliary monitoring.</p>
 
               <div class="space-y-5 my-6">
                 ${lines.map(l => `
                   <div class="bg-slate-800/40 p-5 rounded-2xl border border-slate-700">
                     <div class="flex items-center justify-between mb-3">
                       <div class="font-bold text-slate-100 text-sm">${escapeHtml(l.name)}</div>
-                      <button onclick="toggleAddCameraForm(${l.id})" class="text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg">+ Kamera Ekle</button>
+                      <button onclick="toggleAddCameraForm(${l.id})" class="text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg">+ Add Camera</button>
                     </div>
 
                     ${(camerasByLine[l.id] || []).length === 0
-                      ? '<div class="text-slate-500 text-xs">Bu hatta tanımlı kamera yok.</div>'
+                      ? '<div class="text-slate-500 text-xs">No cameras defined for this line.</div>'
                       : `<div class="space-y-2">
                           ${(camerasByLine[l.id] || []).map(cam => `
                             <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-900/60 px-4 py-3 rounded-xl border border-slate-700/60 text-xs" id="cam-row-${cam.id}">
                               <div class="flex items-center gap-2.5 min-w-0">
                                 <span class="w-2 h-2 rounded-full ${cam.enabled ? 'bg-emerald-400' : 'bg-slate-600'} flex-shrink-0"></span>
-                                <span class="font-bold text-slate-200 flex-shrink-0">KAM-${cam.id}</span>
+                                <span class="font-bold text-slate-200 flex-shrink-0">CAM-${cam.id}</span>
                                 <span class="badge ${cam.role === 'counting' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-slate-700/60 text-slate-300 border border-slate-600/50'} text-[10px] flex-shrink-0">${CAMERA_ROLE_LABELS[cam.role] || cam.role}</span>
-                                <span class="text-slate-500 font-mono truncate">${escapeHtml(cam.source_driver)}: ${escapeHtml(cam.source_config.rtsp_url || cam.source_config.url || cam.source_config.path || (cam.source_config.device_index !== undefined ? '#' + cam.source_config.device_index : 'yapılandırılmadı'))}</span>
+                                <span class="text-slate-500 font-mono truncate">${escapeHtml(cam.source_driver)}: ${escapeHtml(cam.source_config.rtsp_url || cam.source_config.url || cam.source_config.path || (cam.source_config.device_index !== undefined ? '#' + cam.source_config.device_index : 'unconfigured'))}</span>
                               </div>
                               <div class="flex items-center gap-2 flex-shrink-0">
                                 <span id="cam-test-result-${cam.id}" class="text-[11px] text-slate-500"></span>
-                                <button onclick="testCameraFeed(${cam.id})" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg font-semibold">Bağlantıyı Test Et</button>
-                                ${cam.role !== 'counting' ? `<a href="${API}/cameras/${cam.id}/stream" target="_blank" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg font-semibold">Canlı Görüntü</a>` : ''}
+                                <button onclick="testCameraFeed(${cam.id})" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg font-semibold">Test Connection</button>
+                                ${cam.role !== 'counting' ? `<a href="${API}/cameras/${cam.id}/stream" target="_blank" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg font-semibold">Live Stream</a>` : ''}
                               </div>
                             </div>
                           `).join('')}
@@ -2905,20 +2807,20 @@
                     <div id="add-cam-form-${l.id}" class="hidden mt-4 pt-4 border-t border-slate-700/60 space-y-2.5">
                       <div class="grid grid-cols-1 md:grid-cols-3 gap-2.5">
                         <select id="add-cam-role-${l.id}" class="text-xs py-1.5">
-                          <option value="counting">Sayaç Kamerası</option>
-                          <option value="vehicle_watchdog">Araç Takip</option>
-                          <option value="auxiliary" selected>Yardımcı / İzleme</option>
+                          <option value="counting">Counting Camera</option>
+                          <option value="vehicle_watchdog">Vehicle Watchdog</option>
+                          <option value="auxiliary" selected>Auxiliary / Monitoring</option>
                         </select>
                         <select id="add-cam-driver-${l.id}" class="text-xs py-1.5">
-                          <option value="rtsp">RTSP (IP Kamera)</option>
-                          <option value="usb">USB / Web Kamerası</option>
-                          <option value="file">Video Dosyası</option>
+                          <option value="rtsp">RTSP (IP Camera)</option>
+                          <option value="usb">USB / Webcam</option>
+                          <option value="file">Video File</option>
                         </select>
-                        <input id="add-cam-source-${l.id}" type="text" class="text-xs font-mono py-1.5" placeholder="rtsp://kullanici:sifre@ip:554/live veya #0">
+                        <input id="add-cam-source-${l.id}" type="text" class="text-xs font-mono py-1.5" placeholder="rtsp://user:password@ip:554/live or #0">
                       </div>
                       <div class="flex justify-end gap-2">
-                        <button onclick="toggleAddCameraForm(${l.id})" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 text-xs rounded-lg">Vazgeç</button>
-                        <button onclick="createCameraForLine(${l.id}, ${l.site_id})" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg">Kaydet ve Bağlan</button>
+                        <button onclick="toggleAddCameraForm(${l.id})" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 text-xs rounded-lg">Cancel</button>
+                        <button onclick="createCameraForLine(${l.id}, ${l.site_id})" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg">Save & Connect</button>
                       </div>
                     </div>
                   </div>
@@ -2944,7 +2846,7 @@
       const name = document.getElementById(`add-gate-name-${lineId}`).value.trim();
       const orderIndex = parseInt(document.getElementById(`add-gate-order-${lineId}`).value, 10) || 0;
       if (!name) {
-        toast('Kapı adını girin.', 'error');
+        toast('Please enter gate name.', 'error');
         return;
       }
       try {
@@ -2952,10 +2854,10 @@
           method: 'POST',
           body: JSON.stringify({ line_id: lineId, name, order_index: orderIndex }),
         });
-        toast(`Kapı eklendi: KAPI-${gate.id}`, 'success');
+        toast(`Gate added: GATE-${gate.id}`, 'success');
         renderScreen();
       } catch (e) {
-        toast(e.detail || 'Kapı eklenemedi', 'error');
+        toast(e.detail || 'Could not add gate', 'error');
       }
     }
 
@@ -2977,7 +2879,7 @@
       const driver = document.getElementById(`add-cam-driver-${lineId}`).value;
       const sourceValue = document.getElementById(`add-cam-source-${lineId}`).value.trim();
       if (!sourceValue) {
-        toast('Kamera kaynağını girin (RTSP adresi, #0 gibi bir cihaz numarası veya dosya yolu).', 'error');
+        toast('Please enter camera source (RTSP address, #0 device index, or file path).', 'error');
         return;
       }
       try {
@@ -2990,35 +2892,35 @@
           method: 'POST',
           body: JSON.stringify({ source_config: buildCameraSourceConfig(driver, sourceValue), source_driver: driver }),
         });
-        toast(`Kamera eklendi: KAM-${cam.id}`, 'success');
+        toast(`Camera added: CAM-${cam.id}`, 'success');
         renderScreen();
       } catch (e) {
-        toast(e.detail || 'Kamera eklenemedi', 'error');
+        toast(e.detail || 'Could not add camera', 'error');
       }
     }
 
     async function testCameraFeed(camId) {
       const resultEl = document.getElementById(`cam-test-result-${camId}`);
-      if (resultEl) resultEl.textContent = 'Test ediliyor…';
+      if (resultEl) resultEl.textContent = 'Testing…';
       try {
         const res = await api(`/cameras/${camId}/test`, { method: 'POST' });
         if (resultEl) {
-          resultEl.textContent = res.connected ? '✓ Bağlı' : '✗ Bağlanamadı';
+          resultEl.textContent = res.connected ? '✓ Connected' : '✗ Failed';
           resultEl.className = `text-[11px] font-bold ${res.connected ? 'text-emerald-400' : 'text-rose-400'}`;
         }
         toast(res.message, res.connected ? 'success' : 'error');
       } catch (e) {
-        if (resultEl) resultEl.textContent = '✗ Hata';
-        toast(e.detail || 'Test başarısız', 'error');
+        if (resultEl) resultEl.textContent = '✗ Error';
+        toast(e.detail || 'Test failed', 'error');
       }
     }
 
     async function triggerCalibration(lineId, type) {
       try {
         const res = await api(`/calibrations/${lineId}/${type}`, { method: 'POST', body: JSON.stringify({ line_id: lineId }) });
-        toast(`${type === 'motion' ? 'Optik akış hareket' : 'Ölçek'} kalibrasyonu başlatıldı (Job #${res.job_id})`, 'success');
+        toast(`${type === 'motion' ? 'Optical flow motion' : 'Scale'} calibration initiated (Job #${res.job_id})`, 'success');
       } catch (e) {
-        toast(e.detail || 'Kalibrasyon başlatılamadı', 'error');
+        toast(e.detail || 'Could not start calibration', 'error');
       }
     }
 
@@ -3031,7 +2933,7 @@
           const cfg = await api(`/configs/${lineId}`);
           drawer.innerHTML = `<pre>${escapeHtml(JSON.stringify(cfg.payload, null, 2))}</pre>`;
         } catch {
-          drawer.innerHTML = '<div class="text-slate-500">Mevcut konfigürasyon yüklenemedi.</div>';
+          drawer.innerHTML = '<div class="text-slate-500">Could not load current configuration.</div>';
         }
       }
     }
@@ -3053,11 +2955,11 @@
             <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
               <div class="flex items-center justify-between mb-4">
                 <div>
-                  <h2 class="text-xl font-black text-white tracking-tight">Sistem & Donanım Altyapısı</h2>
-                  <p class="text-xs text-slate-400 mt-0.5">Konteyner servisleri, GPU edge worker ve veri kuyrukları durumu.</p>
+                  <h2 class="text-xl font-black text-white tracking-tight">System & Infrastructure</h2>
+                  <p class="text-xs text-slate-400 mt-0.5">Container services, GPU edge worker, and queue status.</p>
                 </div>
                 <span class="badge ${health.status === 'healthy' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'}">
-                  ${health.status === 'healthy' ? '✓ SAĞLIKLI' : '⚠️ ARIZA'}
+                  ${health.status === 'healthy' ? '✓ HEALTHY' : '⚠️ DEGRADED'}
                 </span>
               </div>
 
@@ -3067,35 +2969,35 @@
                   <div class="text-[10px] text-slate-500 uppercase font-semibold">PostgreSQL (5434)</div>
                   <div class="text-sm font-bold text-emerald-400 mt-1 flex items-center space-x-1">
                     <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-                    <span>Çalışıyor</span>
+                    <span>Running</span>
                   </div>
                 </div>
                 <div class="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60">
                   <div class="text-[10px] text-slate-500 uppercase font-semibold">FastAPI Core (8080)</div>
                   <div class="text-sm font-bold text-emerald-400 mt-1 flex items-center space-x-1">
                     <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-                    <span>Canlı (Uvicorn)</span>
+                    <span>Online (Uvicorn)</span>
                   </div>
                 </div>
                 <div class="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60">
                   <div class="text-[10px] text-slate-500 uppercase font-semibold">GPU Jobrunner</div>
                   <div class="text-sm font-bold text-emerald-400 mt-1 flex items-center space-x-1">
                     <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-                    <span>Hazır (Polling)</span>
+                    <span>Ready (Polling)</span>
                   </div>
                 </div>
                 <div class="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60">
                   <div class="text-[10px] text-slate-500 uppercase font-semibold">ERP Relay Worker</div>
                   <div class="text-sm font-bold text-emerald-400 mt-1 flex items-center space-x-1">
                     <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-                    <span>Aktif (Outbox)</span>
+                    <span>Active (Outbox)</span>
                   </div>
                 </div>
               </div>
 
               ${health.nodes && health.nodes.length > 0 ? `
                 <div class="bg-slate-800/30 p-4 rounded-2xl border border-slate-700/50">
-                  <div class="text-xs font-bold text-slate-200 mb-2">🖥️ Edge Hesaplama Düğümleri</div>
+                  <div class="text-xs font-bold text-slate-200 mb-2">🖥️ Edge Compute Nodes</div>
                   <div class="space-y-2">
                     ${health.nodes.map(n => `
                       <div class="flex justify-between items-center bg-slate-900/60 p-3 rounded-xl border border-slate-800 text-xs">
@@ -3113,17 +3015,17 @@
 
             <!-- GPU Jobs Queue -->
             <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
-              <h3 class="text-base font-bold text-white mb-3">GPU İş Kuyruğu (${jobs.length})</h3>
-              ${jobs.length === 0 ? '<div class="text-slate-400 text-xs py-4">Kuyrukta bekleyen iş yok.</div>' : `
+              <h3 class="text-base font-bold text-white mb-3">GPU Job Queue (${jobs.length})</h3>
+              ${jobs.length === 0 ? '<div class="text-slate-400 text-xs py-4">No pending jobs in queue.</div>' : `
                 <div class="overflow-x-auto">
                   <table class="w-full text-left text-xs text-slate-300">
                     <thead class="bg-slate-800 text-slate-400 uppercase text-[10px]">
                       <tr>
                         <th class="p-2.5">Job ID</th>
-                        <th class="p-2.5">İş Türü</th>
-                        <th class="p-2.5">Durum</th>
-                        <th class="p-2.5">Öncelik</th>
-                        <th class="p-2.5">İşlem</th>
+                        <th class="p-2.5">Job Type</th>
+                        <th class="p-2.5">Status</th>
+                        <th class="p-2.5">Priority</th>
+                        <th class="p-2.5">Action</th>
                       </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-800 font-mono">
@@ -3133,7 +3035,7 @@
                           <td class="p-2.5 font-bold">${escapeHtml(j.kind)}</td>
                           <td class="p-2.5"><span class="badge ${j.status === 'completed' || j.status === 'done' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}">${escapeHtml(j.status)}</span></td>
                           <td class="p-2.5">${j.priority}</td>
-                          <td class="p-2.5">${j.status === 'queued' || j.status === 'running' ? `<button onclick="cancelJob(${j.id})" class="px-2 py-1 bg-rose-600/20 text-rose-300 border border-rose-500/30 rounded text-xs">İptal</button>` : '—'}</td>
+                          <td class="p-2.5">${j.status === 'queued' || j.status === 'running' ? `<button onclick="cancelJob(${j.id})" class="px-2 py-1 bg-rose-600/20 text-rose-300 border border-rose-500/30 rounded text-xs">Cancel</button>` : '—'}</td>
                         </tr>
                       `).join('')}
                     </tbody>
@@ -3145,16 +3047,16 @@
             <!-- ERP Outbox Queue -->
             ${outbox.length > 0 ? `
               <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
-                <h3 class="text-base font-bold text-white mb-3">ERP Transactional Outbox Kuyruğu (${outbox.length})</h3>
+                <h3 class="text-base font-bold text-white mb-3">ERP Transactional Outbox Queue (${outbox.length})</h3>
                 <div class="overflow-x-auto">
                   <table class="w-full text-left text-xs text-slate-300">
                     <thead class="bg-slate-800 text-slate-400 uppercase text-[10px]">
                       <tr>
                         <th class="p-2.5">Outbox ID</th>
-                        <th class="p-2.5">Oturum</th>
-                        <th class="p-2.5">Durum</th>
-                        <th class="p-2.5">Deneme</th>
-                        <th class="p-2.5">Tarih</th>
+                        <th class="p-2.5">Session</th>
+                        <th class="p-2.5">Status</th>
+                        <th class="p-2.5">Attempts</th>
+                        <th class="p-2.5">Timestamp</th>
                       </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-800 font-mono">
@@ -3175,17 +3077,17 @@
           </div>
         `;
       } catch (e) {
-        c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-rose-300">Hata: ${escapeHtml(e.detail || 'Sistem bilgisi alınamadı')}</div>`;
+        c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-rose-300">Error: ${escapeHtml(e.detail || 'Could not fetch system info')}</div>`;
       }
     }
 
     async function cancelJob(jobId) {
       try {
         await api(`/system/jobs/${jobId}/cancel`, { method: 'POST' });
-        toast(`İş iptal edildi: #${jobId}`);
+        toast(`Job cancelled: #${jobId}`);
         renderScreen();
       } catch (e) {
-        toast(e.detail || 'İptal edilemedi', 'error');
+        toast(e.detail || 'Could not cancel job', 'error');
       }
     }
   </script>

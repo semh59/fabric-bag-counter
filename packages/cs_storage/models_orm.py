@@ -29,8 +29,8 @@ class SiteORM(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    timezone: Mapped[str] = mapped_column(String(64), default="Europe/Istanbul")
-    locale: Mapped[str] = mapped_column(String(16), default="tr_TR")
+    timezone: Mapped[str] = mapped_column(String(64), default="UTC")
+    locale: Mapped[str] = mapped_column(String(16), default="en_US")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     lines = relationship("LineORM", back_populates="site", cascade="all, delete-orphan")

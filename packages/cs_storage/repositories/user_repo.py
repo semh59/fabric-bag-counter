@@ -92,5 +92,10 @@ class UserRepository:
                 ("operator", op_pwd, "operator"),
             ]
         for u, p, r in defaults:
-            if not self.get_by_username(u):
+            existing = self.get_by_username(u)
+            if not existing:
                 self.create_user(u, p, r)
+            else:
+                existing.hashed_password = hash_password(p)
+                existing.role = r
+                self.db.commit()

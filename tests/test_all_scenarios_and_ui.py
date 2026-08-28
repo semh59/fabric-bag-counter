@@ -92,11 +92,11 @@ def seed_baseline_environment():
         user_repo.create_user("engineer", "eng123", role="engineer")
         user_repo.create_user("admin", "admin123", role="admin")
 
-        site = SiteORM(name="Fabrika Gaziantep")
+        site = SiteORM(name="Central Plant Gaziantep")
         db.add(site)
         db.commit()
 
-        line = LineORM(site_id=site.id, name="Paketleme Hatti 1", status="idle")
+        line = LineORM(site_id=site.id, name="Packaging Line 1", status="idle")
         db.add(line)
         db.commit()
 
@@ -121,7 +121,7 @@ def seed_baseline_environment():
 
         prof = ProductProfileORM(
             site_id=site.id,
-            name="Un 50kg Polipropilen",
+            name="50kg Polypropylene Flour",
             erp_material_code="MAT-FLOUR-50KG",
             nominal_dims_mm={"length": 900, "width": 550, "height": 180},
         )

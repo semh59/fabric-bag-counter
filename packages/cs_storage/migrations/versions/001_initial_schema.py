@@ -20,8 +20,8 @@ def upgrade() -> None:
         "site",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column("name", sa.String(length=255), nullable=False),
-        sa.Column("timezone", sa.String(length=64), server_default="Europe/Istanbul"),
-        sa.Column("locale", sa.String(length=16), server_default="tr_TR"),
+        sa.Column("timezone", sa.String(length=64), server_default="UTC"),
+        sa.Column("locale", sa.String(length=16), server_default="en_US"),
         sa.Column("created_at", sa.DateTime(), server_default=sa.func.now()),
     )
 

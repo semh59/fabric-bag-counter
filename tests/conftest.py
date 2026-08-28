@@ -5,7 +5,7 @@ import os
 # Point the storage layer at an isolated, per-test-process SQLite file BEFORE
 # packages.cs_storage.db is imported -- its DEFAULT_SYNC_URL / DEFAULT_ASYNC_URL
 # are computed once at import time from these same env vars. Without this,
-# tests fall back to db.py's real dev/prod default (./data/cuval_sayim.db),
+# tests fall back to db.py's real dev/prod default (./data/bag_counter.db),
 # the same file a manually-run `uvicorn services.api.main:app` (or any other
 # process working in this checkout) would use. The autouse `clean_db` fixture
 # below does a DROP-then-CREATE of every table before *every single test*, so
@@ -19,7 +19,7 @@ import os
 # explicitly-set DATABASE_SYNC_URL/DATABASE_URL via setdefault -- e.g.
 # pointing tests at a real Postgres instance to exercise that dialect --
 # rather than overriding it.)
-_TEST_DB_PATH = f"./data/test_cuval_{os.getpid()}.db"
+_TEST_DB_PATH = f"./data/test_bag_{os.getpid()}.db"
 os.environ.setdefault("DATABASE_SYNC_URL", f"sqlite:///{_TEST_DB_PATH}")
 os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_TEST_DB_PATH}")
 

@@ -340,9 +340,9 @@ def test_camera_connection(cam_id: int):
     try:
         connected = cap.isOpened()
         message = (
-            f"Kamera akışı başarıyla bağlandı: {source}"
+            f"Camera feed connected successfully: {source}"
             if connected
-            else f"Kamera akışına bağlanılamadı: {source}"
+            else f"Could not connect to camera feed: {source}"
         )
     finally:
         cap.release()
@@ -528,7 +528,7 @@ async def upload_line_video(line_id: int, file: UploadFile = File(...)):
         _renderers[line_id] = LiveStreamRenderer(line_id=line_id)
     _renderers[line_id].set_video_source(video_path)
 
-    return {"status": "ok", "message": f"Video yüklendi ve analize başlandı: {file.filename}", "video_path": video_path}
+    return {"status": "ok", "message": f"Video uploaded and analysis started: {file.filename}", "video_path": video_path}
 
 
 class SetCameraSourceRequest(BaseModel):
@@ -666,7 +666,7 @@ def update_quick_line_settings(line_id: int, req: QuickLineSettingsRequest, user
             if req.gate_x_pos is not None:
                 renderer.gate_x = int(req.gate_x_pos)
 
-        return {"status": "ok", "message": "Hat ve bant ayarları güncellendi."}
+        return {"status": "ok", "message": "Line and conveyor belt settings updated."}
 
 
 @router.post("/sessions/{sess_id}/close")
@@ -771,9 +771,9 @@ def get_session_dispatch_report(sess_id: int, user: Annotated[CurrentUser, Depen
             "status": sess.status,
             "reconciliation_status": (
                 None if diff is None
-                else "TAM MUTABAKAT" if diff == 0
-                else "FAZLA SEVKİYAT" if diff > 0
-                else "EKSİK SEVKİYAT"
+                else "EXACT RECONCILIATION" if diff == 0
+                else "OVER DISPATCH" if diff > 0
+                else "SHORT DISPATCH"
             ),
             "damaged_count": damaged_count,
             "simulated_count": simulated_count,
@@ -1049,7 +1049,7 @@ def set_line_roi_polygon(line_id: int, req: SetRoiPolygonRequest, user: Annotate
     between the two.
     """
     if len(req.roi_polygon) < 3:
-        raise HTTPException(status_code=400, detail="roi_polygon en az 3 nokta içermelidir.")
+        raise HTTPException(status_code=400, detail="roi_polygon must contain at least 3 points.")
 
     with get_sync_session() as db:
         config_repo = ConfigRepository(db)
@@ -1057,7 +1057,7 @@ def set_line_roi_polygon(line_id: int, req: SetRoiPolygonRequest, user: Annotate
         if bundle is None:
             raise HTTPException(
                 status_code=400,
-                detail="Bu hat için aktif bir model dağıtımı yok, önce bir model aktive edin.",
+                detail="No active model deployment for this line. Please activate a model first.",
             )
 
         # Merge into the current effective payload rather than replacing it
@@ -1067,7 +1067,7 @@ def set_line_roi_polygon(line_id: int, req: SetRoiPolygonRequest, user: Annotate
         merged_payload["roi_polygon"] = req.roi_polygon
 
         new_config = config_repo.create_config_version(
-            line_id=line_id, payload=merged_payload, note="ROI güncellemesi (UI)", created_by=user.username,
+            line_id=line_id, payload=merged_payload, note="ROI update (UI)", created_by=user.username,
         )
         new_bundle = config_repo.create_and_activate_bundle(
             line_id=line_id,
@@ -1187,13 +1187,13 @@ def simulate_bag_crossing(sess_id: int, req: SimulateBagRequest = SimulateBagReq
         bundle = db.query(DeploymentBundleORM).filter(DeploymentBundleORM.line_id == sess.line_id, DeploymentBundleORM.deactivated_at == None).first()
 
         missing = [
-            name for name, row in (("kamera", cam), ("kapı (gate)", gate), ("aktif model dağıtımı", bundle))
+            name for name, row in (("camera", cam), ("gate", gate), ("active model deployment", bundle))
             if row is None
         ]
         if missing:
             raise HTTPException(
                 status_code=400,
-                detail=f"Bu hat için şunlar tanımlı değil, simülasyon çalıştırılamaz: {', '.join(missing)}.",
+                detail=f"The following are not configured for this line; cannot run simulation: {', '.join(missing)}.",
             )
 
         cam_id = cam.id
@@ -1246,7 +1246,7 @@ def simulate_bag_crossing(sess_id: int, req: SimulateBagRequest = SimulateBagReq
             ))
         db.refresh(sess)
 
-        # Also reflect this manual "+1 Hasarlı" / "+2 Bitişik" trigger on the
+        # Also reflect this manual "+1 Damaged" / "+2 Merged" trigger on the
         # live MJPEG demo feed (if a renderer for this line is running), so
         # the defect/multi badges in LiveStreamRenderer._process_simulated_frame
         # actually render instead of being permanently dead code.

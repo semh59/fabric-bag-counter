@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 # with no env configured would silently write to what looks like throwaway
 # test data. Tests get their own isolated state via conftest.py's per-test
 # drop_all/create_all, so sharing this default path with a real run is safe.
-DEFAULT_ASYNC_URL = os.getenv("DATABASE_URL") or "sqlite+aiosqlite:///./data/cuval_sayim.db"
-DEFAULT_SYNC_URL = os.getenv("DATABASE_SYNC_URL") or "sqlite:///./data/cuval_sayim.db"
+DEFAULT_ASYNC_URL = os.getenv("DATABASE_URL") or "sqlite+aiosqlite:///./data/bag_counter.db"
+DEFAULT_SYNC_URL = os.getenv("DATABASE_SYNC_URL") or "sqlite:///./data/bag_counter.db"
 
 
 class Base(DeclarativeBase):

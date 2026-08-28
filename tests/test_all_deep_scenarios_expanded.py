@@ -1,4 +1,4 @@
-"""Expanded Industrial Deep Test Suite for Cuval Sayim v2.0 Enterprise (§1-§16).
+"""Expanded Industrial Deep Test Suite for Fabric Bag Counter v2.0 Enterprise (§1-§16).
 
 Exhaustively verifies every operational scenario, physical invariant, and edge case:
 1. Scenario A: Multi-Stream Asynchronous Camera Interleaving (25, 30, 15, 10 FPS)
