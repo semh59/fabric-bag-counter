@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import logging
-import math
-import random
 import time
-from datetime import datetime, timezone
-from typing import Generator
+from collections.abc import Generator
+from datetime import UTC, datetime
+
 import cv2
 import numpy as np
 
@@ -16,8 +15,9 @@ from packages.cs_counting.event_handler import CountingEventHandler, estimate_si
 from packages.cs_counting.events import GateCrossingRecorded, SessionAreaEstimateUpdated
 from packages.cs_counting.gate import GateCrossingEvent
 from packages.cs_storage.db import get_sync_session
-from packages.cs_storage.models_orm import CameraORM, GateORM, ProductProfileORM, SessionORM
+from packages.cs_storage.models_orm import CameraORM, GateORM
 from packages.cs_storage.repositories.calibration_repo import CalibrationRepository
+from packages.cs_storage.repositories.camera_epoch_repo import CameraEpochRepository
 from packages.cs_storage.repositories.config_repo import ConfigRepository
 from packages.cs_storage.repositories.session_repo import SessionRepository
 from packages.cs_vision.calibration import apply_perspective_warp
@@ -51,8 +51,13 @@ class LiveStreamRenderer:
         self._last_frame_time: float | None = None
         self._fps_ema: float | None = None
         self.homography_matrix: list[list[float]] | None = None
+        self.camera_id: int | None = None
+        self.gate_id: int | None = None
+        self.stream_epoch: int = 1
+        self.active_bundle_id: int | None = None
         self.reload_perspective_calibration()
         self.reload_active_config()
+        self.reload_camera_context()
 
         # Initialize physical bags on conveyor
         self.bags.append({"x": 100.0, "y": 140.0, "w": 110, "h": 150, "label": "50kg Çimento", "color": (40, 180, 240), "id": self.next_sim_id, "passed": False})
@@ -117,16 +122,59 @@ class LiveStreamRenderer:
         etc. doesn't need to restart the stream. No active bundle means the
         engine keeps running on its own hardcoded defaults -- CountingEngine.
         configure() is simply never called, not called with an empty payload.
+        Also caches self.active_bundle_id -- the real value ledger events
+        must be stamped with (deployment_bundle_id is NOT NULL; see
+        reload_camera_context()'s docstring for why this used to be a
+        hardcoded, frequently-wrong literal instead).
         """
         try:
             with get_sync_session() as db:
                 config_repo = ConfigRepository(db)
                 bundle = config_repo.get_active_bundle(self.line_id)
+                self.active_bundle_id = bundle.id if bundle else None
                 if bundle is not None:
                     payload = config_repo.get_effective_config_payload(bundle.config_version)
                     self.engine.configure(payload)
         except Exception:
             logger.exception("Failed to load active config for line_id=%s", self.line_id)
+            self.active_bundle_id = None
+
+    def reload_camera_context(self) -> None:
+        """(Re)load this line's real camera_id, gate_id, and current
+        stream_epoch for ledger event attribution.
+
+        Previously frame-processing hardcoded camera_id=1, gate_id=1, and
+        stream_epoch=4 regardless of what was actually configured for this
+        line -- harmless only by coincidence on a line whose real camera/
+        gate happened to have id 1; verified directly that on any other
+        line it raises a real count_event_camera_id_fkey (or _gate_id_fkey)
+        violation (caught, logged, and the crossing silently never
+        recorded) instead of attributing the event to a real camera/gate.
+        No camera or gate configured for this line yet means camera_id/
+        gate_id stay None -- callers must check for that and skip the
+        ledger write rather than fabricate an id.
+        """
+        try:
+            with get_sync_session() as db:
+                cam = db.query(CameraORM).filter(CameraORM.line_id == self.line_id).first()
+                self.camera_id = cam.id if cam else None
+                self.stream_epoch = CameraEpochRepository(db).get_current_epoch(self.camera_id) or 1 if self.camera_id else 1
+                gate = db.query(GateORM).filter(GateORM.line_id == self.line_id).first()
+                self.gate_id = gate.id if gate else None
+                if self.gate_id is not None:
+                    # GateStateMachine.gate_id defaults to 1 and is never
+                    # otherwise updated (update_geometry() only takes
+                    # axis/position params, not gate_id) -- every real
+                    # crossing this engine produces carries whatever
+                    # gate_id the state machine was constructed with, so
+                    # this is the one place that ever gets synced to the
+                    # real GateORM row for this line.
+                    self.engine.gate_state_machine.gate_id = self.gate_id
+        except Exception:
+            logger.exception("Failed to load camera context for line_id=%s", self.line_id)
+            self.camera_id = None
+            self.stream_epoch = 1
+            self.gate_id = None
 
     def set_video_source(self, video_path: str) -> bool:
         """Set a real MP4 / AVI video file as input source."""
@@ -194,18 +242,18 @@ class LiveStreamRenderer:
         # 3. Render physical bags moving on conveyor
         for bag in self.bags:
             bx, by, bw, bh = int(bag["x"]), int(bag["y"]), int(bag["w"]), int(bag["h"])
-            
+
             # Shadow
             cv2.rectangle(frame, (bx + 8, by + 8), (bx + bw + 8, by + bh + 8), (8, 10, 15), -1)
-            
+
             # Bag textured body (Kraft / Poly)
             b_color = bag.get("color", (40, 180, 240))
             cv2.rectangle(frame, (bx, by), (bx + bw, by + bh), b_color, -1)
-            
+
             # Bag 3D shading / folds
             cv2.rectangle(frame, (bx + 4, by + 4), (bx + bw - 4, by + bh - 4), (b_color[0] + 20, b_color[1] + 20, min(255, b_color[2] + 20)), 2)
             cv2.line(frame, (bx + 10, by + bh // 2), (bx + bw - 10, by + bh // 2), (b_color[0] - 25, b_color[1] - 25, max(0, b_color[2] - 25)), 2)
-            
+
             # Print label
             cv2.putText(frame, bag.get("label", "50kg Çimento")[:14], (bx + 8, by + bh // 2 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (15, 20, 25), 1, cv2.LINE_AA)
             cv2.putText(frame, "FABRIC #2026", (bx + 8, by + bh // 2 + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (30, 40, 50), 1, cv2.LINE_AA)
@@ -257,7 +305,7 @@ class LiveStreamRenderer:
         for real detection when a camera IS connected.
         """
         self.frame_idx += 1
-        t_now = datetime.now(timezone.utc)
+        t_now = datetime.now(UTC)
         mono_ns = int(time.perf_counter() * 1e9)
 
         if self.video_cap is not None:
@@ -295,21 +343,31 @@ class LiveStreamRenderer:
         # That gap is closed by going through the same shared handler both
         # paths now use.
         if session_id:
-            try:
-                with get_sync_session() as db:
-                    handler = CountingEventHandler(db)
-                    handler.handle_frame_output(
-                        out,
-                        line_id=self.line_id,
-                        camera_id=1,
-                        session_id=session_id,
-                        stream_epoch=4,
+            if self.camera_id is None or self.gate_id is None or self.active_bundle_id is None:
+                if out.gate_crossings:
+                    logger.warning(
+                        "Dropping %d real gate-crossing(s) for session_id=%s, line_id=%s: "
+                        "no real camera (%s), gate (%s), or active deployment bundle (%s) configured for this "
+                        "line -- recording them would need a fabricated camera_id/gate_id/deployment_bundle_id.",
+                        len(out.gate_crossings), session_id, self.line_id, self.camera_id, self.gate_id, self.active_bundle_id,
                     )
-            except Exception:
-                logger.exception(
-                    "Failed to record real gate-crossing ledger event(s) for session_id=%s, line_id=%s",
-                    session_id, self.line_id,
-                )
+            else:
+                try:
+                    with get_sync_session() as db:
+                        handler = CountingEventHandler(db)
+                        handler.handle_frame_output(
+                            out,
+                            line_id=self.line_id,
+                            camera_id=self.camera_id,
+                            session_id=session_id,
+                            stream_epoch=self.stream_epoch,
+                            deployment_bundle_id=self.active_bundle_id,
+                        )
+                except Exception:
+                    logger.exception(
+                        "Failed to record real gate-crossing ledger event(s) for session_id=%s, line_id=%s",
+                        session_id, self.line_id,
+                    )
 
         # Annotate on detect_frame (not the raw frame): track boxes/masks are
         # in the coordinate space the detector actually saw, i.e. the warped
@@ -349,14 +407,20 @@ class LiveStreamRenderer:
                     # services/api/routes.py::simulate_bag_crossing (which previously
                     # used a different, diverged +/-0.998 incremental-delta formula
                     # instead of this flat multiply).
-                    if session_id:
+                    if session_id and (self.camera_id is None or self.gate_id is None or self.active_bundle_id is None):
+                        logger.warning(
+                            "Dropping simulated gate-crossing for session_id=%s, line_id=%s, bag_id=%s: "
+                            "no real camera (%s), gate (%s), or active deployment bundle (%s) configured for this line.",
+                            session_id, self.line_id, bag["id"], self.camera_id, self.gate_id, self.active_bundle_id,
+                        )
+                    elif session_id:
                         try:
                             with get_sync_session() as db:
                                 handler = CountingEventHandler(db)
                                 crossing = GateCrossingEvent(
                                     track_id=bag["id"],
                                     crossing_seq=1,
-                                    gate_id=1,
+                                    gate_id=self.gate_id,
                                     direction=self.belt_dir,
                                     crossing_timestamp=t_now,
                                     frame_index=self.frame_idx,
@@ -367,10 +431,10 @@ class LiveStreamRenderer:
                                 )
                                 _, created = handler.handle_gate_crossing(GateCrossingRecorded(
                                     line_id=self.line_id,
-                                    camera_id=1,
+                                    camera_id=self.camera_id,
                                     session_id=session_id,
-                                    stream_epoch=4,
-                                    deployment_bundle_id=1,
+                                    stream_epoch=self.stream_epoch,
+                                    deployment_bundle_id=self.active_bundle_id,
                                     crossing=crossing,
                                     is_simulated=True,
                                 ))
@@ -411,10 +475,10 @@ class LiveStreamRenderer:
             # Polygon mask
             pts = np.array([[bx, by], [bx + bw, by], [bx + bw, by + bh], [bx, by + bh]], np.int32)
             cv2.fillPoly(overlay, [pts], mask_color)
-            
+
             # Bounding Box corners
             cv2.rectangle(annotated, (bx - 2, by - 2), (bx + bw + 2, by + bh + 2), box_color, 2)
-            
+
             # Tracking & Defect Badge
             if is_defective:
                 badge_text = f"🚨 DEFECT-HASARLI {bag['id']}"

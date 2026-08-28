@@ -44,6 +44,7 @@ from packages.cs_storage.models_orm import (
     TrainingRunORM,
 )
 from packages.cs_storage.repositories.calibration_repo import CalibrationRepository
+from packages.cs_storage.repositories.camera_epoch_repo import CameraEpochRepository
 from packages.cs_storage.repositories.config_repo import ConfigRepository
 from packages.cs_storage.repositories.job_repo import JobRepository
 from packages.cs_storage.repositories.ledger_repo import LedgerRepository
@@ -261,7 +262,20 @@ def create_camera(req: CreateCameraRequest):
         db.add(cam)
         db.commit()
         db.refresh(cam)
-        return cam
+        line_id = cam.line_id
+
+    # A live renderer resolves camera_id/gate_id once at construction and
+    # caches them (see LiveStreamRenderer.reload_camera_context()) -- without
+    # this, a camera registered for a line *after* its stream was already
+    # opened would stay invisible to ledger writes until the process
+    # restarted, same class of staleness reload_active_config()/
+    # reload_perspective_calibration() already handle for their own state.
+    from packages.cs_counting.stream_renderer import _renderers
+    renderer = _renderers.get(line_id)
+    if renderer is not None:
+        renderer.reload_camera_context()
+
+    return cam
 
 
 @router.post("/cameras/{cam_id}/test", dependencies=[Depends(require_role(UserRole.ADMIN))])
@@ -1125,14 +1139,30 @@ def simulate_bag_crossing(sess_id: int, req: SimulateBagRequest = SimulateBagReq
             sess.status = "counting"
             db.commit()
 
-        # Find camera, gate, bundle
+        # Find camera, gate, bundle -- camera_id/gate_id/deployment_bundle_id
+        # are all NOT NULL foreign keys on count_event, so a real crossing
+        # genuinely cannot be recorded without all three actually existing
+        # for this line. Previously fell back to a hardcoded `1` for
+        # whichever was missing -- silently wrong on any line whose real
+        # camera/gate/bundle didn't happen to have id 1 (verified directly:
+        # a real ForeignKeyViolation, not a hypothetical), not a safe default.
         cam = db.query(CameraORM).filter(CameraORM.line_id == sess.line_id).first()
         gate = db.query(GateORM).filter(GateORM.line_id == sess.line_id).first()
         bundle = db.query(DeploymentBundleORM).filter(DeploymentBundleORM.line_id == sess.line_id, DeploymentBundleORM.deactivated_at == None).first()
 
-        cam_id = cam.id if cam else 1
-        gate_id = gate.id if gate else 1
-        bundle_id = bundle.id if bundle else 1
+        missing = [
+            name for name, row in (("kamera", cam), ("kapı (gate)", gate), ("aktif model dağıtımı", bundle))
+            if row is None
+        ]
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Bu hat için şunlar tanımlı değil, simülasyon çalıştırılamaz: {', '.join(missing)}.",
+            )
+
+        cam_id = cam.id
+        gate_id = gate.id
+        bundle_id = bundle.id
 
         # Current sequence and unique track_id
         import time, random
@@ -1161,11 +1191,12 @@ def simulate_bag_crossing(sess_id: int, req: SimulateBagRequest = SimulateBagReq
             merge_flag=req.merge_flag,
             centroid=(0.0, 0.0),
         )
+        stream_epoch = CameraEpochRepository(db).get_current_epoch(cam_id) or 1
         ev, created = event_handler.handle_gate_crossing(GateCrossingRecorded(
             line_id=sess.line_id,
             camera_id=cam_id,
             session_id=sess.id,
-            stream_epoch=4,
+            stream_epoch=stream_epoch,
             deployment_bundle_id=bundle_id,
             crossing=crossing,
             is_simulated=True,

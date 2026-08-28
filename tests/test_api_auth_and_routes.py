@@ -2,8 +2,17 @@
 
 import pytest
 from fastapi.testclient import TestClient
+
 from packages.cs_storage.db import get_sync_session, init_db_sync
-from packages.cs_storage.models_orm import LineORM, ProductProfileORM, SiteORM
+from packages.cs_storage.models_orm import (
+    CameraORM,
+    GateORM,
+    LineORM,
+    ModelVersionORM,
+    ProductProfileORM,
+    SiteORM,
+)
+from packages.cs_storage.repositories.config_repo import ConfigRepository
 from packages.cs_storage.repositories.user_repo import UserRepository
 from services.api.main import app
 
@@ -95,6 +104,23 @@ def test_session_lifecycle_routes():
 
 def test_dispute_defect_event_route():
     _, line_id, prof_id = setup_api_data()
+    # simulate_bag_crossing now requires a real camera/gate/active deployment
+    # bundle for the line (previously fell back to a hardcoded id=1 for
+    # whichever was missing -- a real FK violation on any line whose real
+    # rows didn't happen to have id 1, see stream_renderer.py's
+    # reload_camera_context() for the same fix on the live-stream paths).
+    with get_sync_session() as db:
+        cam = CameraORM(line_id=line_id, node_id=1, source_driver="rtsp")
+        db.add(cam)
+        gate = GateORM(line_id=line_id, name="Gate 1")
+        db.add(gate)
+        mv = ModelVersionORM(onnx_hash="test-hash", onnx_path="models/test.onnx")
+        db.add(mv)
+        db.commit()
+        config_repo = ConfigRepository(db)
+        cfg = config_repo.create_config_version(line_id=line_id, payload={})
+        config_repo.create_and_activate_bundle(line_id=line_id, model_version_id=mv.id, config_version_id=cfg.id)
+
     res_login = client.post("/api/auth/login", json={"username": "operator", "password": "op123"})
     headers = {"Authorization": f"Bearer {res_login.json()['token']}"}
 
@@ -127,3 +153,25 @@ def test_dispute_nonexistent_event_returns_404():
     headers = {"Authorization": f"Bearer {res_login.json()['token']}"}
     res = client.post("/api/events/not-a-real-id/dispute_defect", json={}, headers=headers)
     assert res.status_code == 404
+
+
+def test_simulate_bag_400_without_real_camera_gate_bundle():
+    """No camera/gate/active bundle configured for the line -> a real,
+    clear 400 -- previously fell back to a hardcoded camera_id=1/gate_id=1/
+    deployment_bundle_id=1 for whichever was missing, which either silently
+    recorded the crossing against the wrong real row or raised an
+    unhandled foreign-key violation for any line whose real rows didn't
+    happen to have id 1."""
+    _, line_id, prof_id = setup_api_data()
+    res_login = client.post("/api/auth/login", json={"username": "operator", "password": "op123"})
+    headers = {"Authorization": f"Bearer {res_login.json()['token']}"}
+
+    sess_id = client.post(
+        "/api/sessions",
+        json={"line_id": line_id, "product_profile_id": prof_id, "target_count": 10},
+        headers=headers,
+    ).json()["id"]
+
+    res = client.post(f"/api/sessions/{sess_id}/simulate_bag", json={"direction": 1}, headers=headers)
+    assert res.status_code == 400
+    assert "kamera" in res.json()["detail"] or "kapı" in res.json()["detail"] or "model dağıtımı" in res.json()["detail"]

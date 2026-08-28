@@ -38,7 +38,13 @@ class InferenceWorker:
         self.max_consecutive_drops = max_consecutive_drops
         self.engine = engine or CountingEngine()
         self.is_running = False
-        self.active_bundle_id = 1
+        # None (not a hardcoded 1) until a real active bundle is resolved --
+        # deployment_bundle_id is a NOT NULL FK on count_event, so a
+        # fabricated default here would either point at a bundle that
+        # doesn't exist (a real FK violation) or, worse, a real but wrong
+        # bundle that happens to have id 1. run_step() below skips
+        # recording ledger events entirely while this is None.
+        self.active_bundle_id: int | None = None
         # Tracks which config_version was last applied to self.engine via
         # CountingEngine.configure(), so run_step() only re-resolves and
         # re-applies the effective payload when the active bundle's config
@@ -123,7 +129,15 @@ class InferenceWorker:
                 # session.counted_total from them (unlike the other three
                 # call sites, which all did) -- counted_total would have
                 # stayed stale through the whole session on this pipeline.
-                if active_session:
+                if active_session and self.active_bundle_id is None:
+                    if output.gate_crossings:
+                        logger.warning(
+                            f"[Inference] Dropping {len(output.gate_crossings)} gate-crossing(s) for "
+                            f"session_id={active_session.id}, line_id={self.line_id}: no active deployment "
+                            f"bundle configured for this line -- deployment_bundle_id is a required field, "
+                            f"there is no real value to record these events with."
+                        )
+                elif active_session:
                     # A genuine data error here (e.g. self.active_bundle_id
                     # pointing at a deployment_bundle row that no longer
                     # exists) now raises instead of being silently swallowed
