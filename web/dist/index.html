@@ -2787,6 +2787,12 @@
         lines.forEach((l, i) => { camerasByLine[l.id] = cameraLists[i]; });
       } catch {}
 
+      let gatesByLine = {};
+      try {
+        const gateLists = await Promise.all(lines.map(l => api(`/gates?line_id=${l.id}`).catch(() => [])));
+        lines.forEach((l, i) => { gatesByLine[l.id] = gateLists[i]; });
+      } catch {}
+
       c.innerHTML = `
         <div class="space-y-6">
           <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
@@ -2818,6 +2824,50 @@
               </div>
             `}
           </div>
+
+          ${lines.length === 0 ? '' : `
+            <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
+              <h2 class="text-xl font-black text-white tracking-tight">Kapılar</h2>
+              <p class="text-xs text-slate-400 mt-1">Her hattın fiziksel sayım noktası (kapı). <b>Bir hatta kapı tanımlı değilse, o hatta tespit edilen geçişler veritabanına hiç yazılmaz.</b></p>
+
+              <div class="space-y-5 my-6">
+                ${lines.map(l => `
+                  <div class="bg-slate-800/40 p-5 rounded-2xl border border-slate-700">
+                    <div class="flex items-center justify-between mb-3">
+                      <div class="font-bold text-slate-100 text-sm">${escapeHtml(l.name)}</div>
+                      <button onclick="toggleAddGateForm(${l.id})" class="text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg">+ Kapı Ekle</button>
+                    </div>
+
+                    ${(gatesByLine[l.id] || []).length === 0
+                      ? '<div class="text-amber-400 text-xs font-semibold">⚠ Bu hatta tanımlı kapı yok — sayım kaydedilemez.</div>'
+                      : `<div class="space-y-2">
+                          ${(gatesByLine[l.id] || []).map(gate => `
+                            <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-900/60 px-4 py-3 rounded-xl border border-slate-700/60 text-xs">
+                              <div class="flex items-center gap-2.5 min-w-0">
+                                <span class="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0"></span>
+                                <span class="font-bold text-slate-200 flex-shrink-0">KAPI-${gate.id}</span>
+                                <span class="text-slate-400">${escapeHtml(gate.name)}</span>
+                                <span class="text-slate-500 font-mono">sıra: ${gate.order_index}</span>
+                              </div>
+                            </div>
+                          `).join('')}
+                        </div>`}
+
+                    <div id="add-gate-form-${l.id}" class="hidden mt-4 pt-4 border-t border-slate-700/60 space-y-2.5">
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                        <input id="add-gate-name-${l.id}" type="text" class="text-xs py-1.5" placeholder="Ana Kapı">
+                        <input id="add-gate-order-${l.id}" type="number" value="0" class="text-xs py-1.5" placeholder="Sıra">
+                      </div>
+                      <div class="flex justify-end gap-2">
+                        <button onclick="toggleAddGateForm(${l.id})" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 text-xs rounded-lg">Vazgeç</button>
+                        <button onclick="createGateForLine(${l.id})" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg">Kaydet</button>
+                      </div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `}
 
           ${lines.length === 0 ? '' : `
             <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
@@ -2883,6 +2933,30 @@
     function toggleAddCameraForm(lineId) {
       const el = document.getElementById(`add-cam-form-${lineId}`);
       if (el) el.classList.toggle('hidden');
+    }
+
+    function toggleAddGateForm(lineId) {
+      const el = document.getElementById(`add-gate-form-${lineId}`);
+      if (el) el.classList.toggle('hidden');
+    }
+
+    async function createGateForLine(lineId) {
+      const name = document.getElementById(`add-gate-name-${lineId}`).value.trim();
+      const orderIndex = parseInt(document.getElementById(`add-gate-order-${lineId}`).value, 10) || 0;
+      if (!name) {
+        toast('Kapı adını girin.', 'error');
+        return;
+      }
+      try {
+        const gate = await api('/gates', {
+          method: 'POST',
+          body: JSON.stringify({ line_id: lineId, name, order_index: orderIndex }),
+        });
+        toast(`Kapı eklendi: KAPI-${gate.id}`, 'success');
+        renderScreen();
+      } catch (e) {
+        toast(e.detail || 'Kapı eklenemedi', 'error');
+      }
     }
 
     async function ensureNodeForSite(siteId) {

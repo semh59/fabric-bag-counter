@@ -92,6 +92,12 @@ class CreateCameraRequest(BaseModel):
     role: CameraRole = CameraRole.COUNTING
 
 
+class CreateGateRequest(BaseModel):
+    line_id: int
+    name: str
+    order_index: int = 0
+
+
 class CreateSessionRequest(BaseModel):
     line_id: int
     product_profile_id: int
@@ -276,6 +282,36 @@ def create_camera(req: CreateCameraRequest):
         renderer.reload_camera_context()
 
     return cam
+
+
+@router.get("/gates")
+def list_gates(user: Annotated[CurrentUser, Depends(get_current_user)], line_id: int | None = None, limit: int = 100, offset: int = 0):
+    with get_sync_session() as db:
+        q = db.query(GateORM)
+        if line_id is not None:
+            q = q.filter(GateORM.line_id == line_id)
+        return q.order_by(GateORM.id).offset(offset).limit(limit).all()
+
+
+@router.post("/gates", dependencies=[Depends(require_role(UserRole.ADMIN))])
+def create_gate(req: CreateGateRequest):
+    with get_sync_session() as db:
+        gate = GateORM(line_id=req.line_id, name=req.name, order_index=req.order_index)
+        db.add(gate)
+        db.commit()
+        db.refresh(gate)
+        line_id = gate.line_id
+
+    # Same staleness class as create_camera()'s reload_camera_context() call
+    # above -- a gate registered for a line after its stream was already
+    # opened would otherwise stay invisible (gate_id=None, ledger writes
+    # skipped) until the process restarted.
+    from packages.cs_counting.stream_renderer import _renderers
+    renderer = _renderers.get(line_id)
+    if renderer is not None:
+        renderer.reload_camera_context()
+
+    return gate
 
 
 @router.post("/cameras/{cam_id}/test", dependencies=[Depends(require_role(UserRole.ADMIN))])
