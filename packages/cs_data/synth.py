@@ -290,5 +290,11 @@ class SyntheticBagGenerator:
             "amodal_masks": amodal_masks,
             "amodal_boxes": amodal_boxes,
             "print_marks": print_mark_boxes,
+            # Per-bag, aligned 1:1 with amodal_boxes/amodal_masks (unlike
+            # print_marks above, which only has one entry per bag that
+            # actually got a print mark and so isn't index-aligned) --
+            # lets a caller build a real per-box print_mark classification
+            # target instead of training cls_head against an always-0 label.
+            "has_print_marks": [rec["has_print"] for rec in bag_records],
             "visible_ratios": visible_ratios,
         }

@@ -129,9 +129,11 @@ def build_real_training_dataset(
         <data_dir>/annotations.json   raw COCO export (images, annotations, categories)
         <data_dir>/images/<file_name> as referenced by annotations.json
 
-    Only "bag_body" annotations become training targets, mirroring the
-    synthetic pipeline (which likewise trains solely on bag_body boxes/masks;
-    print_mark ground truth is not yet consumed by the loss in either path).
+    Only "bag_body" annotations become box/mask training targets; each one's
+    classification target (cls_head, consumed downstream as
+    DetectionResult.print_marks -- see packages/cs_vision/detector.py) is
+    derived from whether a "print_mark" annotation's center falls inside it,
+    mirroring the synthetic pipeline's has_print_marks.
     Returns an empty list (not an error) if no annotation file is present yet.
     """
     annotations_path = data_dir / "annotations.json"
@@ -162,6 +164,17 @@ def build_real_training_dataset(
 
         boxes_canvas: list[list[float]] = []
         masks_canvas: list[np.ndarray] = []
+        classes_canvas: list[float] = []
+
+        # print_mark centers in original image space, used below to decide
+        # per-bag_body whether a print mark falls on it -- a real per-box
+        # classification target instead of the always-0 placeholder.
+        print_mark_centers = []
+        for ann in anns_by_image.get(img_id, []):
+            if ann["category"] != "print_mark":
+                continue
+            pbx, pby, pbw, pbh = ann["bbox"]
+            print_mark_centers.append((pbx + pbw / 2.0, pby + pbh / 2.0))
 
         for ann in anns_by_image.get(img_id, []):
             if ann["category"] != "bag_body":
@@ -184,13 +197,15 @@ def build_real_training_dataset(
                 x1 * scale + pad_w, y1 * scale + pad_h,
                 x2 * scale + pad_w, y2 * scale + pad_h,
             ])
+            has_print = any(x1 <= cx <= x2 and y1 <= cy <= y2 for cx, cy in print_mark_centers)
+            classes_canvas.append(1.0 if has_print else 0.0)
 
         if not boxes_canvas:
             continue
 
         img_t = torch.from_numpy(padded_img.astype(np.float32) / 255.0).permute(2, 0, 1)
         t_boxes, t_scores, t_classes, t_masks = match_boxes_to_anchor_grid(
-            anchors_np, boxes_canvas, masks_canvas
+            anchors_np, boxes_canvas, masks_canvas, classes=classes_canvas
         )
         dataset.append((img_t, t_boxes, t_scores, t_classes, t_masks))
 
@@ -328,8 +343,9 @@ def build_synthetic_training_dataset(
         img = scene["image"].astype(np.float32) / 255.0
         img_t = torch.from_numpy(img).permute(2, 0, 1)  # [3, 640, 640]
 
+        classes = [1.0 if has_print else 0.0 for has_print in scene["has_print_marks"]]
         t_boxes, t_scores, t_classes, t_masks = match_boxes_to_anchor_grid(
-            anchors_np, scene["amodal_boxes"], scene["amodal_masks"]
+            anchors_np, scene["amodal_boxes"], scene["amodal_masks"], classes=classes
         )
 
         dataset.append((img_t, t_boxes, t_scores, t_classes, t_masks))
