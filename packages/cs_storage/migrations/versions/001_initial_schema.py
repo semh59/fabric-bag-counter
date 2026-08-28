@@ -213,20 +213,28 @@ def upgrade() -> None:
         sa.Column("area_estimate_total", sa.Float(), server_default="0.0"),
         sa.Column("discrepancy_flag", sa.Boolean(), server_default=sa.text("false")),
         sa.Column("reconciliation_id", sa.Integer(), sa.ForeignKey("reconciliation.id"), nullable=True),
+        sa.Column("vehicle_plate", sa.String(length=32), nullable=True),
+        sa.Column("driver_name", sa.String(length=128), nullable=True),
+        sa.Column("carrier_company", sa.String(length=255), nullable=True),
     )
     op.create_index("ix_session_line_id", "session", ["line_id"])
 
     # Now that both sides of the mutual session <-> reconciliation reference
     # exist, add the deferred FK from reconciliation.session_id -> session.id
-    # (matches ReconciliationORM.session_id in models_orm.py).
-    op.create_foreign_key(
-        "fk_reconciliation_session",
-        "reconciliation",
-        "session",
-        ["session_id"],
-        ["id"],
-        ondelete="CASCADE",
-    )
+    # (matches ReconciliationORM.session_id in models_orm.py). Batch mode
+    # (not a standalone op.create_foreign_key) because SQLite has no ALTER
+    # TABLE ADD CONSTRAINT -- batch_alter_table falls back to a plain ALTER
+    # on Postgres and does a real copy-and-move rebuild on SQLite, so this
+    # migration actually runs on both backends the app supports instead of
+    # only ever having been exercised against Postgres.
+    with op.batch_alter_table("reconciliation") as batch_op:
+        batch_op.create_foreign_key(
+            "fk_reconciliation_session",
+            "session",
+            ["session_id"],
+            ["id"],
+            ondelete="CASCADE",
+        )
 
     # count_event (§5.5)
     op.create_table(
@@ -310,8 +318,10 @@ def downgrade() -> None:
     op.drop_table("count_event")
     # reconciliation.session_id -> session.id was added after both tables existed
     # (mutual reference with session.reconciliation_id -> reconciliation.id), so it
-    # must be dropped explicitly before "session" can be dropped.
-    op.drop_constraint("fk_reconciliation_session", "reconciliation", type_="foreignkey")
+    # must be dropped explicitly before "session" can be dropped. Batch mode
+    # for the same cross-dialect reason as the upgrade() side above.
+    with op.batch_alter_table("reconciliation") as batch_op:
+        batch_op.drop_constraint("fk_reconciliation_session", type_="foreignkey")
     op.drop_table("session")
     op.drop_table("reconciliation")
     op.drop_table("deployment_bundle")

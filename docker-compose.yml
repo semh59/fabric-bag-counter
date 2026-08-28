@@ -23,6 +23,27 @@ services:
       timeout: 3s
       retries: 5
 
+  # One-shot: brings the schema up to the latest Alembic revision before any
+  # real service starts, then exits. Previously nothing ever ran migrations
+  # -- every service bootstrapped via init_db_sync()'s create_all(), which
+  # only creates missing tables and never alters existing ones, so an ORM
+  # column added after first deploy would silently never reach a real
+  # database (this happened for real this session: a 500 error from a
+  # missing column, fixed with a manual ALTER TABLE against the running
+  # container). api/jobrunner/erp-relay now wait for this to finish
+  # successfully instead of racing each other to migrate concurrently.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.core
+    container_name: cs-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_SYNC_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+
   api:
     build:
       context: .
@@ -32,6 +53,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
       DATABASE_SYNC_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
@@ -51,6 +74,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
       DATABASE_SYNC_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
@@ -69,6 +94,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
       DATABASE_SYNC_URL: postgresql://cuval_admin:cuval_secure_2026@postgres:5432/cuval_sayim_db
