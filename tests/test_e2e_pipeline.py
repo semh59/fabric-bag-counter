@@ -1,13 +1,14 @@
 """End-to-end integration tests using synthetic scenes and CountingEngine (§11 M3, M5)."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+
 import numpy as np
+
 from packages.cs_counting.engine import CountingEngine
-from packages.cs_data.synth import SyntheticBagGenerator
+from packages.cs_counting.event_handler import CountingEventHandler
 from packages.cs_storage.db import get_sync_session, init_db_sync
 from packages.cs_storage.models_orm import CameraORM, LineORM, ProductProfileORM, SiteORM
 from packages.cs_storage.repositories.calibration_repo import CalibrationRepository
-from packages.cs_storage.repositories.ledger_repo import LedgerRepository
 from packages.cs_storage.repositories.session_repo import SessionRepository
 
 
@@ -53,7 +54,7 @@ def test_e2e_counting_pipeline():
     engine.merge_detector.update_calibration(mean_bag_area_px=15000.0, is_active=True)
 
     # Simulate 30 frames of bag moving across conveyor from x=150 to x=500
-    base_time = datetime.now(timezone.utc)
+    base_time = datetime.now(UTC)
     for f_idx in range(30):
         t_frame = base_time + timedelta(milliseconds=40 * f_idx)
         mono_ns = int(f_idx * 40 * 1e6)
@@ -79,22 +80,9 @@ def test_e2e_counting_pipeline():
         )
 
         with get_sync_session() as db:
-            ledger_repo = LedgerRepository(db)
-            for ev in out.gate_crossings:
-                ledger_repo.record_event(
-                    session_id=sess_id,
-                    line_id=line_id,
-                    camera_id=cam_id,
-                    stream_epoch=1,
-                    track_id=ev.track_id,
-                    crossing_seq=ev.crossing_seq,
-                    gate_id=ev.gate_id,
-                    crossing_timestamp=ev.crossing_timestamp,
-                    frame_index=ev.frame_index,
-                    direction=ev.direction,
-                    confidence=ev.confidence,
-                    merge_flag=ev.merge_flag,
-                )
+            CountingEventHandler(db).handle_frame_output(
+                out, line_id=line_id, camera_id=cam_id, session_id=sess_id, stream_epoch=1,
+            )
 
     with get_sync_session() as db:
         session_repo = SessionRepository(db)

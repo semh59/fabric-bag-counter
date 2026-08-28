@@ -3,12 +3,48 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-from typing import Sequence
+from collections.abc import Sequence
+from datetime import UTC, datetime
+
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+
 from packages.cs_storage.models_orm import CountEventORM
+
+_IDEMPOTENCY_CONSTRAINT_NAME = "uq_count_event_idempotency"
+
+
+def _is_idempotency_duplicate(exc: IntegrityError) -> bool:
+    """True only if `exc` is really the count_event idempotency unique
+    constraint firing (a genuine redelivered duplicate) -- not any other
+    IntegrityError (a foreign-key violation from a stale camera_id/gate_id/
+    deployment_bundle_id, a NOT NULL violation, etc.).
+
+    record_event() previously caught bare `IntegrityError` and always
+    treated it as "already recorded", returning (None, False) with no
+    exception raised. That silently masked a real bug: a deployment_bundle_id
+    default that didn't correspond to any actual row raised an
+    IntegrityError (a real FK violation, not a duplicate), which got
+    swallowed the same way -- the caller saw a clean `(None, False)` and,
+    in production, an operator's "simulate bag" click returned HTTP 200 with
+    counted_total silently never incrementing and nothing logged anywhere.
+    Discovered via a real end-to-end verification against the live API, not
+    a hypothetical.
+
+    Postgres (psycopg2) exposes the violated constraint name directly via
+    `exc.orig.diag.constraint_name` -- exact match. SQLite has no such
+    structured field; its message names every column in the constraint
+    (verified directly: "UNIQUE constraint failed: count_event.session_id,
+    count_event.camera_id, ..."), so match on the table+columns instead.
+    """
+    orig = exc.orig
+    diag = getattr(orig, "diag", None)
+    if diag is not None:
+        return getattr(diag, "constraint_name", None) == _IDEMPOTENCY_CONSTRAINT_NAME
+
+    msg = str(orig)
+    return "UNIQUE constraint failed" in msg and "count_event.session_id" in msg
 
 
 class LedgerRepository:
@@ -38,7 +74,7 @@ class LedgerRepository:
         is_simulated: bool = False,
     ) -> tuple[CountEventORM | None, bool]:
         """Record a crossing event in the ledger.
-        
+
         Returns:
             (event, created): tuple where created is True if newly inserted,
             or False if ignored due to idempotency constraint duplicate.
@@ -67,8 +103,15 @@ class LedgerRepository:
             self.db.add(event)
             self.db.commit()
             return event, True
-        except IntegrityError:
+        except IntegrityError as exc:
             self.db.rollback()
+            if not _is_idempotency_duplicate(exc):
+                # A real error (FK violation from a stale camera_id/gate_id/
+                # deployment_bundle_id, a NOT NULL violation, etc.) --
+                # propagate it. Treating this as "already recorded" would
+                # silently drop a real crossing with no ledger row, no
+                # exception, and no log line anywhere.
+                raise
             # Already exists (idempotency hit)
             existing = self.db.execute(
                 select(CountEventORM).where(
@@ -84,7 +127,7 @@ class LedgerRepository:
 
     def get_session_total_count(self, session_id: int) -> int:
         """Derive the true net bag count directly from the immutable ledger.
-        
+
         Formula: SELECT COALESCE(SUM(direction), 0) FROM count_event WHERE session_id = :sid;
         """
         stmt = select(func.coalesce(func.sum(CountEventORM.direction), 0)).where(
@@ -136,7 +179,7 @@ class LedgerRepository:
             event.defect_disputed = True
             event.defect_disputed_by = disputed_by
             event.defect_disputed_note = note
-            event.defect_disputed_at = datetime.now(timezone.utc)
+            event.defect_disputed_at = datetime.now(UTC)
             self.db.commit()
             self.db.refresh(event)
         return event

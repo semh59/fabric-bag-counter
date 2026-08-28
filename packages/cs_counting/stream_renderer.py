@@ -12,10 +12,12 @@ import cv2
 import numpy as np
 
 from packages.cs_counting.engine import CountingEngine
+from packages.cs_counting.event_handler import CountingEventHandler, estimate_simulated_area
+from packages.cs_counting.events import GateCrossingRecorded, SessionAreaEstimateUpdated
+from packages.cs_counting.gate import GateCrossingEvent
 from packages.cs_storage.db import get_sync_session
 from packages.cs_storage.models_orm import CameraORM, GateORM, ProductProfileORM, SessionORM
 from packages.cs_storage.repositories.calibration_repo import CalibrationRepository
-from packages.cs_storage.repositories.ledger_repo import LedgerRepository
 from packages.cs_storage.repositories.session_repo import SessionRepository
 from packages.cs_vision.calibration import apply_perspective_warp
 
@@ -261,36 +263,30 @@ class LiveStreamRenderer:
 
         if out.gate_crossings:
             self.last_crossing_time = time.time()
-            if session_id:
-                try:
-                    with get_sync_session() as db:
-                        ledger_repo = LedgerRepository(db)
-                        sess_repo = SessionRepository(db)
-                        sess = sess_repo.get_by_id(session_id)
-                        if sess:
-                            for event in out.gate_crossings:
-                                ledger_repo.record_event(
-                                    session_id=session_id,
-                                    line_id=self.line_id,
-                                    camera_id=1,
-                                    stream_epoch=4,
-                                    track_id=event.track_id,
-                                    crossing_seq=event.crossing_seq,
-                                    gate_id=event.gate_id,
-                                    crossing_timestamp=event.crossing_timestamp,
-                                    frame_index=event.frame_index,
-                                    direction=event.direction,
-                                    confidence=event.confidence,
-                                    merge_flag=event.merge_flag,
-                                )
-                            sess.counted_total = ledger_repo.get_session_total_count(session_id)
-                            sess.area_estimate_total = out.area_estimate
-                            db.commit()
-                except Exception:
-                    logger.exception(
-                        "Failed to record real gate-crossing ledger event(s) for session_id=%s, line_id=%s",
-                        session_id, self.line_id,
+
+        # Routed through CountingEventHandler (packages/cs_counting/event_handler.py)
+        # unconditionally, not gated behind `if out.gate_crossings:` -- the
+        # previous inline version only updated area_estimate_total on frames
+        # that also had a crossing, unlike InferenceWorker's reference
+        # implementation of this same logic (which updates it every frame).
+        # That gap is closed by going through the same shared handler both
+        # paths now use.
+        if session_id:
+            try:
+                with get_sync_session() as db:
+                    handler = CountingEventHandler(db)
+                    handler.handle_frame_output(
+                        out,
+                        line_id=self.line_id,
+                        camera_id=1,
+                        session_id=session_id,
+                        stream_epoch=4,
                     )
+            except Exception:
+                logger.exception(
+                    "Failed to record real gate-crossing ledger event(s) for session_id=%s, line_id=%s",
+                    session_id, self.line_id,
+                )
 
         # Annotate on detect_frame (not the raw frame): track boxes/masks are
         # in the coordinate space the detector actually saw, i.e. the warped
@@ -323,31 +319,44 @@ class LiveStreamRenderer:
                     bag["passed"] = True
                     self.last_crossing_time = time.time()
 
-                    # Record to real database ledger (explicit demo/simulated crossing)
+                    # Record to real database ledger (explicit demo/simulated crossing).
+                    # Routed through CountingEventHandler, same as the real-frame path
+                    # -- area estimate now comes from estimate_simulated_area(), the one
+                    # canonical simulated-area heuristic shared with
+                    # services/api/routes.py::simulate_bag_crossing (which previously
+                    # used a different, diverged +/-0.998 incremental-delta formula
+                    # instead of this flat multiply).
                     if session_id:
                         try:
                             with get_sync_session() as db:
-                                ledger_repo = LedgerRepository(db)
-                                sess_repo = SessionRepository(db)
-                                sess = sess_repo.get_by_id(session_id)
-                                if sess:
-                                    ledger_repo.record_event(
+                                handler = CountingEventHandler(db)
+                                crossing = GateCrossingEvent(
+                                    track_id=bag["id"],
+                                    crossing_seq=1,
+                                    gate_id=1,
+                                    direction=self.belt_dir,
+                                    crossing_timestamp=t_now,
+                                    frame_index=self.frame_idx,
+                                    monotonic_ns=mono_ns,
+                                    confidence=0.985,
+                                    merge_flag=False,
+                                    centroid=(bag["x"] + bag["w"] / 2, bag["y"] + bag["h"] / 2),
+                                )
+                                _, created = handler.handle_gate_crossing(GateCrossingRecorded(
+                                    line_id=self.line_id,
+                                    camera_id=1,
+                                    session_id=session_id,
+                                    stream_epoch=4,
+                                    deployment_bundle_id=1,
+                                    crossing=crossing,
+                                    is_simulated=True,
+                                ))
+                                if created:
+                                    net_total = handler.ledger_repo.get_session_total_count(session_id)
+                                    handler.handle_area_updated(SessionAreaEstimateUpdated(
                                         session_id=session_id,
-                                        line_id=self.line_id,
-                                        camera_id=1,
-                                        stream_epoch=4,
-                                        track_id=bag["id"],
-                                        crossing_seq=1,
-                                        gate_id=1,
-                                        crossing_timestamp=t_now,
-                                        frame_index=self.frame_idx,
-                                        direction=self.belt_dir,
-                                        confidence=0.985,
-                                        is_simulated=True,
-                                    )
-                                    sess.counted_total = ledger_repo.get_session_total_count(session_id)
-                                    sess.area_estimate_total = float(sess.counted_total) * 0.998
-                                    db.commit()
+                                        area_estimate=estimate_simulated_area(net_total),
+                                    ))
                         except Exception:
                             logger.exception(
                                 "Failed to record simulated gate-crossing ledger event for "

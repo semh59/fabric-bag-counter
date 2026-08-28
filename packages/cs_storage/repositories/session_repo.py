@@ -123,13 +123,60 @@ class SessionRepository:
             session.area_estimate_total = area_estimate
             self.db.commit()
 
+    def update_counted_total(self, session_id: int, counted_total: int) -> None:
+        """Update the live running net bag count.
+
+        Previously every caller (LiveStreamRenderer, InferenceWorker,
+        simulate_bag_crossing) set `session.counted_total = ...` directly on
+        the ORM object it had separately fetched, instead of through a repo
+        method -- the same duplication CountingEventHandler
+        (packages/cs_counting/event_handler.py) now closes for the
+        ledger-write side of this same update.
+        """
+        session = self.get_by_id(session_id, for_update=True)
+        if session:
+            session.counted_total = counted_total
+            self.db.commit()
+
+    @staticmethod
+    def _set_reconcile_required(session: SessionORM) -> None:
+        """Set the reconcile_required transition on an already-fetched,
+        not-yet-committed session object -- the one place this assignment
+        happens. Not itself a public method: callers that already hold the
+        session mid-transaction (flag_discrepancy, close_session below) use
+        this so the transition lands in their single existing commit rather
+        than a separate one, avoiding a window where a reader could observe
+        e.g. discrepancy_flag=True but status not yet reconcile_required.
+        External callers with no open transaction of their own use
+        require_reconciliation() instead.
+        """
+        session.status = "reconcile_required"
+
+    def require_reconciliation(self, session_id: int, reason: str) -> None:
+        """Transition a session to reconcile_required (fetch + commit).
+
+        For callers with no already-open transaction on this session, e.g.
+        ReconciliationRepository.create_reconciliation() -- three call sites
+        each used to inline `session.status = "reconcile_required"`
+        independently (flag_discrepancy, close_session, and that one) before
+        this method existed; the transition itself was copied three times
+        instead of shared, though each keeps its own trigger logic for
+        *when* to call this. `reason` is accepted for future audit logging
+        even though nothing persists it yet, so call sites don't need to
+        change again when that lands.
+        """
+        session = self.get_by_id(session_id, for_update=True)
+        if session:
+            self._set_reconcile_required(session)
+            self.db.commit()
+
     def flag_discrepancy(self, session_id: int, area_estimate: float) -> SessionORM | None:
         """Mark session with discrepancy flag and change status to reconcile_required."""
         session = self.get_by_id(session_id, for_update=True)
         if session:
             session.discrepancy_flag = True
             session.area_estimate_total = area_estimate
-            session.status = "reconcile_required"
+            self._set_reconcile_required(session)
             self.db.commit()
             self.db.refresh(session)
         return session
@@ -176,7 +223,7 @@ class SessionRepository:
 
         # If session was degraded or had discrepancy, move to reconcile_required
         if session.status == "degraded" or session.discrepancy_flag:
-            session.status = "reconcile_required"
+            self._set_reconcile_required(session)
         else:
             session.status = "closed"
 

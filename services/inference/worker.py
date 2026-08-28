@@ -4,15 +4,19 @@ from __future__ import annotations
 
 import logging
 import os
-import time
-from typing import Any
+
 from packages.cs_core.frame import Frame
+from packages.cs_core.transport import SharedMemoryTransport
 from packages.cs_counting.engine import CountingEngine
+from packages.cs_counting.event_handler import CountingEventHandler
+from packages.cs_counting.events import (
+    GateCrossingRecorded,
+    SessionDegraded,
+    SessionDiscrepancyDetected,
+)
 from packages.cs_storage.db import get_sync_session
 from packages.cs_storage.repositories.config_repo import ConfigRepository
-from packages.cs_storage.repositories.ledger_repo import LedgerRepository
 from packages.cs_storage.repositories.session_repo import SessionRepository
-from packages.cs_core.transport import SharedMemoryTransport
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +49,7 @@ class InferenceWorker:
         # Check for active session
         with get_sync_session() as db:
             session_repo = SessionRepository(db)
-            ledger_repo = LedgerRepository(db)
+            event_handler = CountingEventHandler(db)
             config_repo = ConfigRepository(db)
 
             active_session = session_repo.get_active_session(self.line_id)
@@ -63,7 +67,9 @@ class InferenceWorker:
                     logger.warning(
                         f"[Inference] Excessive consecutive frame drops ({cam_drops}) on camera {frame.camera_id}. Marking session {active_session.id} as DEGRADED."
                     )
-                    session_repo.mark_degraded(active_session.id)
+                    event_handler.handle_degraded(SessionDegraded(
+                        session_id=active_session.id, camera_id=frame.camera_id, consecutive_drops=cam_drops,
+                    ))
 
                 # 2. Retrieve image array from shared memory
                 img_data = self.transport.get_image_data(frame.shm_name)
@@ -88,38 +94,52 @@ class InferenceWorker:
                     wall_clock=frame.wall_clock,
                 )
 
-                # 4. Record gate crossings into immutable Ledger (§5.5)
+                # 4. Record gate crossings into immutable Ledger (§5.5), update
+                # session totals, and handle discrepancy -- via
+                # CountingEventHandler (packages/cs_counting/event_handler.py),
+                # the one shared implementation of this logic also used by
+                # LiveStreamRenderer's two frame paths and simulate_bag_crossing.
+                # This closes a real gap this call site previously had on its
+                # own: it recorded ledger events but never derived/persisted
+                # session.counted_total from them (unlike the other three
+                # call sites, which all did) -- counted_total would have
+                # stayed stale through the whole session on this pipeline.
                 if active_session:
-                    for event in output.gate_crossings:
-                        event_record, created = ledger_repo.record_event(
-                            session_id=active_session.id,
+                    # A genuine data error here (e.g. self.active_bundle_id
+                    # pointing at a deployment_bundle row that no longer
+                    # exists) now raises instead of being silently swallowed
+                    # as a fake idempotency hit (see ledger_repo.py's
+                    # _is_idempotency_duplicate) -- correct, but this loop
+                    # processes every subsequent frame/camera on this line
+                    # too, so one bad frame must not take the whole worker
+                    # process down. Caught and logged here, matching the
+                    # same defensive pattern LiveStreamRenderer's two frame
+                    # paths already use around this exact call.
+                    try:
+                        applied = event_handler.handle_frame_output(
+                            output,
                             line_id=self.line_id,
                             camera_id=frame.camera_id,
+                            session_id=active_session.id,
                             stream_epoch=frame.stream_epoch,
-                            track_id=event.track_id,
-                            crossing_seq=event.crossing_seq,
-                            gate_id=event.gate_id,
-                            crossing_timestamp=event.crossing_timestamp,
-                            frame_index=event.frame_index,
-                            direction=event.direction,
-                            confidence=event.confidence,
-                            merge_flag=event.merge_flag,
                             deployment_bundle_id=self.active_bundle_id,
                         )
-                        if created:
-                            logger.info(
-                                f"[Inference] Cross event: Track {event.track_id} (Seq {event.crossing_seq}) Dir {event.direction:+} on Cam {frame.camera_id}"
-                            )
-
-                    # Update running area estimate on session
-                    session_repo.update_area_estimate(active_session.id, output.area_estimate)
-
-                    # Handle discrepancy flag trigger (§6.9, §5.7)
-                    if output.discrepancy_flag:
-                        logger.warning(
-                            f"[Inference] Discrepancy detected between ledger count ({output.running_net_count}) and area estimate ({output.area_estimate:.1f}). Triggering reconciliation."
+                    except Exception:
+                        logger.exception(
+                            f"[Inference] Failed to record frame output for session_id={active_session.id}, "
+                            f"camera_id={frame.camera_id}, frame_index={frame.frame_index}"
                         )
-                        session_repo.flag_discrepancy(active_session.id, output.area_estimate)
+                        applied = []
+                    for evt in applied:
+                        if isinstance(evt, GateCrossingRecorded):
+                            c = evt.crossing
+                            logger.info(
+                                f"[Inference] Cross event: Track {c.track_id} (Seq {c.crossing_seq}) Dir {c.direction:+} on Cam {frame.camera_id}"
+                            )
+                        elif isinstance(evt, SessionDiscrepancyDetected):
+                            logger.warning(
+                                f"[Inference] Discrepancy detected between ledger count ({output.running_net_count}) and area estimate ({output.area_estimate:.1f}). Triggering reconciliation."
+                            )
 
                 # 5. Release shared memory slot
                 self.transport.release(frame)

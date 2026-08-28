@@ -19,6 +19,9 @@ from packages.cs_core.models import (
     SessionStatus,
     UserRole,
 )
+from packages.cs_counting.event_handler import CountingEventHandler, estimate_simulated_area
+from packages.cs_counting.events import GateCrossingRecorded, SessionAreaEstimateUpdated
+from packages.cs_counting.gate import GateCrossingEvent
 from packages.cs_storage.db import get_sync_session
 from packages.cs_storage.errors import ActiveSessionConflictError
 from packages.cs_storage.models_orm import (
@@ -1070,31 +1073,44 @@ def simulate_bag_crossing(sess_id: int, req: SimulateBagRequest = SimulateBagReq
         current_events_count = len(ledger_repo.get_session_events(sess_id))
         track_id = req.track_id if req.track_id is not None else (int(time.time() * 1000000 + random.randint(100, 999)) % 100000000)
 
-        # Record in immutable ledger
-        ev, created = ledger_repo.record_event(
-            session_id=sess.id,
-            line_id=sess.line_id,
-            camera_id=cam_id,
-            stream_epoch=4,
+        # Record in immutable ledger and update session totals -- routed
+        # through CountingEventHandler (packages/cs_counting/event_handler.py),
+        # the one shared implementation also used by LiveStreamRenderer's two
+        # frame paths and InferenceWorker. area_estimate now comes from
+        # estimate_simulated_area() (a flat multiply derived fresh from the
+        # ledger-true counted_total), replacing this endpoint's previous
+        # incremental +/-0.998 running delta, which had already diverged from
+        # LiveStreamRenderer._process_simulated_frame's own (different) flat
+        # multiply -- the two demo/manual paths now agree.
+        event_handler = CountingEventHandler(db)
+        crossing = GateCrossingEvent(
             track_id=track_id,
             crossing_seq=1,
             gate_id=gate_id,
+            direction=req.direction,
             crossing_timestamp=datetime.now(timezone.utc),
             frame_index=(current_events_count + 1) * 300,
-            direction=req.direction,
+            monotonic_ns=time.perf_counter_ns(),
             confidence=req.confidence,
             merge_flag=req.merge_flag,
-            deployment_bundle_id=bundle_id,
-            evidence_ref=f"/evidence/frames/sess_{sess.id}_trk_{track_id}.jpg",
-            defect_reason=req.defect_reason,
-            is_simulated=True,
+            centroid=(0.0, 0.0),
         )
-
-        net_count = ledger_repo.get_session_total_count(sess.id)
-        sess.counted_total = net_count
-        area_delta = 0.998 if req.direction > 0 else -0.998
-        sess.area_estimate_total = max(0.0, float(sess.area_estimate_total or 0.0) + area_delta)
-        db.commit()
+        ev, created = event_handler.handle_gate_crossing(GateCrossingRecorded(
+            line_id=sess.line_id,
+            camera_id=cam_id,
+            session_id=sess.id,
+            stream_epoch=4,
+            deployment_bundle_id=bundle_id,
+            crossing=crossing,
+            is_simulated=True,
+            defect_reason=req.defect_reason,
+            evidence_ref=f"/evidence/frames/sess_{sess.id}_trk_{track_id}.jpg",
+        ))
+        if created:
+            net_count = event_handler.ledger_repo.get_session_total_count(sess.id)
+            event_handler.handle_area_updated(SessionAreaEstimateUpdated(
+                session_id=sess.id, area_estimate=estimate_simulated_area(net_count),
+            ))
         db.refresh(sess)
 
         # Also reflect this manual "+1 Hasarlı" / "+2 Bitişik" trigger on the

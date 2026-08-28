@@ -7,6 +7,7 @@ from typing import Any, Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from packages.cs_storage.models_orm import ReconciliationORM, SessionORM
+from packages.cs_storage.repositories.session_repo import SessionRepository
 
 
 class ReconciliationRepository:
@@ -41,7 +42,7 @@ class ReconciliationRepository:
         session = self.db.execute(select(SessionORM).where(SessionORM.id == session_id)).scalar_one_or_none()
         if session:
             session.reconciliation_id = rec.id
-            session.status = "reconcile_required"
+            SessionRepository._set_reconcile_required(session)
 
         self.db.commit()
         self.db.refresh(rec)
