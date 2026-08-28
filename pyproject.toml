@@ -32,6 +32,19 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Plain CPU onnxruntime for VisionDetector inside cs-api itself
+# (services/api/routes.py's live MJPEG stream runs detection in-process via
+# stream_renderer.LiveStreamRenderer -- not just the edge/training stack).
+# Kept as its own extra rather than a base dependency, and deliberately NOT
+# onnxruntime-gpu: the server-stack machine (Dockerfile.core) has no GPU,
+# and installing both onnxruntime and onnxruntime-gpu together in one
+# environment is a real conflict -- both packages ship the same top-level
+# `onnxruntime` module, so combining this extra with `vision` below (which
+# installs onnxruntime-gpu, used on the edge/GPU machine) would corrupt
+# whichever installs second. Each Dockerfile installs exactly one of the two.
+api-inference = [
+    "onnxruntime>=1.17.0",
+]
 vision = [
     "onnxruntime-gpu==1.17.1",
     "opencv-python-headless>=4.9.0.80",
