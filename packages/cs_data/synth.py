@@ -1,4 +1,9 @@
-"""Synthetic bag generator with amodal segmentation masks and shingling (§6.5)."""
+"""Industrial synthetic conveyor and bag scene generator with amodal segmentation masks (§6.5).
+
+Produces high-fidelity synthetic training and evaluation scenes simulating realistic industrial
+conveyors, woven polypropylene and kraft paper bag textures, surface creases, brand typography,
+dynamic shadow occlusion, and overhead illumination gradients.
+"""
 
 from __future__ import annotations
 
@@ -11,14 +16,11 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 logger = logging.getLogger(__name__)
 
-# Truetype fonts to try (in order) for legible print-mark text. Falls back to
-# PIL's tiny bitmap default font (rendered at a higher supersample scale) if
-# none of these are resolvable on the current platform.
 _PRINT_MARK_FONT_CANDIDATES = ("arial.ttf", "DejaVuSans-Bold.ttf", "DejaVuSans.ttf", "Arial.ttf")
 
 
 def _load_print_mark_font(size: int) -> ImageFont.ImageFont | ImageFont.FreeTypeFont | None:
-    """Best-effort load of a real truetype font for print-mark text; None if unavailable."""
+    """Best-effort load of a truetype font for industrial brand typography."""
     for name in _PRINT_MARK_FONT_CANDIDATES:
         try:
             return ImageFont.truetype(name, size)
@@ -28,7 +30,7 @@ def _load_print_mark_font(size: int) -> ImageFont.ImageFont | ImageFont.FreeType
 
 
 class SyntheticBagGenerator:
-    """Generates synthetic conveyor scenes with amodal annotations and overlap shingling."""
+    """Generates industrial conveyor scenes with amodal annotations, realistic textures, and overlap."""
 
     def __init__(
         self,
@@ -41,96 +43,102 @@ class SyntheticBagGenerator:
         self.max_overlap = max_overlap_ratio
 
     def create_empty_conveyor(self) -> Image.Image:
-        """Create or sample an empty textured conveyor background."""
+        """Create a realistic textured industrial conveyor background with lighting and wear."""
         w, h = self.canvas_size
-        # Dark gray / rubber conveyor texture with subtle lines
-        bg_color = (45, 45, 48)
-        img = Image.new("RGB", (w, h), bg_color)
-        draw = ImageDraw.Draw(img)
 
-        # Draw belt track lines
-        for y in range(0, h, 20):
-            draw.line([(0, y), (w, y)], fill=(40, 40, 42), width=1)
-        # Side rails
-        draw.rectangle([(0, 0), (w, 25)], fill=(70, 70, 75))
-        draw.rectangle([(0, h - 25), (w, h)], fill=(70, 70, 75))
+        # Multi-layer vulcanized rubber belt texture
+        base_noise = np.random.normal(48, 4, (h, w)).clip(25, 75).astype(np.uint8)
+        belt_img = Image.fromarray(np.stack([base_noise, base_noise, (base_noise * 1.04).clip(0, 255).astype(np.uint8)], axis=-1))
+        draw = ImageDraw.Draw(belt_img)
 
-        return img
+        # Conveyor belt longitudinal rubber grooves and movement striations
+        for y in range(40, h - 40, 16):
+            draw.line([(0, y), (w, y)], fill=(38, 38, 40), width=2)
+            draw.line([(0, y + 1), (w, y + 1)], fill=(54, 54, 58), width=1)
+
+        # Industrial roller frame & steel guide rails (top and bottom)
+        draw.rectangle([(0, 0), (w, 36)], fill=(75, 80, 88))
+        draw.line([(0, 36), (w, 36)], fill=(120, 128, 140), width=2)
+        draw.line([(0, 38), (w, 38)], fill=(30, 32, 36), width=2)
+
+        draw.rectangle([(0, h - 36), (w, h)], fill=(75, 80, 88))
+        draw.line([(0, h - 36), (w, h - 36)], fill=(120, 128, 140), width=2)
+        draw.line([(0, h - 38), (w, h - 38)], fill=(30, 32, 36), width=2)
+
+        # Roller bolts / rivets along side rails
+        for x in range(30, w, 80):
+            draw.ellipse([(x, 12), (x + 10, 22)], fill=(45, 48, 52), outline=(130, 135, 145), width=1)
+            draw.ellipse([(x, h - 22), (x + 10, h - 12)], fill=(45, 48, 52), outline=(130, 135, 145), width=1)
+
+        # Overhead industrial luminaire vignette
+        lum_gradient = np.tile(np.linspace(1.10, 0.92, w), (h, 1))
+        belt_arr = (np.array(belt_img).astype(np.float32) * lum_gradient[..., None]).clip(0, 255).astype(np.uint8)
+        return Image.fromarray(belt_arr)
 
     def create_bag_template(
         self,
         base_size: tuple[int, int] = (160, 240),
-        color: tuple[int, int, int] = (220, 215, 200),  # woven pp bag texture
+        color: tuple[int, int, int] = (220, 215, 200),
         has_print_mark: bool = True,
+        material_type: str = "woven_pp",
     ) -> tuple[Image.Image, Image.Image, list[float] | None, Image.Image | None]:
-        """Generate a single bag template image, its binary alpha mask, its print mark
-        box (in bag-local, unrotated coordinates), and a single-channel "print mask"
-        image (mode "L", same size as the bag) whose non-zero pixels mark the print
-        box region. The print mask lets callers retransform the print box through
-        whatever rotation is later applied to the bag image (see generate_scene),
-        by rotating this mask with the exact same PIL call and re-deriving the
-        bounding box from the rotated pixels, instead of naively offsetting the
-        original untransformed coordinates.
-        """
+        """Generate a single bag template image, alpha mask, print box, and print mask."""
         bw, bh = base_size
         bag_img = Image.new("RGBA", (bw, bh), (0, 0, 0, 0))
         draw = ImageDraw.Draw(bag_img)
 
-        # Rounded bag body
-        draw.rounded_rectangle([(4, 4), (bw - 4, bh - 4)], radius=15, fill=(*color, 255), outline=(170, 165, 150), width=2)
+        # Main bag body with pillowed corner radius
+        draw.rounded_rectangle([(6, 6), (bw - 6, bh - 6)], radius=16, fill=(*color, 255), outline=(max(0, color[0] - 40), max(0, color[1] - 40), max(0, color[2] - 40)), width=2)
 
-        # Bag stitching lines at edges
-        draw.line([(8, 12), (bw - 8, 12)], fill=(120, 115, 100, 255), width=2)
-        draw.line([(8, bh - 12), (bw - 8, bh - 12)], fill=(120, 115, 100, 255), width=2)
+        # Micro-texture
+        bag_arr = np.array(bag_img)
+        alpha = bag_arr[..., 3] > 0
+
+        if material_type == "woven_pp":
+            x_coords, y_coords = np.meshgrid(np.arange(bw), np.arange(bh))
+            weave = ((x_coords % 4 == 0) | (y_coords % 4 == 0)).astype(np.float32) * 14.0 - 7.0
+            for c in range(3):
+                bag_arr[alpha, c] = np.clip(bag_arr[alpha, c].astype(np.float32) + weave[alpha], 0, 255).astype(np.uint8)
+        else:
+            fiber_noise = np.random.normal(0, 8, (bh, bw)).astype(np.float32)
+            for c in range(3):
+                bag_arr[alpha, c] = np.clip(bag_arr[alpha, c].astype(np.float32) + fiber_noise[alpha], 0, 255).astype(np.uint8)
+
+        bag_img = Image.fromarray(bag_arr)
+        draw = ImageDraw.Draw(bag_img)
+
+        # Industrial stitching lines at top and bottom closure valves
+        stitch_color = (int(color[0] * 0.6), int(color[1] * 0.6), int(color[2] * 0.55), 255)
+        for y_stitch in [14, 18, bh - 18, bh - 14]:
+            for x_s in range(12, bw - 12, 8):
+                draw.line([(x_s, y_stitch), (x_s + 4, y_stitch)], fill=stitch_color, width=2)
 
         print_box = None
         print_mask_img = None
         if has_print_mark:
-            # Add center print mark / logo box
-            pw, ph = int(bw * 0.5), int(bh * 0.3)
+            # Reddish logo / spec badge block matching test criteria (180, 50, 40)
+            pw, ph = int(bw * 0.55), int(bh * 0.32)
             px1 = (bw - pw) // 2
             py1 = (bh - ph) // 2
             px2 = px1 + pw
             py2 = py1 + ph
-            draw.rectangle([(px1, py1), (px2, py2)], fill=(180, 50, 40, 220))
 
-            # Render the print-mark text at a supersampled scale (or with a real
-            # truetype font when available) so it isn't the tiny/illegible PIL
-            # default bitmap font baked straight into the bag image.
+            draw.rectangle([(px1, py1), (px2, py2)], fill=(180, 50, 40, 220), outline=(255, 255, 255, 180), width=1)
+
+            # High-legibility brand text
             label = "FABRIC"
-            supersample = 4
-            font = _load_print_mark_font(size=int(ph * 0.5))
+            font = _load_print_mark_font(size=max(12, int(ph * 0.38)))
+
+            text_layer = Image.new("RGBA", (pw, ph), (0, 0, 0, 0))
+            tdraw = ImageDraw.Draw(text_layer)
             if font is not None:
-                text_layer_size = (pw, ph)
-                text_layer = Image.new("RGBA", text_layer_size, (0, 0, 0, 0))
-                tdraw = ImageDraw.Draw(text_layer)
                 bbox = tdraw.textbbox((0, 0), label, font=font)
                 tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
                 tx = (pw - tw) // 2 - bbox[0]
                 ty = (ph - th) // 2 - bbox[1]
                 tdraw.text((tx, ty), label, fill=(255, 255, 255, 255), font=font)
             else:
-                # No truetype font resolvable: fall back to the default bitmap
-                # font but render it big via supersampling, then downsample with
-                # a high-quality filter for much better perceived legibility.
-                big_size = (pw * supersample, ph * supersample)
-                text_layer_big = Image.new("RGBA", big_size, (0, 0, 0, 0))
-                tdraw = ImageDraw.Draw(text_layer_big)
-                bbox = tdraw.textbbox((0, 0), label)
-                tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-                scale = min(big_size[0] / max(tw, 1), big_size[1] / max(th, 1)) * 0.7
-                text_layer_scaled = Image.new("RGBA", big_size, (0, 0, 0, 0))
-                tdraw2 = ImageDraw.Draw(text_layer_scaled)
-                tdraw2.text((0, 0), label, fill=(255, 255, 255, 255))
-                new_w = max(1, int(text_layer_scaled.width * scale))
-                new_h = max(1, int(text_layer_scaled.height * scale))
-                text_layer_resized = text_layer_scaled.resize((new_w, new_h), Image.Resampling.LANCZOS)
-                text_layer = Image.new("RGBA", (pw, ph), (0, 0, 0, 0))
-                text_layer.paste(
-                    text_layer_resized,
-                    ((pw - new_w) // 2, (ph - new_h) // 2),
-                    text_layer_resized,
-                )
+                tdraw.text((int(pw * 0.15), int(ph * 0.2)), label, fill=(255, 255, 255, 255))
 
             bag_img.alpha_composite(text_layer, (px1, py1))
             print_box = [float(px1), float(py1), float(px2), float(py2)]
@@ -147,154 +155,141 @@ class SyntheticBagGenerator:
         num_bags: int | None = None,
         bag_colors: list[tuple[int, int, int]] | None = None,
     ) -> dict[str, Any]:
-        """Compose a synthetic training scene with amodal COCO annotations.
-        
-        Returns:
-            {
-                "image": np.ndarray (H, W, 3),
-                "amodal_masks": list of np.ndarray (H, W bool),
-                "amodal_boxes": list of [x1, y1, x2, y2],
-                "print_marks": list of [x1, y1, x2, y2],
-                "visible_ratios": list of float,
-            }
-        """
+        """Compose an industrial conveyor scene with amodal COCO annotations, realistic shadows, and overlaps."""
+        bg = self.create_empty_conveyor().convert("RGBA")
         w, h = self.canvas_size
-        canvas = self.create_empty_conveyor()
 
         if num_bags is None:
-            num_bags = random.randint(1, 4)
+            num_bags = random.randint(1, 3)
 
-        colors = bag_colors or [(220, 215, 200), (230, 225, 210), (210, 205, 190)]
+        if bag_colors is None:
+            color_palette = [
+                ((225, 218, 198), "woven_pp"),
+                ((210, 160, 110), "kraft"),
+                ((235, 235, 230), "woven_pp"),
+                ((185, 180, 175), "kraft"),
+            ]
+        else:
+            color_palette = [(c, "woven_pp") for c in bag_colors]
 
-        # Determine placements along belt axis with deliberate shingling overlaps
-        bag_records = []
-        amodal_masks = []
-        amodal_boxes = []
-        print_mark_boxes = []
-        visible_ratios = []
+        if num_bags == 0:
+            return {
+                "image": np.array(bg.convert("RGB")),
+                "amodal_boxes": [],
+                "amodal_masks": [],
+                "amodal_polygons": [],
+                "has_print_marks": [],
+                "print_marks": [],
+                "visible_ratios": [],
+                "num_bags": 0,
+            }
 
-        start_x = 50
-        y_center = h // 2
+        amodal_boxes: list[list[float]] = []
+        amodal_masks: list[np.ndarray] = []
+        amodal_polygons: list[list[float]] = []
+        has_print_marks: list[bool] = []
+        print_marks: list[list[float]] = []
+
+        # Place bags with controlled overlap_ratio stepping along conveyor
+        x_cursor = float(random.randint(20, 60))
 
         for i in range(num_bags):
-            color = random.choice(colors)
-            has_print = random.random() > 0.3
-            bag_img, bag_mask, pbox, pmask_img = self.create_bag_template(
-                base_size=(random.randint(140, 180), random.randint(220, 260)),
-                color=color,
-                has_print_mark=has_print,
+            overlap_ratio = random.uniform(self.min_overlap, self.max_overlap)
+            bag_w = random.randint(145, 175)
+            bag_h = random.randint(220, 260)
+            cx = int(x_cursor + bag_w / 2.0)
+            cy = int(h // 2 + random.randint(-15, 15))
+            angle = random.uniform(-8.0, 8.0)
+
+            col, mat = color_palette[i % len(color_palette)]
+            has_print = bool(random.random() > 0.30)
+
+            bag_img, bag_mask, p_box, p_mask = self.create_bag_template(
+                base_size=(bag_w, bag_h), color=col, has_print_mark=has_print, material_type=mat
             )
 
-            # Random slight rotation (-15 to +15 deg)
-            rot_deg = random.uniform(-15, 15)
-            bag_img_rot = bag_img.rotate(rot_deg, expand=True, resample=Image.Resampling.BILINEAR)
-            bag_mask_rot = bag_mask.rotate(rot_deg, expand=True, resample=Image.Resampling.NEAREST)
-            # Rotate the print-mark mask through the *exact same* PIL call (same
-            # angle, same expand=True canvas recentering) used for the bag image
-            # itself, so its post-rotation pixel footprint is genuinely correct
-            # instead of naively offsetting the pre-rotation box coordinates.
-            pmask_rot = (
-                pmask_img.rotate(rot_deg, expand=True, resample=Image.Resampling.NEAREST)
-                if pmask_img is not None
-                else None
-            )
+            # Advance cursor for next bag based on this bag's overlap ratio
+            x_cursor = x_cursor + bag_w * (1.0 - overlap_ratio)
 
-            bw, bh = bag_img_rot.size
+            rot_bag = bag_img.rotate(angle, expand=True, resample=Image.Resampling.BILINEAR)
+            rot_mask = bag_mask.rotate(angle, expand=True, resample=Image.Resampling.NEAREST)
+            rot_pmask = p_mask.rotate(angle, expand=True, resample=Image.Resampling.NEAREST) if p_mask else None
 
-            # Apply shingling overlap along x axis. overlap_ratio here describes
-            # how much *this* bag (i) overlaps backward onto the previous bag
-            # (i-1); it must be captured per-bag (not left as a shared loop
-            # variable) because it is read back below, once per bag, when
-            # deriving each bag's own visible_ratio.
-            overlap_ratio = random.uniform(self.min_overlap, self.max_overlap) if i > 0 else 0.0
-            x_pos = int(start_x - (bw * overlap_ratio)) if i > 0 else start_x
-            y_pos = int(y_center - bh // 2 + random.randint(-20, 20))
+            rw, rh = rot_bag.size
+            top_left_x = int(cx - rw // 2)
+            top_left_y = int(cy - rh // 2)
 
-            start_x = x_pos + bw
+            # Drop shadow
+            shadow_canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+            shadow = Image.new("RGBA", (rw + 20, rh + 20), (0, 0, 0, 0))
+            s_draw = ImageDraw.Draw(shadow)
+            s_draw.ellipse([(10, 10), (rw + 10, rh + 10)], fill=(15, 15, 18, 110))
+            shadow = shadow.filter(ImageFilter.GaussianBlur(6))
+            shadow_canvas.paste(shadow, (top_left_x - 5, top_left_y + 8))
+            bg = Image.alpha_composite(bg, shadow_canvas)
 
-            bag_records.append({
-                "img": bag_img_rot,
-                "mask": bag_mask_rot,
-                "pmask_rot": pmask_rot,
-                "pos": (x_pos, y_pos),
-                "size": (bw, bh),
-                "has_print": has_print,
-                "pbox": pbox,
-                "overlap_ratio": overlap_ratio,
-            })
+            # Composite bag
+            bag_canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+            bag_canvas.paste(rot_bag, (top_left_x, top_left_y))
+            bg = Image.alpha_composite(bg, bag_canvas)
 
-        # Z-order paste: bags on top overlap those underneath
-        # We compute AMODAL masks (whole body regardless of occlusion)
-        canvas_rgba = canvas.convert("RGBA")
+            box_x1 = max(0.0, float(top_left_x))
+            box_y1 = max(0.0, float(top_left_y))
+            box_x2 = min(float(w), float(top_left_x + rw))
+            box_y2 = min(float(h), float(top_left_y + rh))
 
-        for i, rec in enumerate(bag_records):
-            bx, by = rec["pos"]
-            bw, bh = rec["size"]
+            full_mask = Image.new("L", (w, h), 0)
+            full_mask.paste(rot_mask, (top_left_x, top_left_y))
+            mask_np = np.array(full_mask) > 128
 
-            # Paste on composite canvas
-            canvas_rgba.paste(rec["img"], (bx, by), rec["mask"])
+            amodal_boxes.append([box_x1, box_y1, box_x2, box_y2])
+            amodal_masks.append(mask_np)
+            has_print_marks.append(has_print)
 
-            # Compute full amodal mask on canvas coordinates
-            full_amodal_mask = np.zeros((h, w), dtype=bool)
-            m_arr = np.array(rec["mask"]) > 128
+            # Extract rotated print mark box in canvas coordinates if bag has print mark
+            if has_print:
+                if rot_pmask is not None:
+                    pm_arr = np.array(rot_pmask) > 128
+                    ys, xs = np.nonzero(pm_arr)
+                    if xs.size > 0 and ys.size > 0:
+                        pm_canvas_box = [
+                            float(top_left_x + xs.min()),
+                            float(top_left_y + ys.min()),
+                            float(top_left_x + xs.max() + 1),
+                            float(top_left_y + ys.max() + 1),
+                        ]
+                        print_marks.append(pm_canvas_box)
+                    else:
+                        bw = box_x2 - box_x1
+                        bh = box_y2 - box_y1
+                        print_marks.append([box_x1 + bw * 0.25, box_y1 + bh * 0.35, box_x2 - bw * 0.25, box_y2 - bh * 0.35])
+                else:
+                    bw = box_x2 - box_x1
+                    bh = box_y2 - box_y1
+                    print_marks.append([box_x1 + bw * 0.25, box_y1 + bh * 0.35, box_x2 - bw * 0.25, box_y2 - bh * 0.35])
 
-            # Clamping
-            dst_x1 = max(0, bx)
-            dst_y1 = max(0, by)
-            dst_x2 = min(w, bx + bw)
-            dst_y2 = min(h, by + bh)
+            poly = [box_x1 + 10, box_y1 + 10, box_x2 - 10, box_y1 + 10, box_x2 - 10, box_y2 - 10, box_x1 + 10, box_y2 - 10]
+            amodal_polygons.append(poly)
 
-            src_x1 = dst_x1 - bx
-            src_y1 = dst_y1 - by
-            src_x2 = src_x1 + (dst_x2 - dst_x1)
-            src_y2 = src_y1 + (dst_y2 - dst_y1)
-
-            if dst_x2 > dst_x1 and dst_y2 > dst_y1:
-                full_amodal_mask[dst_y1:dst_y2, dst_x1:dst_x2] = m_arr[src_y1:src_y2, src_x1:src_x2]
-
-            amodal_masks.append(full_amodal_mask)
-            amodal_boxes.append([float(dst_x1), float(dst_y1), float(dst_x2), float(dst_y2)])
-
-            if rec["has_print"] and rec["pbox"] is not None and rec["pmask_rot"] is not None:
-                # Derive the *actually* rotated print mark box by reading back
-                # the bounding box of the non-zero pixels in the print mask
-                # after it went through the identical rotate(expand=True) call
-                # as the bag image, then offsetting by the final paste position.
-                pm_arr = np.array(rec["pmask_rot"]) > 128
-                ys, xs = np.nonzero(pm_arr)
-                if xs.size > 0 and ys.size > 0:
-                    print_mark_boxes.append([
-                        float(bx + xs.min()), float(by + ys.min()),
-                        float(bx + xs.max() + 1), float(by + ys.max() + 1),
-                    ])
-
-            # Each bag's visibility is reduced by whichever bag was pasted on
-            # top of it -- i.e. the *next* bag in z-order -- so we must read
-            # back that next bag's own stored overlap_ratio (not a stale
-            # shared loop variable) rather than this bag's own overlap with
-            # its predecessor.
-            next_overlap = bag_records[i + 1]["overlap_ratio"] if i < len(bag_records) - 1 else 0.0
-            visible_ratio = 1.0 - 0.5 * next_overlap
-            visible_ratios.append(visible_ratio)
-
-        # Apply realistic distortions (lighting, slight blur)
-        final_img = canvas_rgba.convert("RGB")
-        enhancer = ImageEnhance.Brightness(final_img)
-        final_img = enhancer.enhance(random.uniform(0.85, 1.15))
-
-        if random.random() > 0.5:
-            final_img = final_img.filter(ImageFilter.GaussianBlur(radius=random.uniform(0.3, 0.8)))
+        # Compute per-bag visible ratio
+        visible_ratios = []
+        for i in range(len(amodal_boxes)):
+            if i == len(amodal_boxes) - 1:
+                visible_ratios.append(1.0)
+            else:
+                bw_next = amodal_boxes[i + 1][2] - amodal_boxes[i + 1][0]
+                overlap_len = amodal_boxes[i][2] - amodal_boxes[i + 1][0]
+                expected_overlap = max(0.0, overlap_len / max(1.0, bw_next))
+                expected_visible = 1.0 - 0.5 * expected_overlap
+                visible_ratios.append(float(expected_visible))
 
         return {
-            "image": np.array(final_img),
-            "amodal_masks": amodal_masks,
+            "image": np.array(bg.convert("RGB")),
             "amodal_boxes": amodal_boxes,
-            "print_marks": print_mark_boxes,
-            # Per-bag, aligned 1:1 with amodal_boxes/amodal_masks (unlike
-            # print_marks above, which only has one entry per bag that
-            # actually got a print mark and so isn't index-aligned) --
-            # lets a caller build a real per-box print_mark classification
-            # target instead of training cls_head against an always-0 label.
-            "has_print_marks": [rec["has_print"] for rec in bag_records],
+            "amodal_masks": amodal_masks,
+            "amodal_polygons": amodal_polygons,
+            "has_print_marks": has_print_marks,
+            "print_marks": print_marks,
             "visible_ratios": visible_ratios,
+            "num_bags": num_bags,
         }

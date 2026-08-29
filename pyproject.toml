@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "fabric-bag-counter"
 version = "2.0.0"
 description = "Local Conveyor Bag Counting and Dispatch Reconciliation System"
+readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [{ name = "Fabric Bag Counter Core Team" }]

@@ -120,15 +120,16 @@ class GateStateMachine:
                 curr_zone = "POST_DEPART"
 
             prev_zone = self._track_zones.get(track.track_id)
+            if prev_zone is None and hasattr(track, "history") and len(track.history) >= 2:
+                prev_cx, prev_cy = track.history[-2]
+                prev_p = project_point_on_axis((prev_cx, prev_cy), self.axis_origin, self.axis_vector)
+                if prev_p <= self.gate_pos:
+                    prev_zone = "PRE"
+                elif prev_p > self.gate_pos:
+                    prev_zone = "POST"
 
             # ---------------------------------------------------------------
             # 1. Forward crossing: from PRE (or PRE_APPROACH) to POST / POST_DEPART
-            #
-            # A PRE-side zone always implies pos <= gate_pos and a POST-side
-            # zone always implies pos > gate_pos (see the zone thresholds
-            # above), so this zone-transition check already implies
-            # prev_pos <= gate_pos < pos -- a separate raw-position check is
-            # redundant and was removed.
             # ---------------------------------------------------------------
             if prev_zone in ["PRE_APPROACH", "PRE"] and curr_zone in ["POST", "POST_DEPART"]:
                 track.crossing_seq += 1

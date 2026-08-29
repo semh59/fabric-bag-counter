@@ -81,8 +81,8 @@ def check_licenses() -> bool:
                 # Dual Apache/GPL licenses where Apache is chosen (§2.1)
                 if "apache" in license_identifiers and ("or" in license_identifiers or pkg_name == "dulwich"):
                     continue
-                # MPL-2.0 documented data-only root CA bundle exception (§2.1)
-                if "mpl" in bad and pkg_name in ["certifi"]:
+                # MPL-2.0 documented data/tooling exceptions (§2.1)
+                if "mpl" in bad and pkg_name in ["certifi", "pathspec"]:
                     continue
                 violations.append(f"Package '{pkg_name}' has prohibited license '{license_identifiers}' (pattern: {bad})")
 

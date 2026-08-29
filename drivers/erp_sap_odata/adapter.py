@@ -1,8 +1,17 @@
-"""SAP OData ERP integration adapter (§4.4, §11 M7)."""
+"""Standard SAP S/4HANA OData ERP Integration Adapter (§4.4, §11 M7).
+
+Supports official standard SAP S/4HANA OData services:
+1. `API_MATERIAL_DOCUMENT_SRV`: Goods Movement & Material Postings (MIGO 601 Goods Issue / 101 Goods Receipt).
+2. `API_OUTBOUND_DELIVERY_SRV`: Outbound Delivery Processing (VL02N Picking & Goods Issue Confirmation).
+"""
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Any
 import httpx
+
 from packages.cs_core.interfaces.erp_adapter import (
     ErpResult,
     ErpStatus,
@@ -10,32 +19,17 @@ from packages.cs_core.interfaces.erp_adapter import (
     SessionPayload,
 )
 
-# Unreachable placeholder base URL. This is intentionally never a valid SAP
-# endpoint -- every real deployment must supply its own `odata_base_url`.
-# submit_session/query_status refuse to make a network call while this
-# placeholder is still configured (see _check_base_url_configured) instead
-# of failing with an opaque connection error deep inside httpx.
-_PLACEHOLDER_BASE_URL = "https://sap.local:8000/sap/opu/odata/sap/Z_BAG_COUNT_SRV"
 
-# Assumed SAP OData entity/response field names. These are specific to one
-# SAP service schema (Z_BAG_COUNT_SRV in the reference deployment) -- every
-# SAP install can name/rewire its custom OData service differently, so this
-# is a configurable default rather than a hardcoded assumption baked into
-# the request/response handling code.
-DEFAULT_FIELD_MAP: dict[str, str] = {
-    # Request body fields (SessionPayload -> SAP entity field name)
-    "session_id": "SessionId",
-    "line_id": "LineId",
-    "delivery_document": "DeliveryDocument",
-    "material_number": "MaterialNumber",
-    "actual_count": "ActualCount",
-    "area_estimate": "AreaEstimate",
-    "posting_date": "PostingDate",
-    # Response parsing fields (OData envelope conventions)
-    "response_envelope": "d",
-    "response_material_document_number": "MaterialDocumentNumber",
-    "response_status": "Status",
-}
+class SapServiceType(str, Enum):
+    """Standard SAP S/4HANA OData service endpoint types."""
+
+    MATERIAL_DOCUMENT = "API_MATERIAL_DOCUMENT_SRV"
+    OUTBOUND_DELIVERY = "API_OUTBOUND_DELIVERY_SRV"
+
+
+# Standard default base URLs for SAP S/4HANA OData services
+_DEFAULT_SAP_HOST = "https://sap.local:8000/sap/opu/odata/sap"
+_PLACEHOLDER_BASE_URL = f"{_DEFAULT_SAP_HOST}/API_MATERIAL_DOCUMENT_SRV"
 
 
 class SapConfigurationError(RuntimeError):
@@ -43,63 +37,138 @@ class SapConfigurationError(RuntimeError):
 
 
 class SapODataErpAdapter:
-    """Bi-directional SAP OData service adapter supporting status queries."""
+    """Bi-directional standard SAP S/4HANA OData service adapter."""
 
     def __init__(
         self,
         odata_base_url: str = _PLACEHOLDER_BASE_URL,
+        service_type: SapServiceType | str = SapServiceType.MATERIAL_DOCUMENT,
         api_key: str | None = None,
+        username: str | None = None,
+        password: str | None = None,
+        sap_client: str = "100",
+        plant: str = "1000",
+        storage_location: str = "1010",
+        goods_movement_type: str = "601",  # 601: Goods Issue for Delivery
         timeout_seconds: float = 10.0,
         field_map: dict[str, str] | None = None,
     ) -> None:
         self.base_url = odata_base_url.rstrip("/")
+        self.service_type = SapServiceType(service_type) if isinstance(service_type, str) else service_type
         self.api_key = api_key
+        self.username = username
+        self.password = password
+        self.sap_client = sap_client
+        self.plant = plant
+        self.storage_location = storage_location
+        self.goods_movement_type = goods_movement_type
         self.timeout = timeout_seconds
-        # Merge caller overrides onto the documented defaults so a site can
-        # override just the field names its SAP service actually uses.
-        self.field_map: dict[str, str] = {**DEFAULT_FIELD_MAP, **(field_map or {})}
+
+        # Configurable field mapping with standard SAP S/4HANA defaults
+        self.field_map: dict[str, str] = {
+            "posting_date": "PostingDate",
+            "document_date": "DocumentDate",
+            "header_text": "MaterialDocumentHeaderText",
+            "material": "Material",
+            "plant": "Plant",
+            "storage_loc": "StorageLocation",
+            "movement_type": "GoodsMovementType",
+            "quantity": "QuantityInEntryUnit",
+            "unit": "EntryUnit",
+            "delivery_doc": "DeliveryDocument",
+            "response_envelope": "d",
+            "mat_doc_number": "MaterialDocument",
+            "mat_doc_year": "MaterialDocumentYear",
+            **(field_map or {}),
+        }
 
     def _check_base_url_configured(self) -> None:
         if self.base_url == _PLACEHOLDER_BASE_URL.rstrip("/"):
             raise SapConfigurationError(
-                "SapODataErpAdapter.base_url is still the unreachable placeholder "
-                f"({_PLACEHOLDER_BASE_URL!r}). Pass a real SAP OData service base URL "
-                "via odata_base_url before submitting/querying live ERP data."
+                f"SapODataErpAdapter.base_url is configured with placeholder ({_PLACEHOLDER_BASE_URL!r}). "
+                "Configure a valid production SAP S/4HANA OData endpoint URL before issuing ERP transactions."
             )
 
-    def submit_session(self, payload: SessionPayload) -> ErpResult:
-        """Post finalized count event to SAP OData Goods Receipt / Dispatch EntitySet."""
-        fm = self.field_map
-        url = f"{self.base_url}/BagCountPostings"
-        body = {
-            fm["session_id"]: str(payload.session_id),
-            fm["line_id"]: str(payload.line_id),
-            fm["delivery_document"]: payload.external_ref or "",
-            fm["material_number"]: payload.erp_material_code or "",
-            fm["actual_count"]: payload.counted_total,
-            fm["area_estimate"]: float(payload.area_estimate_total),
-            fm["posting_date"]: payload.closed_at.isoformat() if payload.closed_at else payload.opened_at.isoformat(),
-        }
+    def _build_headers(self, csrf_token: str | None = None) -> dict[str, str]:
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
+            "sap-client": self.sap_client,
         }
+        if csrf_token:
+            headers["x-csrf-token"] = csrf_token
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
+
+    def _fetch_csrf_token(self, client: httpx.Client) -> tuple[str | None, dict[str, str]]:
+        """Fetch SAP CSRF token (X-CSRF-Token: Fetch) required for state-modifying POST requests."""
+        headers = {"x-csrf-token": "Fetch", "Accept": "application/json", "sap-client": self.sap_client}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        auth = (self.username, self.password) if (self.username and self.password) else None
 
         try:
-            # Raised (and caught below into a retryable ErpResult, same as any
-            # other submission failure) rather than allowed to fall through to
-            # an opaque httpx connection error against an address that was
-            # never going to resolve.
+            res = client.get(f"{self.base_url}/$metadata", headers=headers, auth=auth)
+            token = res.headers.get("x-csrf-token")
+            cookies = dict(res.cookies)
+            return token, cookies
+        except Exception:
+            return None, {}
+
+    def _build_material_document_payload(self, payload: SessionPayload) -> dict[str, Any]:
+        """Build standard SAP S/4HANA `API_MATERIAL_DOCUMENT_SRV` JSON payload."""
+        fm = self.field_map
+        posting_dt = (payload.closed_at or payload.opened_at or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%S")
+
+        return {
+            fm["posting_date"]: f"/Date({int(datetime.now(timezone.utc).timestamp() * 1000)})/",
+            fm["document_date"]: f"/Date({int(datetime.now(timezone.utc).timestamp() * 1000)})/",
+            fm["header_text"]: f"Delivery {payload.external_ref or payload.session_id}",
+            "to_MaterialDocumentItem": {
+                "results": [
+                    {
+                        fm["material"]: str(payload.erp_material_code or "DEFAULT_BAG_MATERIAL"),
+                        fm["plant"]: self.plant,
+                        fm["storage_loc"]: self.storage_location,
+                        fm["movement_type"]: self.goods_movement_type,
+                        fm["quantity"]: str(payload.counted_total),
+                        fm["unit"]: "ST",
+                        fm["delivery_doc"]: str(payload.external_ref or ""),
+                    }
+                ]
+            },
+        }
+
+    def submit_session(self, payload: SessionPayload) -> ErpResult:
+        """Post verified bag count to standard SAP S/4HANA OData service."""
+        try:
             self._check_base_url_configured()
-            with httpx.Client(timeout=self.timeout) as client:
-                res = client.post(url, json=body, headers=headers)
+
+            auth = (self.username, self.password) if (self.username and self.password) else None
+            with httpx.Client(timeout=self.timeout, auth=auth) as client:
+                csrf_token, cookies = self._fetch_csrf_token(client)
+                headers = self._build_headers(csrf_token=csrf_token)
+
+                if self.service_type == SapServiceType.MATERIAL_DOCUMENT:
+                    url = f"{self.base_url}/A_MaterialDocumentHeader"
+                    body = self._build_material_document_payload(payload)
+                else:
+                    url = f"{self.base_url}/A_OutbDeliveryHeader('{payload.external_ref}')/to_DeliveryDocumentItem"
+                    body = {
+                        "ActualDeliveryQuantity": str(payload.counted_total),
+                        "DeliveryQuantityUnit": "ST",
+                    }
+
+                res = client.post(url, json=body, headers=headers, cookies=cookies)
+
                 if res.status_code in [200, 201]:
                     data = res.json()
-                    envelope = data.get(fm["response_envelope"], {})
-                    sap_doc = envelope.get(fm["response_material_document_number"], f"SAP_DOC_{payload.session_id}")
-                    return ErpResult(success=True, external_tx_id=str(sap_doc))
+                    envelope = data.get(self.field_map["response_envelope"], {})
+                    mat_doc = envelope.get(self.field_map["mat_doc_number"], f"SAP_DOC_{payload.session_id}")
+                    mat_year = envelope.get(self.field_map["mat_doc_year"], datetime.now().year)
+                    tx_id = f"{mat_doc}/{mat_year}" if mat_doc else f"SAP_TX_{payload.session_id}"
+                    return ErpResult(success=True, external_tx_id=str(tx_id))
                 else:
                     return ErpResult(
                         success=False,
@@ -111,30 +180,34 @@ class SapODataErpAdapter:
             return ErpResult(success=False, external_tx_id=None, error_message=str(e), retryable=True)
 
     def query_status(self, external_ref: str) -> ErpStatus:
-        """Query SAP to verify if delivery document has already been posted (§11 M7)."""
-        fm = self.field_map
-        url = f"{self.base_url}/BagCountPostings('{external_ref}')"
-        headers = {"Accept": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-
+        """Query standard SAP S/4HANA OData service for goods issue / delivery status (§11 M7)."""
         try:
             self._check_base_url_configured()
-            with httpx.Client(timeout=self.timeout) as client:
+
+            auth = (self.username, self.password) if (self.username and self.password) else None
+            headers = self._build_headers()
+
+            with httpx.Client(timeout=self.timeout, auth=auth) as client:
+                if self.service_type == SapServiceType.MATERIAL_DOCUMENT:
+                    url = f"{self.base_url}/A_MaterialDocumentHeader?$filter=MaterialDocumentHeaderText eq '{external_ref}'&$top=1"
+                else:
+                    url = f"{self.base_url}/A_OutbDeliveryHeader('{external_ref}')"
+
                 res = client.get(url, headers=headers)
+
                 if res.status_code == 200:
                     data = res.json()
-                    envelope = data.get(fm["response_envelope"], {})
-                    status_val = envelope.get(fm["response_status"], "posted")
-                    doc_num = envelope.get(fm["response_material_document_number"])
-                    return ErpStatus(
-                        state=ErpStatusState.POSTED if status_val == "posted" else ErpStatusState.PENDING,
-                        external_tx_id=doc_num,
-                    )
+                    envelope = data.get(self.field_map["response_envelope"], {})
+                    results = envelope.get("results", [envelope]) if isinstance(envelope, dict) else []
+                    if results:
+                        item = results[0]
+                        mat_doc = item.get(self.field_map["mat_doc_number"]) or external_ref
+                        return ErpStatus(state=ErpStatusState.POSTED, external_tx_id=str(mat_doc))
+                    return ErpStatus(state=ErpStatusState.PENDING, external_tx_id=None, message="Document not yet posted")
                 elif res.status_code == 404:
                     return ErpStatus(state=ErpStatusState.UNKNOWN, external_tx_id=None, message="Not found in SAP")
                 else:
-                    return ErpStatus(state=ErpStatusState.UNKNOWN, external_tx_id=None, message=res.text)
+                    return ErpStatus(state=ErpStatusState.UNKNOWN, external_tx_id=None, message=f"HTTP {res.status_code}: {res.text}")
         except Exception as e:
             return ErpStatus(state=ErpStatusState.UNKNOWN, external_tx_id=None, message=str(e))
 

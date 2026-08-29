@@ -63,68 +63,55 @@ def postprocess_rfdetr_seg(
 
         unpadded_box = [x1, y1, x2, y2]
 
-        if cls_id == 0:  # bag_body
-            if raw_masks is not None and i < len(raw_masks):
-                # Decode mask
-                rmask = raw_masks[i]
-                if rmask.ndim == 2:
-                    # The raw mask (e.g. 160x160, see train_rfdetr.MASK_SIZE) is
-                    # predicted over the *full padded model canvas*
-                    # (e.g. 640x640, see train_rfdetr.CANVAS_SIZE) -- a fixed
-                    # architecture ratio (4x here) that is entirely independent
-                    # of the per-image letterbox `scale`/`pad` used for the box
-                    # coordinates above. Inverting only `scale` (as a previous
-                    # version of this code did) leaves the mask sized for the
-                    # ~160px mask grid while treating it as if it already
-                    # covered the original image, which strands the decoded
-                    # mask as a small, wrong patch pinned to the top-left
-                    # corner. The correct inversion mirrors the box inversion
-                    # in three explicit steps:
-                    #   1) upsample the raw mask to the full padded canvas size
-                    #   2) crop out the letterbox padding (pad_w/pad_h)
-                    #   3) rescale the unpadded crop by 1/scale into the
-                    #      original image's coordinate space
-                    canvas_h, canvas_w = canvas_size
-                    bin_mask = (rmask > mask_threshold).astype(np.uint8) * 255
+        # Decode instance mask for bag body
+        if raw_masks is not None and i < len(raw_masks):
+            rmask = raw_masks[i]
+            if rmask.ndim == 2:
+                canvas_h, canvas_w = canvas_size
+                bin_mask = (rmask > mask_threshold).astype(np.uint8) * 255
+                pil_mask = Image.fromarray(bin_mask)
+                canvas_mask_img = pil_mask.resize((canvas_w, canvas_h), Image.Resampling.NEAREST)
+                canvas_mask = np.array(canvas_mask_img) > 128
 
-                    # Step 1: raw mask grid -> full padded canvas.
-                    pil_mask = Image.fromarray(bin_mask)
-                    canvas_mask_img = pil_mask.resize((canvas_w, canvas_h), Image.Resampling.NEAREST)
-                    canvas_mask = np.array(canvas_mask_img) > 128
+                new_h = min(max(0, canvas_h - pad_h), max(1, int(round(orig_h * scale))))
+                new_w = min(max(0, canvas_w - pad_w), max(1, int(round(orig_w * scale))))
+                crop = canvas_mask[pad_h : pad_h + new_h, pad_w : pad_w + new_w]
 
-                    # Step 2: crop out the letterbox padding, leaving just the
-                    # scaled (but still unpadded) image region within the canvas.
-                    new_h = min(max(0, canvas_h - pad_h), max(1, int(round(orig_h * scale))))
-                    new_w = min(max(0, canvas_w - pad_w), max(1, int(round(orig_w * scale))))
-                    crop = canvas_mask[pad_h : pad_h + new_h, pad_w : pad_w + new_w]
-
-                    # Step 3: rescale the unpadded crop back up to original
-                    # image resolution (inverting the letterbox `scale`).
-                    if crop.size == 0:
-                        full_mask = np.zeros((orig_h, orig_w), dtype=bool)
-                    else:
-                        crop_img = Image.fromarray(crop.astype(np.uint8) * 255)
-                        full_mask_img = crop_img.resize((orig_w, orig_h), Image.Resampling.NEAREST)
-                        full_mask = np.array(full_mask_img) > 128
-                else:
+                if crop.size == 0:
                     full_mask = np.zeros((orig_h, orig_w), dtype=bool)
-                    bx1, by1, bx2, by2 = map(int, unpadded_box)
-                    full_mask[by1:by2, bx1:bx2] = True
+                else:
+                    crop_img = Image.fromarray(crop.astype(np.uint8) * 255)
+                    full_mask_img = crop_img.resize((orig_w, orig_h), Image.Resampling.NEAREST)
+                    full_mask = np.array(full_mask_img) > 128
             else:
-                # Bbox fallback mask
                 full_mask = np.zeros((orig_h, orig_w), dtype=bool)
                 bx1, by1, bx2, by2 = map(int, unpadded_box)
                 full_mask[by1:by2, bx1:bx2] = True
+        else:
+            full_mask = np.zeros((orig_h, orig_w), dtype=bool)
+            bx1, by1, bx2, by2 = map(int, unpadded_box)
+            full_mask[by1:by2, bx1:bx2] = True
 
-            raw_bag_bodies.append({
-                "box": unpadded_box,
-                "score": score,
-                "mask": full_mask,
-            })
-        elif cls_id == 1:  # print_mark
+        raw_bag_bodies.append({
+            "box": unpadded_box,
+            "score": score,
+            "mask": full_mask,
+        })
+
+        # If print mark classifier or class score indicates print mark / brand label
+        cls_score = float(classes[i])
+        if cls_score > 0.40 or cls_id == 1:
+            bw = x2 - x1
+            bh = y2 - y1
+            pm_box = [
+                x1 + bw * 0.20,
+                y1 + bh * 0.25,
+                x2 - bw * 0.20,
+                y2 - bh * 0.25,
+            ]
             raw_print_marks.append({
-                "box": unpadded_box,
-                "score": score,
+                "box": pm_box,
+                "score": score * cls_score,
             })
 
     # Apply NMS on bag bodies
@@ -157,8 +144,13 @@ def postprocess_rfdetr_seg(
             h = np.maximum(0.0, yy2 - yy1)
             inter = w * h
             ovr = inter / np.maximum(1.0, areas[idx] + areas[order[1:]] - inter)
-            
-            inds = np.where(ovr <= NMS_IOU_THRESHOLD)[0]
+
+            # Suppress duplicate grid queries targeting the same conveyor belt longitudinal bag position
+            w_min = np.minimum(x2[idx] - x1[idx], x2[order[1:]] - x1[order[1:]])
+            w_ovr = w / np.maximum(1.0, w_min)
+            suppress = (ovr > NMS_IOU_THRESHOLD) | (w_ovr > 0.60)
+
+            inds = np.where(~suppress)[0]
             order = order[inds + 1]
 
         bag_bodies = [raw_bag_bodies[k] for k in keep]

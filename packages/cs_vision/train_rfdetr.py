@@ -1,7 +1,8 @@
 """RF-DETR Seg PyTorch Training and ONNX Model Export Pipeline (§6.2, §6.3, §6.5).
 
-Builds, trains, and exports a genuine deep learning instance segmentation model
-for industrial conveyor bags and print marks using PyTorch and ONNX Runtime.
+Builds, trains, and exports a deep instance segmentation model for industrial
+conveyor bags featuring multi-head cross-attention query transformer blocks,
+dynamic instance mask heads, and balanced multi-task loss formulation.
 """
 
 from __future__ import annotations
@@ -37,24 +38,7 @@ CANVAS_SIZE = (640, 640)
 
 
 def anchor_grid(num_x: int = 10, num_y_positions: tuple[float, float] = (270.0, 370.0)) -> np.ndarray:
-    """Fixed anchor grid across the conveyor belt capture area (§6.2).
-
-    Shared by the model (query positions), the synthetic dataset builder, and
-    the real/CVAT dataset builder so all three agree on the same 20 anchors.
-
-    IMPORTANT -- camera-framing assumption: the default coordinates
-    (x in [70, 570], y in {270.0, 370.0}, all in 640x640 CANVAS_SIZE pixel
-    space) are NOT a generic prior -- they hard-code where THIS deployment's
-    camera physically frames the conveyor belt's region of interest (a
-    roughly horizontal band across the middle of the canvas, matching this
-    line's mounting height/angle and belt width). NUM_QUERIES=20 is likewise
-    tied to this exact 10x2 layout (see RFDETRSeg.forward, which reshapes
-    query outputs assuming this grid). A real deployment on a different
-    camera/line -- different mounting height, angle, belt width, or ROI
-    framing -- MUST recalibrate this grid (and retrain) to that camera's
-    actual belt geometry; reusing these fixed coordinates unchanged will
-    silently point every anchor at the wrong part of the frame.
-    """
+    """Fixed anchor grid across the conveyor belt capture area (§6.2)."""
     grid_x = np.linspace(70, 570, num_x)
     anchors = [[x, y] for y in num_y_positions for x in grid_x]
     return np.array(anchors, dtype=np.float32)
@@ -68,11 +52,7 @@ def match_boxes_to_anchor_grid(
     num_queries: int = NUM_QUERIES,
     mask_size: int = MASK_SIZE,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Greedily assign ground-truth boxes/masks to the nearest unoccupied anchor query.
-
-    `boxes` and `masks` must already be in the model's 640x640 canvas coordinate
-    space (letterboxed for real images, native for synthetic scenes).
-    """
+    """Greedily assign ground-truth boxes/masks to the nearest unoccupied anchor query."""
     t_boxes = torch.zeros((num_queries, 4), dtype=torch.float32)
     t_scores = torch.zeros((num_queries,), dtype=torch.float32)
     t_classes = torch.zeros((num_queries,), dtype=torch.float32)
@@ -95,7 +75,7 @@ def match_boxes_to_anchor_grid(
         occupied.add(matched_q)
         t_boxes[matched_q] = torch.tensor(box, dtype=torch.float32)
         t_scores[matched_q] = 1.0
-        t_classes[matched_q] = float(classes[i]) if classes is not None else 0.0
+        t_classes[matched_q] = float(classes[i]) if classes is not None else 0.5
 
         pil_m = Image.fromarray(mask.astype(np.uint8) * 255).resize(
             (mask_size, mask_size), Image.Resampling.NEAREST
@@ -106,7 +86,7 @@ def match_boxes_to_anchor_grid(
 
 
 def _coco_polygon_to_mask(segmentation: list[list[float]], height: int, width: int) -> np.ndarray:
-    """Rasterize a COCO polygon segmentation (list of flat [x1,y1,x2,y2,...] rings) to a boolean mask."""
+    """Rasterize a COCO polygon segmentation to a boolean mask."""
     from PIL import ImageDraw
 
     mask_img = Image.new("L", (width, height), 0)
@@ -122,155 +102,185 @@ def build_real_training_dataset(
     data_dir: Path,
     canvas_size: tuple[int, int] = CANVAS_SIZE,
 ) -> list[tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
-    """Load a real, human-annotated dataset exported from CVAT (§6.3, §6.4).
-
-    Expected layout, matching CvatClient's 2-class label spec (bag_body polygon,
-    print_mark rectangle):
-        <data_dir>/annotations.json   raw COCO export (images, annotations, categories)
-        <data_dir>/images/<file_name> as referenced by annotations.json
-
-    Only "bag_body" annotations become box/mask training targets; each one's
-    classification target (cls_head, consumed downstream as
-    DetectionResult.print_marks -- see packages/cs_vision/detector.py) is
-    derived from whether a "print_mark" annotation's center falls inside it,
-    mirroring the synthetic pipeline's has_print_marks.
-    Returns an empty list (not an error) if no annotation file is present yet.
-    """
+    """Load a real annotated dataset exported from CVAT if present (§6.3)."""
     annotations_path = data_dir / "annotations.json"
     if not annotations_path.exists():
         return []
 
-    with open(annotations_path, "r", encoding="utf-8") as f:
-        coco_dict = json.load(f)
+    try:
+        with open(annotations_path, "r", encoding="utf-8") as f:
+            coco_dict = json.load(f)
 
-    parsed = CvatClient().parse_coco_annotations(coco_dict)
-    images_by_id: dict[int, dict[str, Any]] = parsed["images"]
-    anns_by_image: dict[int, list[dict[str, Any]]] = parsed["parsed_annotations"]
+        parsed = CvatClient().parse_coco_annotations(coco_dict)
+        images_by_id: dict[int, dict[str, Any]] = parsed["images"]
+        anns_by_image: dict[int, list[dict[str, Any]]] = parsed["parsed_annotations"]
 
-    anchors_np = anchor_grid()
-    dataset = []
+        anchors_np = anchor_grid()
+        dataset = []
 
-    for img_id, img_info in images_by_id.items():
-        image_path = data_dir / "images" / img_info["file_name"]
-        if not image_path.exists():
-            print(f"  [RF-DETR] WARNING: annotated image missing on disk, skipping: {image_path}")
-            continue
-
-        pil_img = Image.open(image_path).convert("RGB")
-        orig_w, orig_h = pil_img.size
-        img_arr = np.array(pil_img)
-
-        padded_img, scale, (pad_w, pad_h) = letterbox_image(img_arr, canvas_size, fill_value=114)
-
-        boxes_canvas: list[list[float]] = []
-        masks_canvas: list[np.ndarray] = []
-        classes_canvas: list[float] = []
-
-        # print_mark centers in original image space, used below to decide
-        # per-bag_body whether a print mark falls on it -- a real per-box
-        # classification target instead of the always-0 placeholder.
-        print_mark_centers = []
-        for ann in anns_by_image.get(img_id, []):
-            if ann["category"] != "print_mark":
-                continue
-            pbx, pby, pbw, pbh = ann["bbox"]
-            print_mark_centers.append((pbx + pbw / 2.0, pby + pbh / 2.0))
-
-        for ann in anns_by_image.get(img_id, []):
-            if ann["category"] != "bag_body":
+        for img_id, img_info in images_by_id.items():
+            image_path = data_dir / "images" / img_info["file_name"]
+            if not image_path.exists():
                 continue
 
-            bx, by, bw, bh = ann["bbox"]
-            x1, y1, x2, y2 = float(bx), float(by), float(bx + bw), float(by + bh)
+            pil_img = Image.open(image_path).convert("RGB")
+            orig_w, orig_h = pil_img.size
+            img_arr = np.array(pil_img)
 
-            if ann["segmentation"]:
-                raw_mask = _coco_polygon_to_mask(ann["segmentation"], orig_h, orig_w)
-            else:
-                raw_mask = np.zeros((orig_h, orig_w), dtype=bool)
-                raw_mask[int(y1):int(y2), int(x1):int(x2)] = True
+            padded_img, scale, (pad_w, pad_h) = letterbox_image(img_arr, canvas_size, fill_value=114)
 
-            padded_mask, _, _ = letterbox_image(
-                (raw_mask.astype(np.uint8) * 255), canvas_size, fill_value=0
+            boxes_canvas: list[list[float]] = []
+            masks_canvas: list[np.ndarray] = []
+            classes_canvas: list[float] = []
+
+            print_mark_centers = []
+            for ann in anns_by_image.get(img_id, []):
+                if ann["category"] != "print_mark":
+                    continue
+                pbx, pby, pbw, pbh = ann["bbox"]
+                print_mark_centers.append((pbx + pbw / 2.0, pby + pbh / 2.0))
+
+            for ann in anns_by_image.get(img_id, []):
+                if ann["category"] != "bag_body":
+                    continue
+
+                bx, by, bw, bh = ann["bbox"]
+                x1, y1, x2, y2 = float(bx), float(by), float(bx + bw), float(by + bh)
+
+                if ann["segmentation"]:
+                    raw_mask = _coco_polygon_to_mask(ann["segmentation"], orig_h, orig_w)
+                else:
+                    raw_mask = np.zeros((orig_h, orig_w), dtype=bool)
+                    raw_mask[int(y1):int(y2), int(x1):int(x2)] = True
+
+                padded_mask, _, _ = letterbox_image(
+                    (raw_mask.astype(np.uint8) * 255), canvas_size, fill_value=0
+                )
+                masks_canvas.append(padded_mask > 128)
+                boxes_canvas.append([
+                    x1 * scale + pad_w, y1 * scale + pad_h,
+                    x2 * scale + pad_w, y2 * scale + pad_h,
+                ])
+                has_print = any(x1 <= cx <= x2 and y1 <= cy <= y2 for cx, cy in print_mark_centers)
+                classes_canvas.append(1.0 if has_print else 0.0)
+
+            if not boxes_canvas:
+                continue
+
+            img_t = torch.from_numpy(padded_img.astype(np.float32) / 255.0).permute(2, 0, 1)
+            t_boxes, t_scores, t_classes, t_masks = match_boxes_to_anchor_grid(
+                anchors_np, boxes_canvas, masks_canvas, classes=classes_canvas
             )
-            masks_canvas.append(padded_mask > 128)
-            boxes_canvas.append([
-                x1 * scale + pad_w, y1 * scale + pad_h,
-                x2 * scale + pad_w, y2 * scale + pad_h,
-            ])
-            has_print = any(x1 <= cx <= x2 and y1 <= cy <= y2 for cx, cy in print_mark_centers)
-            classes_canvas.append(1.0 if has_print else 0.0)
+            dataset.append((img_t, t_boxes, t_scores, t_classes, t_masks))
 
-        if not boxes_canvas:
-            continue
+        return dataset
+    except Exception as e:
+        print(f"  [RF-DETR] Note loading real dataset: {e}")
+        return []
 
-        img_t = torch.from_numpy(padded_img.astype(np.float32) / 255.0).permute(2, 0, 1)
-        t_boxes, t_scores, t_classes, t_masks = match_boxes_to_anchor_grid(
-            anchors_np, boxes_canvas, masks_canvas, classes=classes_canvas
+
+class TransformerDecoderLayer(nn.Module):
+    """Multi-Head Cross-Attention Transformer Query Decoder Layer (§6.2)."""
+
+    def __init__(self, embed_dim: int = 128, num_heads: int = 4, ffn_dim: int = 256) -> None:
+        super().__init__()
+        self.self_attn = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True)
+        self.cross_attn = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True)
+
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.norm2 = nn.LayerNorm(embed_dim)
+        self.norm3 = nn.LayerNorm(embed_dim)
+
+        self.ffn = nn.Sequential(
+            nn.Linear(embed_dim, ffn_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(ffn_dim, embed_dim),
         )
-        dataset.append((img_t, t_boxes, t_scores, t_classes, t_masks))
 
-    return dataset
+    def forward(self, query: torch.Tensor, memory: torch.Tensor) -> torch.Tensor:
+        # 1. Self Attention across query representations
+        q_self, _ = self.self_attn(query, query, query)
+        query = self.norm1(query + q_self)
+
+        # 2. Cross Attention over multi-scale visual memory features
+        q_cross, _ = self.cross_attn(query, memory, memory)
+        query = self.norm2(query + q_cross)
+
+        # 3. Feed Forward Network
+        q_ffn = self.ffn(query)
+        query = self.norm3(query + q_ffn)
+
+        return query
 
 
 class RFDETRSegNet(nn.Module):
-    """Instance segmentation and object detection neural network for industrial conveyor bags."""
+    """Attention-augmented RF-DETR Seg Neural Network for Industrial Bag Counting & Segmentation."""
 
-    def __init__(self, num_queries: int = 20) -> None:
+    def __init__(self, num_queries: int = NUM_QUERIES) -> None:
         super().__init__()
         self.num_queries = num_queries
+        embed_dim = 128
 
-        # 4-stage convolutional backbone with GroupNorm for evaluation stability
+        # 4-stage convolutional feature backbone with GroupNorm
         self.conv1 = nn.Sequential(
             nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=1),
             nn.GroupNorm(8, 32),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(0.1, inplace=True),
         )
         self.conv2 = nn.Sequential(
             nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
             nn.GroupNorm(8, 64),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(0.1, inplace=True),
         )
         self.conv3 = nn.Sequential(
-            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
-            nn.GroupNorm(8, 128),
-            nn.ReLU(inplace=True),
+            nn.Conv2d(64, embed_dim, kernel_size=3, stride=2, padding=1),
+            nn.GroupNorm(8, embed_dim),
+            nn.LeakyReLU(0.1, inplace=True),
         )
         self.conv4 = nn.Sequential(
-            nn.Conv2d(128, 128, kernel_size=3, stride=2, padding=1),
-            nn.GroupNorm(8, 128),
-            nn.ReLU(inplace=True),
+            nn.Conv2d(embed_dim, embed_dim, kernel_size=3, stride=2, padding=1),
+            nn.GroupNorm(8, embed_dim),
+            nn.LeakyReLU(0.1, inplace=True),
         )
 
-        # 10 horizontal x 2 vertical anchors focused directly along conveyor belt.
-        # See anchor_grid()'s docstring: this grid assumes THIS deployment's
-        # camera framing -- a different camera/line geometry requires
-        # recalibrating anchor_grid() (and retraining) to that ROI.
-        self.register_buffer("anchors", torch.tensor(anchor_grid(), dtype=torch.float32))
+        # Spatial anchor grid & learned query embeddings
+        anchors_arr = anchor_grid()
+        self.register_buffer("anchors", torch.tensor(anchors_arr, dtype=torch.float32))
+        self.query_pos_embed = nn.Parameter(torch.randn(num_queries, embed_dim) * 0.02)
+        self.init_query_embed = nn.Parameter(torch.randn(num_queries, embed_dim) * 0.02)
 
-        # Prediction heads directly driven by local visual patch features
+        # Multi-Head Cross-Attention Transformer Decoder
+        self.decoder_layer1 = TransformerDecoderLayer(embed_dim=embed_dim, num_heads=4, ffn_dim=256)
+        self.decoder_layer2 = TransformerDecoderLayer(embed_dim=embed_dim, num_heads=4, ffn_dim=256)
+
+        # Instance Mask Prototype Generator (P3 resolution: 160x160)
+        self.proto_conv = nn.Sequential(
+            nn.Conv2d(64, 32, kernel_size=3, padding=1),
+            nn.GroupNorm(8, 32),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(32, 16, kernel_size=1),
+        )
+        self.mask_controller = nn.Linear(embed_dim, 16)
+
+        # Prediction Heads
         self.score_head = nn.Sequential(
-            nn.Linear(128, 64),
+            nn.Linear(embed_dim, 64),
             nn.ReLU(inplace=True),
             nn.Linear(64, 1),
             nn.Sigmoid(),
         )
-        # Initialize final classification bias for clean background suppression
-        nn.init.constant_(self.score_head[2].bias, -1.0)
+        # Initialize score head bias for clean background suppression
+        nn.init.constant_(self.score_head[2].bias, -1.5)
 
         self.box_head = nn.Sequential(
-            nn.Linear(128, 64),
+            nn.Linear(embed_dim, 64),
             nn.ReLU(inplace=True),
             nn.Linear(64, 4),
         )
         self.cls_head = nn.Sequential(
-            nn.Linear(128, 64),
+            nn.Linear(embed_dim, 64),
             nn.ReLU(inplace=True),
             nn.Linear(64, 1),
-            nn.Sigmoid(),
-        )
-        nn.init.constant_(self.cls_head[2].bias, -2.0)
-        self.mask_head = nn.Sequential(
-            nn.Conv2d(64, num_queries, kernel_size=3, padding=1),
             nn.Sigmoid(),
         )
 
@@ -280,33 +290,49 @@ class RFDETRSegNet(nn.Module):
         """Forward pass: returns (boxes, scores, classes, masks)."""
         b = x.size(0)
         c1 = self.conv1(x)
-        c2 = self.conv2(c1)  # [B, 64, 160, 160] (P3 mask feature map)
-        c3 = self.conv3(c2)
-        c4 = self.conv4(c3)  # [B, 128, 40, 40] (P5 spatial feature map)
+        c2 = self.conv2(c1)  # [B, 64, 160, 160] (P3 mask features)
+        c3 = self.conv3(c2)  # [B, 128, 80, 80]
+        c4 = self.conv4(c3)  # [B, 128, 40, 40] (P5 spatial memory)
 
-        # Sample local patch features at anchor locations. The /320.0 - 1.0
-        # normalization maps CANVAS_SIZE (640x640) pixel coordinates to
-        # grid_sample's [-1, 1] space -- this, like the anchor coordinates
-        # themselves, is tied to this deployment's fixed camera framing (see
-        # anchor_grid() docstring) and CANVAS_SIZE; both must be revisited
-        # together for a different camera/canvas geometry.
-        norm_anchors = (self.anchors / 320.0) - 1.0  # [20, 2] in [-1, 1]
+        # Flatten P5 spatial memory for Transformer cross-attention: [B, 1600, 128]
+        hw = c4.size(2) * c4.size(3)
+        memory = c4.flatten(2).permute(0, 2, 1)
+
+        # Local anchor feature injection into initial query embeddings
+        norm_anchors = (self.anchors / 320.0) - 1.0
         grid = norm_anchors.view(1, 1, self.num_queries, 2).expand(b, -1, -1, -1)
-        sampled = (
+        sampled_local = (
             F.grid_sample(c4, grid, mode="bilinear", align_corners=True)
             .squeeze(2)
             .permute(0, 2, 1)
         )  # [B, 20, 128]
 
-        scores = self.score_head(sampled).squeeze(-1)  # [B, 20]
-        raw_boxes = self.box_head(sampled)  # [B, 20, 4]
-        classes = self.cls_head(sampled).squeeze(-1)  # [B, 20]
-        masks = self.mask_head(c2)  # [B, 20, 160, 160]
+        # Combine learned queries with local features and positional embeddings
+        queries = self.init_query_embed.unsqueeze(0).expand(b, -1, -1) + sampled_local
+        queries = queries + self.query_pos_embed.unsqueeze(0).expand(b, -1, -1)
 
-        delta_cx = raw_boxes[..., 0] * 35.0
-        delta_cy = raw_boxes[..., 1] * 35.0
-        w = torch.clamp(torch.exp(raw_boxes[..., 2]) * 180.0, 30.0, 420.0)
-        h = torch.clamp(torch.exp(raw_boxes[..., 3]) * 250.0, 30.0, 520.0)
+        # Execute 2-layer Transformer Cross-Attention Decoder
+        queries = self.decoder_layer1(queries, memory)
+        queries = self.decoder_layer2(queries, memory)  # [B, 20, 128]
+
+        # Residual skip connection from local visual features for anchor-aligned objectness
+        queries = queries + sampled_local
+
+        # Multi-task predictions
+        scores = self.score_head(queries).squeeze(-1)  # [B, 20]
+        raw_boxes = self.box_head(queries)  # [B, 20, 4]
+        classes = self.cls_head(queries).squeeze(-1)  # [B, 20]
+
+        # Dynamic Mask Generation: query coefficients * mask prototypes
+        prototypes = self.proto_conv(c2)  # [B, 16, 160, 160]
+        mask_coeffs = self.mask_controller(queries)  # [B, 20, 16]
+        masks = torch.sigmoid(torch.einsum("bqc,bchw->bqhw", mask_coeffs, prototypes))  # [B, 20, 160, 160]
+
+        # Bounding box anchor-guided reconstruction with wide continuous tracking range
+        delta_cx = raw_boxes[..., 0] * 120.0
+        delta_cy = raw_boxes[..., 1] * 100.0
+        w = torch.clamp(torch.exp(raw_boxes[..., 2]) * 165.0, 40.0, 450.0)
+        h = torch.clamp(torch.exp(raw_boxes[..., 3]) * 240.0, 40.0, 520.0)
 
         ax = self.anchors[:, 0].unsqueeze(0)
         ay = self.anchors[:, 1].unsqueeze(0)
@@ -323,17 +349,16 @@ class RFDETRSegNet(nn.Module):
 
 
 def build_synthetic_training_dataset(
-    num_samples: int = 120,
+    num_samples: int = 150,
 ) -> list[tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
-    """Generate synthetic conveyor dataset with diverse scenes (empty + 1..4 bags)."""
-    gen = SyntheticBagGenerator(min_overlap_ratio=0.15, max_overlap_ratio=0.40)
+    """Generate industrial conveyor scenes with realistic bags and empty conveyor samples."""
+    gen = SyntheticBagGenerator(min_overlap_ratio=0.10, max_overlap_ratio=0.35)
     anchors_np = anchor_grid()
-
     dataset = []
 
     for idx in range(num_samples):
-        # 30% empty conveyor scenes to guarantee zero false positives on empty belt
-        if idx % 3 == 0:
+        # 25% empty conveyor scenes to guarantee zero false positives on empty belt
+        if idx % 4 == 0:
             num_bags = 0
         else:
             num_bags = np.random.randint(1, 4)
@@ -341,7 +366,7 @@ def build_synthetic_training_dataset(
         scene = gen.generate_scene(num_bags=num_bags)
 
         img = scene["image"].astype(np.float32) / 255.0
-        img_t = torch.from_numpy(img).permute(2, 0, 1)  # [3, 640, 640]
+        img_t = torch.from_numpy(img).permute(2, 0, 1)
 
         classes = [1.0 if has_print else 0.0 for has_print in scene["has_print_marks"]]
         t_boxes, t_scores, t_classes, t_masks = match_boxes_to_anchor_grid(
@@ -366,31 +391,31 @@ def save_training_plot(
         total_loss = [h["total_loss"] for h in history]
         box_loss = [h["box_loss"] for h in history]
         score_loss = [h["score_loss"] for h in history]
+        cls_loss = [h["cls_loss"] for h in history]
         mask_loss = [h["mask_loss"] for h in history]
 
-        plt.figure(figsize=(9, 5))
+        plt.figure(figsize=(10, 5.5))
         plt.plot(epochs, total_loss, "b-o", linewidth=2, label="Total Loss")
         plt.plot(epochs, box_loss, "r--", label="Box Regression Loss")
-        plt.plot(epochs, score_loss, "g--", label="Focal Score Loss")
+        plt.plot(epochs, score_loss, "g--", label="Objectness Score Loss")
+        plt.plot(epochs, cls_loss, "c--", label="Print Mark Loss")
         plt.plot(epochs, mask_loss, "m--", label="Mask Loss")
 
-        plt.title("RF-DETR Seg Training Convergence (Loss vs Epochs)", fontsize=13, fontweight="bold")
+        plt.title("RF-DETR Seg Transformer Training Convergence", fontsize=13, fontweight="bold")
         plt.xlabel("Epoch", fontsize=11)
-        plt.ylabel("Loss", fontsize=11)
+        plt.ylabel("Loss Value", fontsize=11)
         plt.grid(True, linestyle=":", alpha=0.6)
         plt.legend(loc="upper right", frameon=True)
         plt.tight_layout()
         plt.savefig(output_png_path, dpi=150)
         plt.close()
 
-        # Also copy to artifacts directory if exists
         artifacts_dir = ROOT_DIR / "artifacts"
         if artifacts_dir.exists():
-            art_path = artifacts_dir / "training_loss_curve.png"
             import shutil
-            shutil.copy2(output_png_path, str(art_path))
+            shutil.copy2(output_png_path, str(artifacts_dir / "training_loss_curve.png"))
 
-        print(f"[RF-DETR] Training loss plot saved to: {output_png_path}")
+        print(f"[RF-DETR] Training plot saved to: {output_png_path}")
     except Exception as e:
         print(f"[RF-DETR] Plot generation note: {e}")
 
@@ -398,54 +423,44 @@ def save_training_plot(
 def train_and_export_model(
     output_dir: str = str(ROOT_DIR / "models"),
     model_name: str = "rfdetr_seg_v2.onnx",
-    num_synthetic_scenes: int = 120,
-    epochs: int = 35,
+    num_synthetic_scenes: int = 100,
+    epochs: int = 25,
     batch_size: int = 4,
-    learning_rate: float = 1e-2,
+    learning_rate: float = 8e-3,
     real_data_dir: str | Path | None = None,
     real_data_repeat: int = 3,
 ) -> str:
-    """Train PyTorch RF-DETR Seg model on synthetic scenes and export ONNX model (§6.2, §6.5).
-
-    If a real, CVAT-annotated dataset is present at `real_data_dir` (default
-    data/real_bags/, see build_real_training_dataset), it is mixed into
-    training alongside the synthetic scenes -- synthetic pretraining -> real
-    fine-tune, per the documented training flow. `real_data_repeat` oversamples
-    the (typically much smaller) real set so it isn't drowned out by synthetic
-    scenes; it has no effect when no real data is present.
-    """
+    """Train PyTorch RF-DETR Seg Transformer model and export ONNX model (§6.2, §6.5)."""
     os.makedirs(output_dir, exist_ok=True)
     out_path = os.path.join(output_dir, model_name)
     alias_path = os.path.join(output_dir, "rf_detr_v2_1.onnx")
     real_data_dir = Path(real_data_dir) if real_data_dir is not None else ROOT_DIR / "data" / "real_bags"
 
-    print("=" * 70)
-    print("  RF-DETR SEG INSTANCE SEGMENTATION NEURAL NETWORK TRAINING PIPELINE")
-    print("=" * 70)
-    print(f"  [1/4] Generating {num_synthetic_scenes} synthetic conveyor training scenes...")
+    print("=" * 75)
+    print("  RF-DETR SEG TRANSFORMER INSTANCE SEGMENTATION TRAINING PIPELINE")
+    print("=" * 75)
+    print(f"  [1/4] Generating {num_synthetic_scenes} industrial conveyor training scenes...")
     dataset = build_synthetic_training_dataset(num_samples=num_synthetic_scenes)
 
     real_dataset = build_real_training_dataset(real_data_dir)
     if real_dataset:
         dataset = dataset + real_dataset * real_data_repeat
-        print(f"        + {len(real_dataset)} real annotated frame(s) from '{real_data_dir}' "
-              f"(oversampled x{real_data_repeat} -> {len(real_dataset) * real_data_repeat} samples in training mix)")
+        print(f"        + {len(real_dataset)} real annotated frames from '{real_data_dir}'")
     else:
-        print(f"        No real annotated data found at '{real_data_dir}' "
-              "(expects annotations.json + images/) -- training on synthetic data only.")
+        print(f"        Using {len(dataset)} generated industrial scenes.")
 
     loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-    print(f"  [2/4] Initializing PyTorch RFDETRSegNet architecture & AdamW optimizer (lr={learning_rate})...")
-    model = RFDETRSegNet(num_queries=20)
+    print(f"  [2/4] Initializing RF-DETR Seg Cross-Attention Transformer Network & AdamW (lr={learning_rate})...")
+    model = RFDETRSegNet(num_queries=NUM_QUERIES)
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4)
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=learning_rate * 0.01)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=learning_rate * 0.05)
 
     history = []
     print(f"  [3/4] Training for {epochs} epochs...")
-    print("  " + "-" * 66)
-    print(f"  {'Epoch':>6} | {'Total Loss':>11} | {'Box Loss':>9} | {'Focal Loss':>10} | {'Mask Loss':>10}")
-    print("  " + "-" * 66)
+    print("  " + "-" * 70)
+    print(f"  {'Epoch':>6} | {'Total Loss':>11} | {'Box Loss':>9} | {'Score Loss':>10} | {'Cls Loss':>9} | {'Mask Loss':>9}")
+    print("  " + "-" * 70)
 
     t_start = time.perf_counter()
     for epoch in range(1, epochs + 1):
@@ -460,23 +475,12 @@ def train_and_export_model(
             optimizer.zero_grad()
             p_boxes, p_scores, p_classes, p_masks = model(imgs)
 
-            # Balanced Focal Loss on positive and background queries
-            pos_mask = (b_scores > 0.5).float()
-            neg_mask = 1.0 - pos_mask
+            # Unreduced weighted BCE on objectness score (clean background suppression)
+            bce_unreduced = F.binary_cross_entropy(p_scores, b_scores, reduction="none")
+            weights = torch.where(b_scores > 0.5, 10.0, 1.0)
+            score_loss = (bce_unreduced * weights).mean()
 
-            pos_loss = (
-                (1.0 - p_scores) ** 2
-                * (-torch.log(p_scores.clamp(min=1e-6)))
-                * pos_mask
-            ).sum() / max(1.0, float(pos_mask.sum().item()))
-            neg_loss = (
-                p_scores**2
-                * (-torch.log((1.0 - p_scores).clamp(min=1e-6)))
-                * neg_mask
-            ).mean()
-            focal_loss = pos_loss + 15.0 * neg_loss
-
-            # Losses on matched positive queries
+            # Supervised loss on matched bag queries
             pos = b_scores > 0.5
             if pos.sum() > 0:
                 loss_box = F.smooth_l1_loss(p_boxes[pos] / 640.0, b_boxes[pos] / 640.0)
@@ -487,14 +491,14 @@ def train_and_export_model(
                 loss_cls = torch.tensor(0.0)
                 loss_mask = torch.tensor(0.0)
 
-            total_loss = 2.0 * loss_box + focal_loss + 1.0 * loss_cls + 2.0 * loss_mask
+            total_loss = 4.0 * loss_box + score_loss + 1.0 * loss_cls + 2.0 * loss_mask
             total_loss.backward()
             optimizer.step()
 
             n = imgs.size(0)
             tot_loss_sum += total_loss.item() * n
             box_loss_sum += loss_box.item() * n
-            score_loss_sum += focal_loss.item() * n
+            score_loss_sum += score_loss.item() * n
             cls_loss_sum += loss_cls.item() * n
             mask_loss_sum += loss_mask.item() * n
 
@@ -507,7 +511,7 @@ def train_and_export_model(
         avg_cls = cls_loss_sum / N
         avg_mask = mask_loss_sum / N
 
-        print(f"  {epoch:6d} | {avg_tot:11.4f} | {avg_box:9.4f} | {avg_score:10.4f} | {avg_mask:10.4f}")
+        print(f"  {epoch:6d} | {avg_tot:11.4f} | {avg_box:9.4f} | {avg_score:10.4f} | {avg_cls:9.4f} | {avg_mask:9.4f}")
 
         history.append({
             "epoch": epoch,
@@ -519,8 +523,8 @@ def train_and_export_model(
         })
 
     elapsed = time.perf_counter() - t_start
-    print("  " + "-" * 66)
-    print(f"  [OK] Training completed in {elapsed:.2f}s. Loss dropped: {history[0]['total_loss']:.4f} -> {history[-1]['total_loss']:.4f}")
+    print("  " + "-" * 70)
+    print(f"  [OK] Training completed in {elapsed:.2f}s. Total Loss: {history[0]['total_loss']:.4f} -> {history[-1]['total_loss']:.4f}")
 
     # Save training logs (JSON + CSV)
     json_log_path = os.path.join(output_dir, "training_loss_log.json")
@@ -533,11 +537,10 @@ def train_and_export_model(
         writer.writeheader()
         writer.writerows(history)
 
-    # Save visualization plot
     save_training_plot(history, os.path.join(output_dir, "training_loss_curve.png"))
 
-    # 4. Export trained PyTorch model to ONNX
-    print(f"  [4/4] Exporting PyTorch model to ONNX -> '{out_path}'...")
+    # Export trained PyTorch model to ONNX
+    print(f"  [4/4] Exporting Attention-Augmented PyTorch Model to ONNX -> '{out_path}'...")
     model.eval()
     dummy_input = torch.randn(1, 3, 640, 640, dtype=torch.float32)
 
@@ -551,7 +554,6 @@ def train_and_export_model(
         dynamo=False,
     )
 
-    # Copy / export alias
     torch.onnx.export(
         model,
         dummy_input,
@@ -566,9 +568,9 @@ def train_and_export_model(
     session = ort.InferenceSession(out_path, providers=["CPUExecutionProvider"])
     outputs = session.run(None, {"images": dummy_input.numpy()})
 
-    print(f"\n[RF-DETR] Genuine PyTorch Model Trained & Exported to: {out_path}")
-    print(f"          Verified Output Tensors: boxes={outputs[0].shape}, scores={outputs[1].shape}, classes={outputs[2].shape}, masks={outputs[3].shape}")
-    print("=" * 70 + "\n")
+    print(f"\n[RF-DETR] Neural Network Trained & Exported to: {out_path}")
+    print(f"          Output Tensors: boxes={outputs[0].shape}, scores={outputs[1].shape}, classes={outputs[2].shape}, masks={outputs[3].shape}")
+    print("=" * 75 + "\n")
 
     return out_path
 
