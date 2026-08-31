@@ -82,6 +82,8 @@ file = "drivers.video_file.driver:FileVideoSource"
 [project.entry-points."cs.erp_adapter"]
 csv = "drivers.erp_csv.adapter:CsvErpAdapter"
 sap_odata = "drivers.erp_sap_odata.adapter:SapODataErpAdapter"
+sap_ecc = "drivers.erp_sap_ecc.adapter:SapEccErpAdapter"
+
 
 [project.entry-points."cs.io_controller"]
 noop = "drivers.io_noop.controller:NoopIoController"

@@ -11,6 +11,7 @@ import numpy as np
 from packages.cs_core.geometry import point_in_polygon
 from packages.cs_counting.area_counter import AreaIntegralCounter
 from packages.cs_counting.gate import GateCrossingEvent, GateStateMachine
+from packages.cs_tracking.amodal_reconstruction import TemporalAmodalReconstructor
 from packages.cs_tracking.merge_detector import MergeDetector
 from packages.cs_tracking.motion import BeltMotionModel
 from packages.cs_tracking.tracker import BagTrack, ConveyorByteTracker
@@ -86,6 +87,7 @@ class CountingEngine:
         self.merge_detector = merge_detector or MergeDetector()
         self.gate_state_machine = gate_state_machine or GateStateMachine()
         self.area_counter = area_counter or AreaIntegralCounter()
+        self.amodal_reconstructor = TemporalAmodalReconstructor(max_history_frames=15)
 
         self.running_net_count = 0
         self.total_forward_crossings = 0
@@ -244,6 +246,25 @@ class CountingEngine:
 
         # 3. Conveyor Multi-Object Tracking
         active_tracks = self.tracker.update(enriched_detections)
+
+        # 3b. Temporal Amodal Mask Reconstruction (§6.3, §6.6)
+        for trk in active_tracks:
+            is_merged_trk = getattr(trk, "is_merged", False) or getattr(trk, "is_latent", False)
+            if not is_merged_trk and trk.mask is not None:
+                self.amodal_reconstructor.record_observation(
+                    track_id=trk.track_id,
+                    frame_index=frame_index,
+                    box=trk.box,
+                    mask=trk.mask,
+                    is_isolated=True,
+                )
+            elif is_merged_trk:
+                trk.mask = self.amodal_reconstructor.reconstruct_amodal_mask(
+                    track_id=trk.track_id,
+                    current_box=trk.box,
+                    current_visible_mask=trk.mask,
+                    canvas_shape=CANVAS_SIZE,
+                )
 
         # 4. Gate State Machine (PRE -> GATE -> POST)
         gate_crossings = self.gate_state_machine.process_tracks(

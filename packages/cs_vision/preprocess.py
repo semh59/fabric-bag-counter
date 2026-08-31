@@ -42,15 +42,29 @@ def letterbox_image(
     return padded, scale, (pad_w, pad_h)
 
 
+from packages.cs_vision.retinex import MultiScaleRetinex
+
+_retinex_instance: MultiScaleRetinex | None = None
+
+
 def preprocess_image(
     image: np.ndarray,
     target_shape: tuple[int, int] = (640, 640),
+    apply_retinex: bool = False,
 ) -> tuple[np.ndarray, float, tuple[int, int]]:
-    """Standardize image to NCHW float32 tensor normalized to [0, 1]."""
-    padded, scale, (pad_w, pad_h) = letterbox_image(image, target_shape)
+    """Standardize image to NCHW float32 tensor normalized to [0, 1] with optional Retinex lighting compensation."""
+    global _retinex_instance
+    proc_img = image
+    if apply_retinex:
+        if _retinex_instance is None:
+            _retinex_instance = MultiScaleRetinex()
+        proc_img = _retinex_instance.enhance(image)
+
+    padded, scale, (pad_w, pad_h) = letterbox_image(proc_img, target_shape)
     
     # HWC -> CHW, normalized [0, 1]
     blob = padded.astype(np.float32) / 255.0
     blob = np.transpose(blob, (2, 0, 1))
     blob = np.expand_dims(blob, axis=0)  # (1, C, H, W)
     return blob, scale, (pad_w, pad_h)
+

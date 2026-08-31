@@ -18,17 +18,25 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class LensDistortionParams:
-    """Camera intrinsic parameters and Brown-Conrady distortion coefficients."""
+    """Camera intrinsic parameters and Brown-Conrady distortion coefficients.
+
+    Defaults to identity (zero distortion) unless explicitly calibrated from physical camera intrinsics.
+    """
 
     fx: float = 800.0
     fy: float = 800.0
     cx: float = 320.0
     cy: float = 320.0
-    k1: float = -0.05  # Radial distortion (barrel / pincushion)
-    k2: float = 0.01
-    p1: float = 0.0    # Tangential distortion (lens decentering)
+    k1: float = 0.0  # Zero distortion default (uncalibrated)
+    k2: float = 0.0
+    p1: float = 0.0
     p2: float = 0.0
     k3: float = 0.0
+
+    @property
+    def is_calibrated(self) -> bool:
+        """True only if non-zero lens distortion coefficients have been measured."""
+        return any(abs(c) > 1e-6 for c in (self.k1, self.k2, self.p1, self.p2, self.k3))
 
     def get_camera_matrix(self) -> np.ndarray:
         return np.array([[self.fx, 0.0, self.cx],
@@ -49,8 +57,8 @@ class LensDistortionCorrector:
         self._cached_shape: tuple[int, int] | None = None
 
     def undistort_image(self, image: np.ndarray) -> np.ndarray:
-        """Apply Brown-Conrady undistortion mapping to image frame."""
-        if image is None or image.size == 0:
+        """Apply Brown-Conrady undistortion mapping to image frame (zero-overhead identity if uncalibrated)."""
+        if image is None or image.size == 0 or not self.params.is_calibrated:
             return image
 
         h, w = image.shape[:2]
