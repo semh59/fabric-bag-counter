@@ -10,6 +10,7 @@ import os
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from packages.cs_core.models import (
@@ -1408,5 +1409,40 @@ def simulate_bag_crossing(sess_id: int, req: SimulateBagRequest = SimulateBagReq
             "event_id": ev.event_id if ev else None,
             "direction": req.direction,
         }
+
+
+@router.get("/health")
+def get_system_health():
+    """Production health check and database connectivity verification."""
+    with get_sync_session() as db:
+        try:
+            db.execute(select(1)).scalar()
+            db_status = "healthy"
+        except Exception:
+            db_status = "unhealthy"
+
+    return {
+        "status": "healthy" if db_status == "healthy" else "degraded",
+        "database": db_status,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "version": "2.0.0",
+    }
+
+
+@router.get("/metrics")
+def get_system_metrics():
+    """System metrics and telemetry summary."""
+    with get_sync_session() as db:
+        total_sessions = db.query(SessionORM).count()
+        total_lines = db.query(LineORM).count()
+        total_events = db.query(CountEventORM).count()
+
+    return {
+        "total_sessions": total_sessions,
+        "total_lines": total_lines,
+        "total_events": total_events,
+        "status": "ok",
+    }
+
 
 
