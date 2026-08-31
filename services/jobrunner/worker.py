@@ -272,10 +272,15 @@ class JobrunnerWorker:
                 train_kwargs["epochs"] = int(payload["epochs"])
             if payload.get("num_synthetic_scenes") is not None:
                 train_kwargs["num_synthetic_scenes"] = int(payload["num_synthetic_scenes"])
-            if payload.get("real_data_dir") is not None:
-                train_kwargs["real_data_dir"] = payload["real_data_dir"]
-
             onnx_path = train_and_export_model(**train_kwargs)
+
+            # Actively build TensorRT execution plan if TensorRT is present in environment
+            from packages.cs_vision.tensorrt_builder import TensorRtEngineBuilder
+            try:
+                TensorRtEngineBuilder(onnx_path).build_engine()
+            except Exception as exc:
+                logger.debug(f"[Jobrunner] TensorRT engine compilation skipped or failed: {exc}")
+
             eval_scores = _evaluate_model(onnx_path, real_data_dir=payload.get("real_data_dir"))
             model_hash = _hash_file(onnx_path)
 
@@ -327,12 +332,15 @@ class JobrunnerWorker:
                         hyperparams=payload.get("hyperparams", {}),
                         started_at=datetime.now(UTC),
                     )
-                    db.add(training_run)
-                    db.commit()
-                    db.refresh(training_run)
-                    training_run_id = training_run.id
-
             onnx_path = train_and_export_model()
+
+            # Actively build TensorRT execution plan if TensorRT is present in environment
+            from packages.cs_vision.tensorrt_builder import TensorRtEngineBuilder
+            try:
+                TensorRtEngineBuilder(onnx_path).build_engine()
+            except Exception as exc:
+                logger.debug(f"[Jobrunner] TensorRT engine compilation skipped or failed: {exc}")
+
             eval_scores = _evaluate_model(onnx_path)
             model_hash = _hash_file(onnx_path)
 

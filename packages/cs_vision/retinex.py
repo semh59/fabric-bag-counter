@@ -62,22 +62,32 @@ class MultiScaleRetinex:
 
         enhanced_channels = []
         for i in range(3):
-            msr = self.process_channel(image[:, :, i])
+            orig_c = image[:, :, i]
+            msr = self.process_channel(orig_c)
             msrcr = color_restoration[:, :, i] * msr
-            norm = self._normalize_and_clip(msrcr)
-            enhanced_channels.append(norm)
+            norm = self._normalize_and_clip(msrcr, fallback_channel=orig_c)
+            # Blend original + shadow-compensated Retinex to preserve model color space
+            blended = cv2.addWeighted(orig_c, 0.7, norm, 0.3, 0)
+            enhanced_channels.append(blended)
 
         return np.stack(enhanced_channels, axis=2)
 
-    def _normalize_and_clip(self, retinex: np.ndarray) -> np.ndarray:
-        """Linear contrast stretching using percentiles."""
-        low = np.percentile(retinex, self.dynamic_clip_percent)
-        high = np.percentile(retinex, 100.0 - self.dynamic_clip_percent)
+    def _normalize_and_clip(self, retinex: np.ndarray, fallback_channel: np.ndarray | None = None) -> np.ndarray:
+        """Statistical mean/std normalization (Jobson MSRCR standard)."""
+        mean = float(np.mean(retinex))
+        std = float(np.std(retinex))
 
-        if high > low:
-            stretched = (retinex - low) / (high - low) * 255.0
+        # If flat illumination / synthetic uniform background with no shadows
+        if std < 0.5:
+            return fallback_channel if fallback_channel is not None else np.uint8(np.clip(retinex, 0, 255))
+
+        min_val = mean - 2.0 * std
+        max_val = mean + 2.0 * std
+
+        if max_val > min_val:
+            stretched = (retinex - min_val) / (max_val - min_val) * 255.0
         else:
-            stretched = retinex * 255.0
+            stretched = retinex
 
         clipped = np.clip(stretched, 0, 255)
         return np.uint8(clipped)

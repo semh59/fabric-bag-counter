@@ -12,6 +12,7 @@ import cv2
 
 from packages.cs_vision.postprocess import postprocess_rfdetr_seg
 from packages.cs_vision.preprocess import preprocess_image
+from packages.cs_vision.tensorrt_builder import TensorRtEngineBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,7 @@ class VisionDetector:
         allow_fallback: bool = True,
         mean_bag_gate_area_px: float | None = None,
         merge_area_ratio: float = 1.50,
+        apply_retinex: bool = True,
     ) -> None:
         self.model_path = model_path
         self.use_cuda = use_cuda
@@ -68,6 +70,7 @@ class VisionDetector:
         self.allow_fallback = allow_fallback
         self.mean_bag_gate_area_px = mean_bag_gate_area_px
         self.merge_area_ratio = merge_area_ratio
+        self.apply_retinex = apply_retinex
         self.is_scale_calibrated = mean_bag_gate_area_px is not None and mean_bag_gate_area_px > 0
         self.session: Any = None
         self._init_session()
@@ -81,7 +84,7 @@ class VisionDetector:
         """Update calibration parameters unified with MergeDetector and AreaIntegralCounter."""
         self.mean_bag_gate_area_px = mean_bag_area_px
         self.merge_area_ratio = merge_area_ratio
-        self.is_scale_calibrated = is_active and (mean_bag_area_px is not None and mean_bag_area_px > 0)
+        self.is_scale_calibrated = is_active and (mean_bag_area_px is not None and mean_bag_gate_area_px > 0)
 
     def _init_session(self) -> None:
         if self.model_path is None or not os.path.exists(self.model_path):
@@ -104,21 +107,31 @@ class VisionDetector:
             available = ort.get_available_providers()
             want_cuda = self.use_cuda or os.getenv("USE_CUDA", "").lower() in ("1", "true", "yes")
 
-            providers = []
+            providers: list[Any] = []
+            provider_options: list[dict[str, Any]] = []
+
             if want_cuda:
                 if "TensorrtExecutionProvider" in available:
                     providers.append("TensorrtExecutionProvider")
+                    trt_builder = TensorRtEngineBuilder(self.model_path)
+                    provider_options.append(trt_builder.get_onnxruntime_tensorrt_options())
                 if "CUDAExecutionProvider" in available:
                     providers.append("CUDAExecutionProvider")
+                    provider_options.append({"device_id": 0})
                 if not providers:
                     logger.warning("[VisionDetector] CUDA requested but neither CUDAExecutionProvider nor TensorrtExecutionProvider found in onnxruntime. Falling back to CPU.")
             elif "CUDAExecutionProvider" in available:
-                # Auto-accelerate if CUDA is present in the environment
                 providers.append("CUDAExecutionProvider")
+                provider_options.append({"device_id": 0})
 
             providers.append("CPUExecutionProvider")
+            provider_options.append({})
 
-            self.session = ort.InferenceSession(self.model_path, providers=providers)
+            if len(provider_options) == len(providers):
+                self.session = ort.InferenceSession(self.model_path, providers=providers, provider_options=provider_options)
+            else:
+                self.session = ort.InferenceSession(self.model_path, providers=providers)
+
             active_provider = self.session.get_providers()[0] if hasattr(self.session, "get_providers") else providers[0]
             logger.info(
                 f"[VisionDetector] RF-DETR ONNX Inference Session loaded successfully from '{self.model_path}' "
@@ -143,7 +156,7 @@ class VisionDetector:
             # ===================================================================
             # 1. Primary Engine: Deep Learning Inference (RF-DETR Seg ONNX Runtime)
             # ===================================================================
-            blob, scale, pad = preprocess_image(image, self.input_size)
+            blob, scale, pad = preprocess_image(image, self.input_size, apply_retinex=self.apply_retinex)
             input_name = self.session.get_inputs()[0].name
             outputs = self.session.run(None, {input_name: blob})
             boxes = outputs[0][0] if len(outputs) > 0 else np.zeros((0, 4))
