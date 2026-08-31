@@ -13,6 +13,7 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 
 from packages.cs_core.geometry import compute_mask_iou
+from packages.cs_tracking.diou import compute_diou
 
 
 def compute_cost_matrix(
@@ -23,9 +24,8 @@ def compute_cost_matrix(
     max_distance_px: float = 150.0,
 ) -> np.ndarray:
     """Compute association cost matrix between existing tracks and new candidate detections.
-    
-    Cost is a weighted linear combination of Mask IoU distance (1 - IoU) and Euclidean distance.
-    Bounding box IoU is explicitly avoided to prevent false associations during shingling.
+
+    Cost combines Mask IoU distance (1 - IoU) or DIoU spatial centroid distance with Euclidean proximity.
     """
     n_tracks = len(tracks)
     n_dets = len(detections)
@@ -40,6 +40,7 @@ def compute_cost_matrix(
 
     for i, track in enumerate(tracks):
         track_mask = track.mask
+        track_box = track.box
         track_centroid = track.centroid  # (cx, cy)
 
         for j, det in enumerate(detections):
@@ -50,32 +51,22 @@ def compute_cost_matrix(
                 (det_box[1] + det_box[3]) / 2.0,
             )
 
-            # 1. Mask IoU cost
-            #
-            # When either side has no mask (e.g. the fallback bbox-only
-            # detector path, or a brand-new track not yet assigned a mask),
-            # we cannot measure IoU at all -- there is no "unknown" value in
-            # a cost matrix, so this deliberately assumes the worst case
-            # (iou=0.0 -> mask_cost=1.0) rather than silently guessing a
-            # good match. Since w_mask=0.70 dominates the weighting below,
-            # association in that situation is effectively driven almost
-            # entirely by centroid distance alone (the w_dist=0.30 term),
-            # not truly disabled -- just heavily penalized versus a real
-            # mask-IoU match.
+            # 1. Mask IoU or DIoU cost
             if track_mask is not None and det_mask is not None:
-                iou = compute_mask_iou(track_mask, det_mask)
+                mask_iou = compute_mask_iou(track_mask, det_mask)
+                spatial_cost = 1.0 - mask_iou
             else:
-                iou = 0.0
-            mask_cost = 1.0 - iou
+                diou = compute_diou(track_box, det_box)
+                # Map DIoU [-1, 1] to cost [0, 1]
+                spatial_cost = (1.0 - diou) / 2.0
 
-            # 2. Centroid distance cost
+            # 2. Normalized Euclidean distance cost
             dx = track_centroid[0] - det_centroid[0]
             dy = track_centroid[1] - det_centroid[1]
             dist = math.sqrt(dx * dx + dy * dy)
-            norm_dist = min(1.0, dist / max_distance_px)
+            dist_cost = min(1.0, dist / max_distance_px)
 
-            cost = (w_mask * mask_cost) + (w_dist * norm_dist)
-            cost_matrix[i, j] = cost
+            cost_matrix[i, j] = w_mask * spatial_cost + w_dist * dist_cost
 
     return cost_matrix
 
