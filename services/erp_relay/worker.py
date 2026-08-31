@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Any
 from packages.cs_core.interfaces.erp_adapter import ErpAdapter, SessionPayload
@@ -11,16 +12,27 @@ from packages.cs_storage.models_orm import OutboxORM, SessionORM
 from packages.cs_storage.repositories.outbox_repo import OutboxRepository
 from packages.cs_storage.repositories.reconciliation_repo import ReconciliationRepository
 from drivers.erp_csv.adapter import CsvErpAdapter
+from drivers.erp_sap_ecc.adapter import SapEccErpAdapter
 from drivers.erp_sap_odata.adapter import SapODataErpAdapter
 
 logger = logging.getLogger(__name__)
+
+
+def resolve_erp_adapter(adapter_name: str | None = None) -> ErpAdapter:
+    """Resolve configured ERP adapter by name or environment variable."""
+    name = (adapter_name or os.getenv("ERP_ADAPTER", "csv")).lower()
+    if name in ("sap_ecc", "ecc"):
+        return SapEccErpAdapter()
+    elif name in ("sap_odata", "s4hana", "odata"):
+        return SapODataErpAdapter()
+    return CsvErpAdapter()
 
 
 class ErpRelayWorker:
     """Consumes transactional outbox events and guarantees reliable ERP synchronization."""
 
     def __init__(self, adapter: ErpAdapter | None = None, poll_interval_sec: float = 3.0) -> None:
-        self.adapter = adapter or CsvErpAdapter()
+        self.adapter = adapter or resolve_erp_adapter()
         self.poll_interval = poll_interval_sec
         self.is_running = False
 
