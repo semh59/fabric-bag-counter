@@ -3,7 +3,7 @@
 # on purpose -- docker-compose.yml is the server/cloud stack (postgres, api,
 # jobrunner, erp-relay), which has no camera or GPU hardware attached and
 # never needs it. This file runs ON the factory-floor machine that has the
-# real cameras and (ideally) a GPU plugged in.
+# real cameras plugged in (works on standard CPU or optional GPU acceleration).
 #
 # `supervisor` dynamically spawns one `services.ingest.worker --camera-id N`
 # process per enabled row in the `camera` table (see

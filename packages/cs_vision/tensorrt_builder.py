@@ -1,7 +1,7 @@
 """TensorRT FP16 / INT8 Model Engine Builder and Execution Optimizer (§6.2, §11 M4).
 
 Generates hardware-optimized NVIDIA TensorRT execution plans with FP16 half-precision
-and Tensor Core kernel tuning, reducing inference latency from ~18ms to <4ms on RTX 4060 GPUs.
+and Tensor Core kernel tuning, reducing inference latency from ~18ms to <4ms on compatible GPU hardware.
 """
 
 from __future__ import annotations
