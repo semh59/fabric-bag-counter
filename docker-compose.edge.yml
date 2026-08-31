@@ -46,17 +46,6 @@ services:
     # source needs the device node below).
     devices:
       - "/dev/video0:/dev/video0"
-    # Uncomment if this machine has an NVIDIA GPU for the inference worker's
-    # onnxruntime-gpu session (untested on real GPU hardware in this
-    # environment -- verify the runtime is actually available before relying
-    # on this):
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
 
   inference:
     build:
@@ -69,6 +58,7 @@ services:
       DATABASE_URL: postgresql://bag_admin:${POSTGRES_PASSWORD:-bag_secure_2026}@${POSTGRES_HOST:-host.docker.internal}:5434/bag_counter_db
       DATABASE_SYNC_URL: postgresql://bag_admin:${POSTGRES_PASSWORD:-bag_secure_2026}@${POSTGRES_HOST:-host.docker.internal}:5434/bag_counter_db
       LINE_ID: ${LINE_ID:-1}
+      USE_CUDA: "${USE_CUDA:-false}"
       MODBUS_HOST: ${MODBUS_HOST:-host.docker.internal}
       MODBUS_PORT: ${MODBUS_PORT:-5020}
       ENABLE_SIDE_INSPECTION: "true"
@@ -78,5 +68,13 @@ services:
     command: ["python", "-m", "services.inference.worker"]
     volumes:
       - ./data:/app/data
-    # See the commented-out GPU reservation block above -- same applies here.
+    # NVIDIA Container Toolkit GPU reservation for edge ONNX Runtime acceleration:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
 

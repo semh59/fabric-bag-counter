@@ -100,9 +100,30 @@ class VisionDetector:
 
         try:
             import onnxruntime as ort
-            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if self.use_cuda else ["CPUExecutionProvider"]
+
+            available = ort.get_available_providers()
+            want_cuda = self.use_cuda or os.getenv("USE_CUDA", "").lower() in ("1", "true", "yes")
+
+            providers = []
+            if want_cuda:
+                if "TensorrtExecutionProvider" in available:
+                    providers.append("TensorrtExecutionProvider")
+                if "CUDAExecutionProvider" in available:
+                    providers.append("CUDAExecutionProvider")
+                if not providers:
+                    logger.warning("[VisionDetector] CUDA requested but neither CUDAExecutionProvider nor TensorrtExecutionProvider found in onnxruntime. Falling back to CPU.")
+            elif "CUDAExecutionProvider" in available:
+                # Auto-accelerate if CUDA is present in the environment
+                providers.append("CUDAExecutionProvider")
+
+            providers.append("CPUExecutionProvider")
+
             self.session = ort.InferenceSession(self.model_path, providers=providers)
-            logger.info(f"[VisionDetector] RF-DETR ONNX Inference Session loaded successfully from '{self.model_path}'")
+            active_provider = self.session.get_providers()[0] if hasattr(self.session, "get_providers") else providers[0]
+            logger.info(
+                f"[VisionDetector] RF-DETR ONNX Inference Session loaded successfully from '{self.model_path}' "
+                f"(Active Execution Provider: {active_provider})"
+            )
         except Exception as e:
             if not self.allow_fallback:
                 raise RuntimeError(f"[VisionDetector] Failed to load ONNX model '{self.model_path}': {e}") from e
