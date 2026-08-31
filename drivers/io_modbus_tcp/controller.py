@@ -43,11 +43,9 @@ MODBUS_EXCEPTIONS: dict[int, str] = {
 # Default Mapping for Coils
 DEFAULT_COIL_MAP: dict[str, int] = {
     "conveyor_run": 0,
-    "reject_diverter": 1,
-    "warning_horn": 2,
-    "green_light": 3,
-    "error_red": 4,
-    "photoeye_interlock": 5,
+    "warning_horn": 1,
+    "green_light": 2,
+    "error_red": 3,
 }
 
 # Default Mapping for Holding Registers (16-bit and 32-bit Float)

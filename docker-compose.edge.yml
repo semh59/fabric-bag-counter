@@ -61,8 +61,6 @@ services:
       USE_CUDA: "${USE_CUDA:-false}"
       MODBUS_HOST: ${MODBUS_HOST:-host.docker.internal}
       MODBUS_PORT: ${MODBUS_PORT:-5020}
-      ENABLE_SIDE_INSPECTION: "true"
-      ENABLE_DETERMINISTIC_REJECT: "true"
       ENABLE_SHADOW_EVALUATOR: "true"
       LOG_LEVEL: INFO
     command: ["python", "-m", "services.inference.worker"]

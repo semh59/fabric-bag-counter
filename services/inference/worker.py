@@ -17,7 +17,6 @@ from packages.cs_counting.events import (
 from packages.cs_storage.db import get_sync_session
 from packages.cs_storage.repositories.config_repo import ConfigRepository
 from packages.cs_storage.repositories.session_repo import SessionRepository
-from packages.cs_vision.side_inspector import SideViewInspector
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +37,6 @@ class InferenceWorker:
         self.batch_wait_ms = batch_wait_ms
         self.max_consecutive_drops = max_consecutive_drops
         self.engine = engine or CountingEngine()
-        self.side_inspector = SideViewInspector()
         self.is_running = False
 
         # Industrial Modbus TCP PLC connection (if configured via env)
@@ -192,8 +190,6 @@ class InferenceWorker:
                     if self.modbus is not None:
                         try:
                             self.modbus.write_register("counted_total", output.running_net_count)
-                            if output.scheduled_rejects:
-                                self.modbus.set_signal("reject_diverter", True)
                             if active_session.target_count and output.running_net_count >= active_session.target_count:
                                 self.modbus.set_signal("conveyor_run", False)
                         except Exception as exc:

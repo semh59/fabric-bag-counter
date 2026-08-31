@@ -11,10 +11,6 @@ import numpy as np
 from packages.cs_core.geometry import point_in_polygon
 from packages.cs_counting.area_counter import AreaIntegralCounter
 from packages.cs_counting.gate import GateCrossingEvent, GateStateMachine
-from packages.cs_counting.reject_calculator import (
-    DeterministicRejectCalculator,
-    ScheduledRejectEvent,
-)
 from packages.cs_tracking.merge_detector import MergeDetector
 from packages.cs_tracking.motion import BeltMotionModel
 from packages.cs_tracking.tracker import BagTrack, ConveyorByteTracker
@@ -70,7 +66,6 @@ class FrameProcessingOutput:
     discrepancy_flag: bool = False
     merge_events_in_frame: int = 0
     merge_extra_bags_in_frame: int = 0
-    scheduled_rejects: list[ScheduledRejectEvent] = field(default_factory=list)
 
 
 class CountingEngine:
@@ -84,7 +79,6 @@ class CountingEngine:
         gate_state_machine: GateStateMachine | None = None,
         area_counter: AreaIntegralCounter | None = None,
         belt_motion: BeltMotionModel | None = None,
-        reject_calculator: DeterministicRejectCalculator | None = None,
     ) -> None:
         self.belt_motion = belt_motion or BeltMotionModel()
         self.detector = detector or VisionDetector()
@@ -92,7 +86,6 @@ class CountingEngine:
         self.merge_detector = merge_detector or MergeDetector()
         self.gate_state_machine = gate_state_machine or GateStateMachine()
         self.area_counter = area_counter or AreaIntegralCounter()
-        self.reject_calculator = reject_calculator or DeterministicRejectCalculator()
 
         self.running_net_count = 0
         self.total_forward_crossings = 0
@@ -285,21 +278,6 @@ class CountingEngine:
         )
         has_discrepancy, _ = self.area_counter.check_discrepancy(self.running_net_count)
 
-        # 6. Deterministic Physical Diverter / Reject Scheduler (§4.4, §5.5)
-        scheduled_events: list[ScheduledRejectEvent] = []
-        if merge_count > 0:
-            for trk in active_tracks:
-                if getattr(trk, "is_merged", False) or getattr(trk, "is_latent", False):
-                    ev = self.reject_calculator.schedule_reject(
-                        track_id=trk.track_id,
-                        current_x_px=float(trk.box[0]),
-                        belt_speed_px_per_s=max(10.0, float(self.belt_motion.speed_px) * 30.0),
-                        defect_reason="merged_double_bag",
-                    )
-                    scheduled_events.append(ev)
-
-        triggers_due, _ = self.reject_calculator.poll_due_commands()
-
         return FrameProcessingOutput(
             frame_index=frame_index,
             monotonic_ns=monotonic_ns,
@@ -312,6 +290,6 @@ class CountingEngine:
             discrepancy_flag=has_discrepancy,
             merge_events_in_frame=merge_count,
             merge_extra_bags_in_frame=merge_extra_bags,
-            scheduled_rejects=scheduled_events,
         )
+
 
