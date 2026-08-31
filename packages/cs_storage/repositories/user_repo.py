@@ -83,13 +83,22 @@ class UserRepository:
     def seed_default_users(self, defaults: list[tuple[str, str, str]] | None = None) -> None:
         """Seed initial accounts if database is empty."""
         if defaults is None:
-            admin_pwd = os.getenv("ADMIN_DEFAULT_PASSWORD", "admin123")
-            eng_pwd = os.getenv("ENGINEER_DEFAULT_PASSWORD", "eng123")
-            op_pwd = os.getenv("OPERATOR_DEFAULT_PASSWORD", "op123")
+            admin_pwd = os.getenv("ADMIN_DEFAULT_PASSWORD")
+            eng_pwd = os.getenv("ENGINEER_DEFAULT_PASSWORD")
+            op_pwd = os.getenv("OPERATOR_DEFAULT_PASSWORD")
+            env_mode = os.getenv("ENV", os.getenv("NODE_ENV", "development")).lower()
+
+            if env_mode in ["production", "prod"]:
+                if not (admin_pwd and eng_pwd and op_pwd):
+                    logger.warning(
+                        "[Security] CRITICAL: Default accounts seeded with fallback passwords in PRODUCTION! "
+                        "Set ADMIN_DEFAULT_PASSWORD, ENGINEER_DEFAULT_PASSWORD, and OPERATOR_DEFAULT_PASSWORD in your environment."
+                    )
+
             defaults = [
-                ("admin", admin_pwd, "admin"),
-                ("engineer", eng_pwd, "engineer"),
-                ("operator", op_pwd, "operator"),
+                ("admin", admin_pwd or "admin123", "admin"),
+                ("engineer", eng_pwd or "eng123", "engineer"),
+                ("operator", op_pwd or "op123", "operator"),
             ]
         for u, p, r in defaults:
             existing = self.get_by_username(u)

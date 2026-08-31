@@ -2495,7 +2495,7 @@
               <h2 class="text-xl font-black text-white tracking-tight">Data & Synthetic Image Generation (§5.8)</h2>
               <p class="text-xs text-slate-400 mt-1">Copy-paste data augmentation and training dataset compiler.</p>
 
-              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 my-6">
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 my-6">
                 <button onclick="triggerJob('extract')" class="glass-card p-5 rounded-2xl hover:border-indigo-500/60 transition text-left">
                   <div class="text-2xl mb-2">🎬</div>
                   <div class="font-bold text-slate-200">Frame Extractor</div>
@@ -2506,9 +2506,14 @@
                   <div class="font-bold text-slate-200">Generate Synthetic Bags</div>
                   <div class="text-xs text-slate-400 mt-1">Blends photorealistic bags into background scenes.</div>
                 </button>
+                <button onclick="triggerJob('mine_hard_frames')" class="glass-card p-5 rounded-2xl hover:border-indigo-500/60 transition text-left border border-amber-500/30 bg-amber-950/10">
+                  <div class="text-2xl mb-2">⛏️</div>
+                  <div class="font-bold text-amber-200">Mine Hard Frames</div>
+                  <div class="text-xs text-slate-400 mt-1">Extracts discrepancy & edge cases for active learning.</div>
+                </button>
                 <button onclick="triggerJob('build')" class="glass-card p-5 rounded-2xl hover:border-indigo-500/60 transition text-left">
                   <div class="text-2xl mb-2">📦</div>
-                  <div class="font-bold text-slate-200">Compile Dataset Version</div>
+                  <div class="font-bold text-slate-200">Compile Dataset</div>
                   <div class="text-xs text-slate-400 mt-1">Packages into COCO format with train & test splits.</div>
                 </button>
                 <button onclick="setTab('cvat')" class="glass-card p-5 rounded-2xl hover:border-indigo-500/60 transition text-left border border-indigo-500/40 bg-indigo-950/20">
@@ -2541,9 +2546,15 @@
     }
 
     async function triggerJob(type) {
-      const endpoints = { extract: '/datasets/extract', synthesize: '/datasets/synthesize', build: '/datasets/build' };
+      const endpoints = {
+        extract: '/datasets/extract',
+        synthesize: '/datasets/synthesize',
+        build: '/datasets/build',
+        mine_hard_frames: '/datasets/mine_hard_frames',
+      };
       try {
-        const res = await api(endpoints[type], { method: 'POST', body: JSON.stringify({ type }) });
+        const payload = type === 'mine_hard_frames' ? { line_id: 1, discrepancy_threshold: 0.05 } : { type };
+        const res = await api(endpoints[type], { method: 'POST', body: JSON.stringify(payload) });
         toast(`Job queued: Job #${res.job_id} (${res.kind})`, 'success');
       } catch (e) {
         toast(e.detail || 'Could not start job', 'error');
@@ -2751,13 +2762,99 @@
                 <div id="active-model-card" class="bg-slate-800/40 p-5 rounded-2xl border border-slate-700 flex flex-col justify-between">
                 </div>
               </div>
+
+              <!-- Shadow vs Active Model Comparison Card (§6.2, §11 M5) -->
+              <div id="shadow-comparison-card" class="bg-slate-800/30 p-5 rounded-2xl border border-slate-700 my-4">
+                <div class="flex items-center justify-between mb-2">
+                  <h3 class="font-bold text-sm text-slate-200">🔍 Shadow Model Comparison & A/B Evaluation</h3>
+                  <button onclick="loadShadowComparison()" class="text-xs text-indigo-400 hover:text-indigo-300 font-medium">🔄 Refresh Metrics</button>
+                </div>
+                <div id="shadow-comparison-content" class="text-xs text-slate-400 py-2">Loading comparison metrics...</div>
+              </div>
+
+              <!-- Model Registry Table -->
+              <div class="mt-6">
+                <h3 class="font-bold text-sm text-slate-200 mb-3">Model Registry & Lifecycle Staging</h3>
+                ${models.length === 0 ? '<div class="text-slate-400 text-xs py-4">No models registered.</div>' : `
+                  <div class="space-y-2.5">
+                    ${models.map(m => {
+                      const stageBadge = m.stage === 'active' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
+                        (m.stage === 'shadow' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-slate-700/60 text-slate-400 border-slate-600/40');
+                      return `
+                        <div class="bg-slate-800/40 p-4 rounded-xl border border-slate-700/60 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                          <div>
+                            <div class="flex items-center space-x-2">
+                              <span class="font-bold text-slate-200 text-sm">Model #${m.id}</span>
+                              <span class="badge ${stageBadge}">${escapeHtml(m.stage || 'candidate')}</span>
+                            </div>
+                            <div class="text-[11px] text-slate-400 font-mono mt-0.5">${escapeHtml(m.onnx_path || 'models/rfdetr_seg_v2.onnx')}</div>
+                          </div>
+                          <div class="flex flex-wrap items-center gap-2">
+                            ${m.stage !== 'active' ? `<button onclick="setModelStage(${m.id}, 'active')" class="px-2.5 py-1.5 bg-emerald-600/80 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition">Promote Active</button>` : ''}
+                            ${m.stage !== 'shadow' ? `<button onclick="setModelStage(${m.id}, 'shadow')" class="px-2.5 py-1.5 bg-amber-600/80 hover:bg-amber-500 text-white text-xs font-bold rounded-lg transition">Set Shadow</button>` : ''}
+                            ${m.stage !== 'archived' ? `<button onclick="setModelStage(${m.id}, 'archived')" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg border border-slate-700 transition">Archive</button>` : ''}
+                            <button onclick="downloadModelOnnx(${m.id})" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg border border-slate-700 transition">Download</button>
+                          </div>
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                `}
+              </div>
             </div>
           </div>
         `;
 
         renderActiveModelCard(active);
+        loadShadowComparison();
       } catch (e) {
         c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-rose-300">Error loading training screen: ${escapeHtml(e.detail || e.message || '')}</div>`;
+      }
+    }
+
+    async function setModelStage(modelId, stage) {
+      try {
+        await api(`/models/${modelId}/stage?stage=${encodeURIComponent(stage)}`, { method: 'POST' });
+        toast(`Model #${modelId} stage updated to '${stage}'`, 'success');
+        renderScreen();
+      } catch (e) {
+        toast(e.detail || 'Could not update model stage', 'error');
+      }
+    }
+
+    async function loadShadowComparison() {
+      const el = document.getElementById('shadow-comparison-content');
+      if (!el) return;
+      try {
+        const comp = await api('/models/shadow/comparison');
+        if (!comp || comp.status === 'no_shadow_model') {
+          el.innerHTML = '<span class="text-slate-400">No shadow model currently staged. Set a model to <b>shadow</b> stage in the table below to begin live parallel comparison.</span>';
+          return;
+        }
+        el.innerHTML = `
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center my-1 font-mono">
+            <div class="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+              <div class="text-[10px] text-slate-500">Agreement Rate</div>
+              <div class="font-bold text-emerald-400 text-sm mt-0.5">${(comp.agreement_rate * 100).toFixed(1)}%</div>
+            </div>
+            <div class="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+              <div class="text-[10px] text-slate-500">Mean DIoU</div>
+              <div class="font-bold text-indigo-400 text-sm mt-0.5">${(comp.mean_iou || 0).toFixed(2)}</div>
+            </div>
+            <div class="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+              <div class="text-[10px] text-slate-500">Frames Compared</div>
+              <div class="font-bold text-slate-200 text-sm mt-0.5">${comp.frames_compared || 0}</div>
+            </div>
+            <div class="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+              <div class="text-[10px] text-slate-500">Promotion Ready</div>
+              <div class="font-bold ${comp.is_ready_for_promotion ? 'text-emerald-400' : 'text-amber-400'} text-sm mt-0.5">
+                ${comp.is_ready_for_promotion ? '✓ READY' : 'EVALUATING'}
+              </div>
+            </div>
+          </div>
+        `;
+      } catch (e) {
+        el.innerHTML = `<span class="text-slate-500">Shadow comparison unavailable: ${escapeHtml(e.detail || e.message)}</span>`;
       }
     }
 
@@ -3003,8 +3100,102 @@
               </div>
             </div>
           `}
+
+          <!-- User Management & Security (§8.1) -->
+          <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
+            <h2 class="text-xl font-black text-white tracking-tight">👤 User Management & Role Security (§8.1)</h2>
+            <p class="text-xs text-slate-400 mt-1">Manage local operator/engineer credentials and authentication passwords.</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 my-6">
+              <!-- Add User -->
+              <div class="bg-slate-800/40 p-5 rounded-2xl border border-slate-700">
+                <h3 class="font-bold text-sm text-slate-200 mb-3">➕ Register New User</h3>
+                <div class="space-y-3">
+                  <div>
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Username</label>
+                    <input type="text" id="usr-reg-name" placeholder="new_operator" class="w-full text-xs">
+                  </div>
+                  <div>
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Password</label>
+                    <input type="password" id="usr-reg-pass" placeholder="••••••••" class="w-full text-xs">
+                  </div>
+                  <div>
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Role</label>
+                    <select id="usr-reg-role" class="w-full text-xs">
+                      <option value="operator">Operator (Line Operations & Counting)</option>
+                      <option value="engineer">Engineer (Calibration & Vision)</option>
+                      <option value="admin">Administrator (Full Control)</option>
+                    </select>
+                  </div>
+                  <button onclick="registerNewUser()" class="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition">
+                    Create User Account
+                  </button>
+                </div>
+              </div>
+
+              <!-- Change Password -->
+              <div class="bg-slate-800/40 p-5 rounded-2xl border border-slate-700">
+                <h3 class="font-bold text-sm text-slate-200 mb-3">🔑 Change Password (${escapeHtml(auth.username || 'Current User')})</h3>
+                <div class="space-y-3">
+                  <div>
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Old Password</label>
+                    <input type="password" id="usr-old-pass" placeholder="••••••••" class="w-full text-xs">
+                  </div>
+                  <div>
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">New Password</label>
+                    <input type="password" id="usr-new-pass" placeholder="••••••••" class="w-full text-xs">
+                  </div>
+                  <div>
+                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Confirm New Password</label>
+                    <input type="password" id="usr-conf-pass" placeholder="••••••••" class="w-full text-xs">
+                  </div>
+                  <button onclick="changeUserPassword()" class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition">
+                    Update Password
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       `;
+    }
+
+    async function registerNewUser() {
+      const username = document.getElementById('usr-reg-name').value.trim();
+      const password = document.getElementById('usr-reg-pass').value;
+      const role = document.getElementById('usr-reg-role').value;
+      if (!username || !password) return toast('Please enter username and password', 'error');
+      try {
+        await api('/auth/register', {
+          method: 'POST',
+          body: JSON.stringify({ username, password, role })
+        });
+        toast(`User '${username}' registered successfully!`, 'success');
+        document.getElementById('usr-reg-name').value = '';
+        document.getElementById('usr-reg-pass').value = '';
+      } catch (e) {
+        toast(e.detail || 'Could not register user', 'error');
+      }
+    }
+
+    async function changeUserPassword() {
+      const oldPassword = document.getElementById('usr-old-pass').value;
+      const newPassword = document.getElementById('usr-new-pass').value;
+      const confirmPassword = document.getElementById('usr-conf-pass').value;
+      if (!oldPassword || !newPassword) return toast('Please enter old and new passwords', 'error');
+      if (newPassword !== confirmPassword) return toast('New passwords do not match', 'error');
+      try {
+        await api('/auth/change-password', {
+          method: 'POST',
+          body: JSON.stringify({ old_password: oldPassword, new_password: newPassword })
+        });
+        toast('Password updated successfully! Please re-login with new password.', 'success');
+        document.getElementById('usr-old-pass').value = '';
+        document.getElementById('usr-new-pass').value = '';
+        document.getElementById('usr-conf-pass').value = '';
+      } catch (e) {
+        toast(e.detail || 'Could not update password', 'error');
+      }
     }
 
     function toggleAddCameraForm(lineId) {

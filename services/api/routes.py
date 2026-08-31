@@ -1430,19 +1430,65 @@ def get_system_health():
 
 
 @router.get("/metrics")
-def get_system_metrics():
-    """System metrics and telemetry summary."""
+def get_system_metrics(format: str | None = None):
+    """System metrics and telemetry summary with Prometheus exposition format support (§8.2)."""
     with get_sync_session() as db:
         total_sessions = db.query(SessionORM).count()
+        open_sessions = db.query(SessionORM).filter(SessionORM.status.in_(["open", "counting", "paused"])).count()
         total_lines = db.query(LineORM).count()
+        running_lines = db.query(LineORM).filter(LineORM.status == "running").count()
         total_events = db.query(CountEventORM).count()
+        defect_events = db.query(CountEventORM).filter(CountEventORM.defect_reason.isnot(None)).count()
+        queued_jobs = db.query(JobORM).filter(JobORM.status == "queued").count()
+        pending_outbox = db.query(OutboxORM).filter(OutboxORM.status == "pending").count()
+        open_reconciliations = db.query(ReconciliationORM).filter(ReconciliationORM.resolved_at.is_(None)).count()
+
+    if format == "prometheus":
+        lines = [
+            "# HELP fabric_total_sessions Total number of count sessions created",
+            "# TYPE fabric_total_sessions counter",
+            f"fabric_total_sessions {total_sessions}",
+            "# HELP fabric_open_sessions Currently open or counting sessions",
+            "# TYPE fabric_open_sessions gauge",
+            f"fabric_open_sessions {open_sessions}",
+            "# HELP fabric_total_lines Configured conveyor lines",
+            "# TYPE fabric_total_lines gauge",
+            f"fabric_total_lines {total_lines}",
+            "# HELP fabric_running_lines Currently running conveyor lines",
+            "# TYPE fabric_running_lines gauge",
+            f"fabric_running_lines {running_lines}",
+            "# HELP fabric_total_count_events Total bag crossings recorded in ledger",
+            "# TYPE fabric_total_count_events counter",
+            f"fabric_total_count_events {total_events}",
+            "# HELP fabric_defect_events Total defect bag crossings detected",
+            "# TYPE fabric_defect_events counter",
+            f"fabric_defect_events {defect_events}",
+            "# HELP fabric_queued_jobs Background jobs currently queued",
+            "# TYPE fabric_queued_jobs gauge",
+            f"fabric_queued_jobs {queued_jobs}",
+            "# HELP fabric_pending_outbox_entries Pending ERP outbox transmissions",
+            "# TYPE fabric_pending_outbox_entries gauge",
+            f"fabric_pending_outbox_entries {pending_outbox}",
+            "# HELP fabric_open_reconciliations Unresolved human reconciliation cases",
+            "# TYPE fabric_open_reconciliations gauge",
+            f"fabric_open_reconciliations {open_reconciliations}",
+        ]
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")
 
     return {
         "total_sessions": total_sessions,
+        "open_sessions": open_sessions,
         "total_lines": total_lines,
+        "running_lines": running_lines,
         "total_events": total_events,
+        "defect_events": defect_events,
+        "queued_jobs": queued_jobs,
+        "pending_outbox": pending_outbox,
+        "open_reconciliations": open_reconciliations,
         "status": "ok",
     }
+
 
 
 

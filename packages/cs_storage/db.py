@@ -37,25 +37,43 @@ _async_session_factory = None
 _sync_session_factory = None
 
 
+# Connection pool sizing for PostgreSQL / production databases
+DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "10"))
+DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "20"))
+DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "30"))
+DB_POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "1800"))
+
+ENV_MODE = os.getenv("ENV", os.getenv("NODE_ENV", "development")).lower()
+
+
+def _check_db_environment(target_url: str) -> None:
+    if "sqlite" in target_url and ENV_MODE in ["production", "prod"]:
+        logger.warning(
+            "[Database] WARNING: Running on SQLite in PRODUCTION environment! "
+            "For multi-worker and high-throughput concurrent deployments, configure PostgreSQL via DATABASE_URL."
+        )
+
+
 def get_sync_engine(url: str | None = None) -> Any:
     global _sync_engine, _sync_session_factory
     if _sync_engine is None or url is not None:
         if _sync_engine is not None:
-            # Replacing a live engine without disposing it would leak the old
-            # engine's connection pool (open file handles / DB connections).
             _sync_engine.dispose()
         target_url = url or DEFAULT_SYNC_URL
-        # check_same_thread=False: this app deliberately shares one engine/session
-        # factory across threads (FastAPI's threadpool, the jobrunner/erp_relay
-        # worker loops, concurrent test threads). Without a `timeout`, Python's
-        # sqlite3 default busy_timeout is 0 -- a second thread's write while
-        # another connection holds the write lock fails immediately with
-        # "database is locked" instead of waiting, so any genuinely concurrent
-        # write (e.g. two threads racing JobRepository.acquire_next_job) can
-        # spuriously error rather than just serializing. 30s gives writers time
-        # to queue up behind each other instead of raising.
-        connect_args = {"check_same_thread": False, "timeout": 30} if "sqlite" in target_url else {}
-        _sync_engine = create_engine(target_url, echo=False, connect_args=connect_args)
+        _check_db_environment(target_url)
+
+        if "sqlite" in target_url:
+            connect_args = {"check_same_thread": False, "timeout": 30}
+            _sync_engine = create_engine(target_url, echo=False, connect_args=connect_args)
+        else:
+            _sync_engine = create_engine(
+                target_url,
+                echo=False,
+                pool_size=DB_POOL_SIZE,
+                max_overflow=DB_MAX_OVERFLOW,
+                pool_timeout=DB_POOL_TIMEOUT,
+                pool_recycle=DB_POOL_RECYCLE,
+            )
         _sync_session_factory = sessionmaker(bind=_sync_engine, expire_on_commit=False)
     return _sync_engine
 
@@ -72,14 +90,20 @@ def get_async_engine(url: str | None = None) -> Any:
     global _async_engine, _async_session_factory
     if _async_engine is None or url is not None:
         if _async_engine is not None:
-            # See get_sync_engine: dispose the old engine before replacing it
-            # so its pooled connections are actually released. AsyncEngine.dispose()
-            # is a coroutine, but the underlying pool disposal itself is plain
-            # sync work -- go through .sync_engine to dispose it without needing
-            # an event loop here (this function is not async).
             _async_engine.sync_engine.dispose()
         target_url = url or DEFAULT_ASYNC_URL
-        _async_engine = create_async_engine(target_url, echo=False)
+        _check_db_environment(target_url)
+        if "sqlite" in target_url:
+            _async_engine = create_async_engine(target_url, echo=False)
+        else:
+            _async_engine = create_async_engine(
+                target_url,
+                echo=False,
+                pool_size=DB_POOL_SIZE,
+                max_overflow=DB_MAX_OVERFLOW,
+                pool_timeout=DB_POOL_TIMEOUT,
+                pool_recycle=DB_POOL_RECYCLE,
+            )
         _async_session_factory = async_sessionmaker(bind=_async_engine, expire_on_commit=False, class_=AsyncSession)
     return _async_engine
 
