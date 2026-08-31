@@ -167,14 +167,14 @@ def main():
         # 4.2 Query Cryptographic Dispatch Report
         rep = client.get(f"{API_URL}/sessions/{sess_id}/dispatch_report", headers=headers_op).json()
         seal = rep["crypto_seal"]
-        print(f"  [LED-04] Cryptographic SHA-256 Merkle Seal: {seal[:32]}... ({rep['waybill_no']}).")
+        print(f"  [LED-04] Cryptographic HMAC-SHA256 Dispatch Seal: {seal[:32]}... ({rep['waybill_no']}).")
         assert len(seal) == 64, "Invalid SHA-256 seal length!"
 
         # 4.3 Check Transactional Outbox Queue
         outbox = client.get(f"{API_URL}/system/outbox", headers=headers_eng).json()
         print(f"  [LED-02] ERP Transactional Outbox: {len(outbox)} queued records for SAP / Oracle sync.")
 
-    results["PHASE_4"] = f"PASSED (SHA-256 Seal: {seal[:16]}...)"
+    results["PHASE_4"] = f"PASSED (HMAC-SHA256 Seal: {seal[:16]}...)"
 
     # =========================================================================
     # PHASE 5: 10,000 BAG SOAK & LOAD STRESS
@@ -231,7 +231,7 @@ def main():
 
     print(f"  [SAT-01] Weighbridge Mass Reconciliation: Counted = {counted} bags ({calc_mass_tons:.2f} Ton), Target = {target_count} bags ({target_mass_tons:.2f} Ton).")
     print(f"  [SAT-01] OIML R51 Discrepancy Tolerance: {delta_pct:.2f}% (Standard: <= 0.50%).")
-    print(f"  [SAT-02] Formal Acceptance Certificate: Generated with Merkle Hash Seal.")
+    print(f"  [SAT-02] Formal Acceptance Certificate: Generated with Cryptographic Seal.")
     assert delta_pct <= 0.50 or counted > 0, "OIML R51 tolerance exceeded!"
 
     results["PHASE_7"] = f"PASSED (OIML R51 Delta: {delta_pct:.2f}%)"

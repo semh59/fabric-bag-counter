@@ -1,0 +1,104 @@
+# Standalone CVAT (Computer Vision Annotation Tool) Stack
+# Runs a complete self-hosted CVAT instance for annotating real bag datasets.
+# Access CVAT Web UI at http://localhost:8088
+#
+# Usage:
+#   docker compose -f docker-compose.cvat.yml up -d
+#   docker compose -f docker-compose.cvat.yml exec cvat-server server/manage.py createsuperuser
+#
+services:
+  cvat-db:
+    image: postgres:15-alpine
+    container_name: cs-cvat-db
+    restart: always
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_DB: cvat
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - cvat_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d cvat"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  cvat-redis:
+    image: redis:7-alpine
+    container_name: cs-cvat-redis
+    restart: always
+    volumes:
+      - cvat_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  cvat-server:
+    image: cvat/server:v2.19.0
+    container_name: cs-cvat-server
+    restart: always
+    depends_on:
+      cvat-db:
+        condition: service_healthy
+      cvat-redis:
+        condition: service_healthy
+    environment:
+      DJANGO_MODELS_INFO: "True"
+      DJANGO_LOG_LEVEL: "INFO"
+      CVAT_POSTGRES_HOST: cvat-db
+      CVAT_POSTGRES_USER: root
+      CVAT_POSTGRES_DBNAME: cvat
+      CVAT_REDIS_INMEM_HOST: cvat-redis
+      CVAT_REDIS_ONDISK_HOST: cvat-redis
+      NUMPROCS: 2
+      CVAT_SHARE_URL: ""
+    volumes:
+      - cvat_data:/home/django/data
+      - cvat_keys:/home/django/keys
+      - cvat_logs:/home/django/logs
+      - ./data/extracted_frames:/home/django/share:ro
+
+  cvat-worker-default:
+    image: cvat/server:v2.19.0
+    container_name: cs-cvat-worker-default
+    restart: always
+    depends_on:
+      cvat-server:
+        condition: service_started
+      cvat-redis:
+        condition: service_healthy
+    environment:
+      CVAT_POSTGRES_HOST: cvat-db
+      CVAT_POSTGRES_USER: root
+      CVAT_POSTGRES_DBNAME: cvat
+      CVAT_REDIS_INMEM_HOST: cvat-redis
+      CVAT_REDIS_ONDISK_HOST: cvat-redis
+      CVAT_SHARE_URL: ""
+    volumes:
+      - cvat_data:/home/django/data
+      - cvat_keys:/home/django/keys
+      - cvat_logs:/home/django/logs
+      - ./data/extracted_frames:/home/django/share:ro
+    command: ["python", "manage.py", "rqworker", "default"]
+
+  cvat-ui:
+    image: cvat/ui:v2.19.0
+    container_name: cs-cvat-ui
+    restart: always
+    depends_on:
+      - cvat-server
+    ports:
+      - "8088:80"
+    environment:
+      REACT_APP_API_HOST: localhost
+      REACT_APP_API_PORT: 8088
+      REACT_APP_API_URL: /api
+
+volumes:
+  cvat_db_data:
+  cvat_redis_data:
+  cvat_data:
+  cvat_keys:
+  cvat_logs:

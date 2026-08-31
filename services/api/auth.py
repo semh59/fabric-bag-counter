@@ -8,7 +8,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 import jwt
-from fastapi import Cookie, Depends, HTTPException, Header, status
+from fastapi import Cookie, Depends, HTTPException, Header, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from packages.cs_core.models import UserRole
@@ -61,15 +61,18 @@ def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = 
 def get_current_user(
     authorization: str | None = Header(None),
     session_token: str | None = Cookie(None),
+    token: str | None = Query(None),
 ) -> CurrentUser:
     """Resolve authenticated user by cryptographically validating the signed JWT token (§8.1)."""
-    token = None
+    resolved_token = None
     if authorization and authorization.startswith("Bearer "):
-        token = authorization.split(" ")[1]
+        resolved_token = authorization.split(" ")[1]
     elif session_token:
-        token = session_token
+        resolved_token = session_token
+    elif token:
+        resolved_token = token
 
-    if not token:
+    if not resolved_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication credentials required.",
@@ -78,7 +81,7 @@ def get_current_user(
 
     # Cryptographic JWT Signature Verification
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(resolved_token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id_str = payload.get("sub")
         username = payload.get("username")
         role_str = payload.get("role")

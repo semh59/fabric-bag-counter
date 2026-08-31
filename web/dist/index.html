@@ -441,6 +441,7 @@
         { id: 'sessions', label: '📋 Sessions' },
         { id: 'reconciliation', label: '⚖️ Reconciliation' },
         { id: 'data', label: '📁 Data & Synthetic' },
+        { id: 'cvat', label: '🏷️ Labeling (CVAT)' },
         { id: 'training', label: '🧠 Model & Training' },
         { id: 'settings', label: '🔧 Belt & Calibration' },
         { id: 'system', label: '⚙️ System' },
@@ -451,6 +452,7 @@
         { id: 'reconciliation', label: '⚖️ Reconciliation' },
         { id: 'wizard', label: '🧙 Setup Wizard' },
         { id: 'data', label: '📁 Data & Synthetic' },
+        { id: 'cvat', label: '🏷️ Labeling (CVAT)' },
         { id: 'training', label: '🧠 Model & Training' },
         { id: 'settings', label: '🔧 Belt & Calibration' },
         { id: 'system', label: '⚙️ System' },
@@ -614,6 +616,7 @@
         case 'reconciliation': renderReconciliation(c); break;
         case 'wizard': renderWizard(c); break;
         case 'data': renderData(c); break;
+        case 'cvat': renderCvat(c); break;
         case 'training': renderTraining(c); break;
         case 'settings': renderSettings(c); break;
         case 'system': renderSystem(c); break;
@@ -2492,7 +2495,7 @@
               <h2 class="text-xl font-black text-white tracking-tight">Data & Synthetic Image Generation (§5.8)</h2>
               <p class="text-xs text-slate-400 mt-1">Copy-paste data augmentation and training dataset compiler.</p>
 
-              <div class="grid grid-cols-1 md:grid-cols-3 gap-4 my-6">
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 my-6">
                 <button onclick="triggerJob('extract')" class="glass-card p-5 rounded-2xl hover:border-indigo-500/60 transition text-left">
                   <div class="text-2xl mb-2">🎬</div>
                   <div class="font-bold text-slate-200">Frame Extractor</div>
@@ -2507,6 +2510,11 @@
                   <div class="text-2xl mb-2">📦</div>
                   <div class="font-bold text-slate-200">Compile Dataset Version</div>
                   <div class="text-xs text-slate-400 mt-1">Packages into COCO format with train & test splits.</div>
+                </button>
+                <button onclick="setTab('cvat')" class="glass-card p-5 rounded-2xl hover:border-indigo-500/60 transition text-left border border-indigo-500/40 bg-indigo-950/20">
+                  <div class="text-2xl mb-2">🏷️</div>
+                  <div class="font-bold text-indigo-200">CVAT Studio</div>
+                  <div class="text-xs text-slate-400 mt-1">Annotate real bags & print marks directly in dashboard.</div>
                 </button>
               </div>
 
@@ -2542,47 +2550,214 @@
       }
     }
 
-    // ===================== 6. TRAINING & MODEL SCREEN =====================
-    async function renderTraining(c) {
-      c.innerHTML = `
-        <div class="space-y-6">
-          <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
-            <h2 class="text-xl font-black text-white tracking-tight">Model Training & ONNX Management</h2>
-            <p class="text-xs text-slate-400 mt-1">RF-DETR segmentation model training, ONNX export, and production deployment.</p>
+    // ===================== 5.5 INTEGRATED CVAT SCREEN (§6.3, §6.4) =====================
+    let cvatCustomUrl = localStorage.getItem('cs_cvat_url') || 'http://localhost:8088';
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 my-6">
-              <div class="bg-slate-800/40 p-5 rounded-2xl border border-slate-700">
-                <h3 class="font-bold text-sm text-slate-200 mb-3">🧠 Start Fine-Tuning</h3>
-                <div class="space-y-3">
-                  <div>
-                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Number of Epochs</label>
-                    <input type="number" id="train-epochs" value="50" class="w-full text-xs">
+    async function renderCvat(c) {
+      c.innerHTML = '<div class="text-center py-20"><div class="spinner"></div><div class="text-xs text-slate-400 mt-2">Connecting to CVAT Studio...</div></div>';
+
+      try {
+        const [status, sync] = await Promise.all([
+          api(`/cvat/status?cvat_url=${encodeURIComponent(cvatCustomUrl + '/api')}`).catch(e => ({ status: 'offline', detail: e.detail || e.message })),
+          api('/cvat/sync_dataset').catch(() => ({ status: 'awaiting_export', has_annotations: false, image_count: 0 }))
+        ]);
+
+        const isOnline = status.status === 'online';
+
+        c.innerHTML = `
+          <div class="space-y-4">
+            <!-- Header Bar -->
+            <div class="glass-card p-5 border border-slate-700/80 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div class="flex items-center space-x-3">
+                  <h2 class="text-xl font-black text-white tracking-tight">🏷️ Integrated CVAT Labeling Studio</h2>
+                  <span class="badge ${isOnline ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'}">
+                    ${isOnline ? `● CVAT Online (${status.version || 'v2.x'})` : '○ CVAT Offline (Port 8088)'}
+                  </span>
+                </div>
+                <p class="text-xs text-slate-400 mt-1">
+                  Active Learning & Polygon Annotation Studio for industrial woven/kraft bags and printed stamps (§6.3, §6.4).
+                </p>
+              </div>
+
+              <!-- Action Toolbar -->
+              <div class="flex flex-wrap items-center gap-2">
+                <button onclick="createNewCvatTaskPrompt()" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md transition flex items-center space-x-1.5">
+                  <span>➕ Create Task</span>
+                </button>
+                <button onclick="checkRealDatasetStatus()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 transition flex items-center space-x-1.5" title="Check data/real_bags readiness">
+                  <span>💾 Sync Dataset (${sync.image_count} imgs)</span>
+                </button>
+                <button onclick="setTab('training'); toast('Switched to Model Training & Fine-Tuning');" class="px-3.5 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-md transition flex items-center space-x-1.5">
+                  <span>🧠 Train Model</span>
+                </button>
+                <a href="${escapeHtml(cvatCustomUrl)}" target="_blank" rel="noopener noreferrer" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 transition flex items-center space-x-1.5">
+                  <span>↗️ Open in New Tab</span>
+                </a>
+                <button onclick="promptCvatUrl()" class="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 transition" title="Configure CVAT Host URL">
+                  ⚙️
+                </button>
+              </div>
+            </div>
+
+            <!-- Workspace Viewport -->
+            ${isOnline ? `
+              <div class="glass-card p-2 border border-slate-700 shadow-2xl overflow-hidden rounded-2xl">
+                <iframe
+                  id="cvat-embedded-frame"
+                  src="${escapeHtml(cvatCustomUrl)}"
+                  class="w-full h-[780px] rounded-xl bg-slate-950 border border-slate-800"
+                  allow="fullscreen; clipboard-read; clipboard-write"
+                  title="Embedded CVAT Interface">
+                </iframe>
+              </div>
+            ` : `
+              <div class="glass-card p-8 border border-slate-700/80 shadow-2xl space-y-6">
+                <div class="flex items-start space-x-4">
+                  <div class="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-2xl shrink-0">
+                    🏷️
                   </div>
                   <div>
-                    <label class="text-[11px] text-slate-400 font-semibold block mb-1">Batch Size</label>
-                    <input type="number" id="train-batch" value="16" class="w-full text-xs">
+                    <h3 class="text-lg font-bold text-white">CVAT Annotation Server is Not Running</h3>
+                    <p class="text-xs text-slate-400 mt-1">
+                      To use the embedded labeling studio inside this dashboard, launch the standalone CVAT container stack included in the repository.
+                    </p>
                   </div>
-                  <button onclick="startTrainingRun()" class="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-bold rounded-xl shadow-lg transition">
-                    Start Training (GPU Priority: 5)
+                </div>
+
+                <!-- One-click instruction block -->
+                <div class="bg-slate-900/90 rounded-xl p-5 border border-slate-800 space-y-3 font-mono text-xs">
+                  <div class="text-slate-400 text-[11px] font-sans font-semibold">1. Start CVAT services via Terminal (Docker Compose):</div>
+                  <div class="bg-black/50 p-3 rounded-lg text-emerald-400 select-all border border-slate-800 flex justify-between items-center">
+                    <code>docker compose -f docker-compose.cvat.yml up -d</code>
+                    <button onclick="navigator.clipboard.writeText('docker compose -f docker-compose.cvat.yml up -d'); toast('Command copied to clipboard!');" class="text-slate-400 hover:text-white font-sans text-xs">📋 Copy</button>
+                  </div>
+
+                  <div class="text-slate-400 text-[11px] font-sans font-semibold mt-4">2. Create initial CVAT administrator user:</div>
+                  <div class="bg-black/50 p-3 rounded-lg text-indigo-300 select-all border border-slate-800 flex justify-between items-center">
+                    <code>docker compose -f docker-compose.cvat.yml exec cvat-server server/manage.py createsuperuser</code>
+                    <button onclick="navigator.clipboard.writeText('docker compose -f docker-compose.cvat.yml exec cvat-server server/manage.py createsuperuser'); toast('Command copied to clipboard!');" class="text-slate-400 hover:text-white font-sans text-xs">📋 Copy</button>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-2">
+                  <button onclick="renderScreen()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg transition flex items-center space-x-2">
+                    <span>🔄 Refresh & Connect</span>
+                  </button>
+                  <button onclick="checkRealDatasetStatus()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl border border-slate-700 transition">
+                    📁 Check Local Real Dataset (data/real_bags)
                   </button>
                 </div>
               </div>
+            `}
+          </div>
+        `;
+      } catch (e) {
+        c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-rose-300">Error loading CVAT screen: ${escapeHtml(e.detail || e.message)}</div>`;
+      }
+    }
 
-              <div id="active-model-card" class="bg-slate-800/40 p-5 rounded-2xl border border-slate-700 flex flex-col justify-between">
-                <div class="text-center py-10"><div class="spinner"></div></div>
+    async function createNewCvatTaskPrompt() {
+      const taskName = prompt('Enter CVAT Task Name:', `Batch_${new Date().toISOString().slice(0,10)}_Conveyor_Bags`);
+      if (!taskName) return;
+      toast('Creating CVAT task & uploading extracted frames...', 'info');
+      try {
+        const res = await api('/cvat/tasks', {
+          method: 'POST',
+          body: JSON.stringify({ name: taskName, source_dir: './data/extracted_frames', cvat_url: cvatCustomUrl + '/api' })
+        });
+        toast(`Task created! Task ID: #${res.task_id} (${res.uploaded_frames} frames uploaded)`, 'success');
+        renderScreen();
+      } catch (e) {
+        toast(e.detail || 'Could not create CVAT task', 'error');
+      }
+    }
+
+    async function checkRealDatasetStatus() {
+      try {
+        const res = await api('/cvat/sync_dataset', { method: 'POST' });
+        if (res.has_annotations && res.image_count > 0) {
+          toast(`Dataset ready in data/real_bags: ${res.image_count} images, ${res.annotation_count || 0} labels.`, 'success');
+        } else {
+          toast(`data/real_bags status: ${res.image_count} images found, annotations.json ${res.has_annotations ? 'present' : 'missing (export COCO 1.0 from CVAT)'}.`, 'warn');
+        }
+      } catch (e) {
+        toast(e.detail || 'Error checking dataset', 'error');
+      }
+    }
+
+    function promptCvatUrl() {
+      const val = prompt('Configure CVAT Web UI URL:', cvatCustomUrl);
+      if (val && val.trim()) {
+        cvatCustomUrl = val.trim().replace(/\/$/, '');
+        localStorage.setItem('cs_cvat_url', cvatCustomUrl);
+        toast(`CVAT URL updated: ${cvatCustomUrl}`);
+        renderScreen();
+      }
+    }
+
+    // ===================== 6. TRAINING & MODEL SCREEN =====================
+    async function renderTraining(c) {
+      c.innerHTML = '<div class="text-center py-20"><div class="spinner"></div><div class="text-xs text-slate-400 mt-2">Loading Model Registry...</div></div>';
+
+      try {
+        const [models, sync] = await Promise.all([
+          api('/models').catch(() => []),
+          api('/cvat/sync_dataset').catch(() => ({ has_annotations: false, image_count: 0 }))
+        ]);
+
+        const hasRealData = sync && sync.has_annotations && sync.image_count > 0;
+        const active = models.find(m => m.stage === 'active');
+
+        c.innerHTML = `
+          <div class="space-y-6">
+            <div class="glass-card p-6 border border-slate-700/80 shadow-2xl">
+              <h2 class="text-xl font-black text-white tracking-tight">Model Training & ONNX Management</h2>
+              <p class="text-xs text-slate-400 mt-1">RF-DETR segmentation model training, ONNX export, and production deployment.</p>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 my-6">
+                <div class="bg-slate-800/40 p-5 rounded-2xl border border-slate-700">
+                  <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-bold text-sm text-slate-200">🧠 Start Fine-Tuning</h3>
+                    <span class="badge ${hasRealData ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-slate-700/60 text-slate-400 border border-slate-600/40'}">
+                      ${hasRealData ? '🟢 Real Dataset Ready' : '⚪ Synthetic Pretraining'}
+                    </span>
+                  </div>
+
+                  <div class="mb-3 p-3 rounded-xl border ${hasRealData ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300' : 'bg-slate-900/60 border-slate-700/60 text-slate-400'} text-xs">
+                    <div class="font-bold flex items-center space-x-1.5">
+                      <span>${hasRealData ? '✓ Hybrid Real-Bag Fine-Tuning Active' : 'ℹ️ Pure Synthetic Mode'}</span>
+                    </div>
+                    <div class="text-[11px] mt-0.5 opacity-90">
+                      ${hasRealData ? `Found ${sync.image_count} real factory frames & ${sync.annotation_count || 0} polygon annotations in data/real_bags.` : 'data/real_bags/annotations.json not found yet. Go to Labeling (CVAT) tab to label real bags.'}
+                    </div>
+                  </div>
+
+                  <div class="space-y-3">
+                    <div>
+                      <label class="text-[11px] text-slate-400 font-semibold block mb-1">Number of Epochs</label>
+                      <input type="number" id="train-epochs" value="30" class="w-full text-xs">
+                    </div>
+                    <div>
+                      <label class="text-[11px] text-slate-400 font-semibold block mb-1">Batch Size</label>
+                      <input type="number" id="train-batch" value="16" class="w-full text-xs">
+                    </div>
+                    <button onclick="startTrainingRun()" class="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-bold rounded-xl shadow-lg transition">
+                      ${hasRealData ? 'Start Fine-Tuning (Real + Synthetic)' : 'Start Synthetic Pretraining (GPU Priority: 5)'}
+                    </button>
+                  </div>
+                </div>
+
+                <div id="active-model-card" class="bg-slate-800/40 p-5 rounded-2xl border border-slate-700 flex flex-col justify-between">
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      `;
+        `;
 
-      try {
-        const models = await api('/models');
-        const active = models.find(m => m.stage === 'active');
         renderActiveModelCard(active);
       } catch (e) {
-        const card = document.getElementById('active-model-card');
-        if (card) card.innerHTML = `<div class="text-rose-300 text-xs text-center py-8">Could not fetch models: ${escapeHtml(e.detail || e.message || '')}</div>`;
+        c.innerHTML = `<div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-rose-300">Error loading training screen: ${escapeHtml(e.detail || e.message || '')}</div>`;
       }
     }
 

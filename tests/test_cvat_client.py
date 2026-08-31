@@ -141,3 +141,14 @@ def test_inter_annotator_agreement_disjoint_masks_is_zero():
     m2[15:20, 15:20] = True
     agreement = CvatClient().calculate_inter_annotator_agreement([m1], [m2])
     assert agreement == pytest.approx(0.0)
+
+
+def test_active_learning_pipeline_push_to_cvat_handles_unreachable_server():
+    from tools.active_learning_pipeline import push_to_cvat
+    task_id = push_to_cvat(
+        frame_paths=[],
+        task_name="TestTask",
+        cvat_url="http://127.0.0.1:59999/api"
+    )
+    assert task_id is None
+

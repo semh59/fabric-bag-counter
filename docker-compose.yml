@@ -99,6 +99,19 @@ services:
     volumes:
       - ./data:/app/data
 
+  modbus-plc:
+    build:
+      context: .
+      dockerfile: Dockerfile.core
+    container_name: cs-modbus-plc
+    restart: always
+    environment:
+      PYTHONUNBUFFERED: "1"
+    command: ["python", "-m", "tools.modbus_server", "--port", "502"]
+    ports:
+      - "5020:502"
+
 volumes:
   postgres_data:
+
 

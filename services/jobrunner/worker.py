@@ -32,20 +32,90 @@ def _hash_file(path: str) -> str:
         return f"sha256:{hashlib.sha256(f.read()).hexdigest()}"
 
 
-def _evaluate_model(onnx_path: str, num_scenes: int = 20) -> dict[str, Any]:
-    """Measure real accuracy/throughput of a trained ONNX model on fresh synthetic
-    scenes (same method as tests/test_model_accuracy.py) so eval_scores reflect an
-    actual run rather than a placeholder number."""
+def _evaluate_model(
+    onnx_path: str,
+    num_scenes: int = 20,
+    real_data_dir: str | None = None,
+) -> dict[str, Any]:
+    """Measure real accuracy/throughput of a trained ONNX model.
+
+    If real holdout annotations (e.g. data/real_bags/annotations.json) exist, evaluates
+    on genuine factory images. Otherwise, evaluates on fresh synthetic scenes and
+    explicitly marks evaluation metadata with dataset_type.
+    """
+    import json
     import time
-
+    from pathlib import Path
     import numpy as np
+    from PIL import Image
 
+    from packages.cs_data.cvat_client import CvatClient
     from packages.cs_data.synth import SyntheticBagGenerator
     from packages.cs_vision.detector import VisionDetector
 
     detector = VisionDetector(model_path=onnx_path, conf_threshold=0.35, allow_fallback=False)
-    gen = SyntheticBagGenerator(min_overlap_ratio=0.15, max_overlap_ratio=0.40)
 
+    # Check for real evaluation dataset if present
+    target_real_dir = Path(real_data_dir) if real_data_dir else Path("./data/real_bags")
+    real_ann_path = target_real_dir / "annotations.json"
+
+    if real_ann_path.exists():
+        try:
+            with open(real_ann_path, "r", encoding="utf-8") as f:
+                coco_dict = json.load(f)
+            parsed = CvatClient().parse_coco_annotations(coco_dict)
+            images_by_id = parsed.get("images", {})
+            anns_by_image = parsed.get("parsed_annotations", {})
+
+            count_errors = []
+            ious = []
+            infer_times = []
+            evaluated_frames = 0
+
+            for img_id, img_info in images_by_id.items():
+                img_file = target_real_dir / "images" / img_info["file_name"]
+                if not img_file.exists():
+                    continue
+                img_arr = np.array(Image.open(img_file).convert("RGB"))
+                t0 = time.perf_counter()
+                result = detector.predict(img_arr)
+                infer_times.append(time.perf_counter() - t0)
+
+                pred_boxes = [b["box"] for b in result.bag_bodies]
+                gt_boxes = [
+                    [ann["bbox"][0], ann["bbox"][1], ann["bbox"][0] + ann["bbox"][2], ann["bbox"][1] + ann["bbox"][3]]
+                    for ann in anns_by_image.get(img_id, [])
+                    if ann.get("category") == "bag_body"
+                ]
+
+                count_errors.append(abs(len(pred_boxes) - len(gt_boxes)))
+                for gt in gt_boxes:
+                    best_iou = 0.0
+                    for pred in pred_boxes:
+                        xA, yA = max(gt[0], pred[0]), max(gt[1], pred[1])
+                        xB, yB = min(gt[2], pred[2]), min(gt[3], pred[3])
+                        inter = max(0.0, xB - xA) * max(0.0, yB - yA)
+                        area_gt = max(0.0, gt[2] - gt[0]) * max(0.0, gt[3] - gt[1])
+                        area_pred = max(0.0, pred[2] - pred[0]) * max(0.0, pred[3] - pred[1])
+                        union = area_gt + area_pred - inter
+                        iou = inter / union if union > 0 else 0.0
+                        best_iou = max(best_iou, iou)
+                    ious.append(best_iou)
+                evaluated_frames += 1
+
+            if evaluated_frames > 0:
+                return {
+                    "dataset_type": "real_holdout",
+                    "mean_count_error": round(float(np.mean(count_errors)), 3) if count_errors else None,
+                    "mean_iou": round(float(np.mean(ious)), 3) if ious else None,
+                    "fps": round(1.0 / float(np.mean(infer_times)), 1) if infer_times else None,
+                    "eval_scenes": evaluated_frames,
+                }
+        except Exception as exc:
+            logger.warning("Failed to evaluate on real dataset (%s), falling back to synthetic evaluation.", exc)
+
+    # Fallback to synthetic evaluation
+    gen = SyntheticBagGenerator(min_overlap_ratio=0.15, max_overlap_ratio=0.40)
     count_errors = []
     ious = []
     infer_times = []
@@ -72,6 +142,7 @@ def _evaluate_model(onnx_path: str, num_scenes: int = 20) -> dict[str, Any]:
             ious.append(best_iou)
 
     return {
+        "dataset_type": "synthetic",
         "mean_count_error": round(float(np.mean(count_errors)), 3) if count_errors else None,
         "mean_iou": round(float(np.mean(ious)), 3) if ious else None,
         "fps": round(1.0 / float(np.mean(infer_times)), 1) if infer_times else None,
@@ -205,7 +276,7 @@ class JobrunnerWorker:
                 train_kwargs["real_data_dir"] = payload["real_data_dir"]
 
             onnx_path = train_and_export_model(**train_kwargs)
-            eval_scores = _evaluate_model(onnx_path)
+            eval_scores = _evaluate_model(onnx_path, real_data_dir=payload.get("real_data_dir"))
             model_hash = _hash_file(onnx_path)
 
             with get_sync_session() as db:
@@ -385,6 +456,21 @@ class JobrunnerWorker:
             )
             return False
 
+        # Background lease renewer during job execution (§5.8)
+        import threading
+        stop_heartbeat = threading.Event()
+
+        def _heartbeat_loop():
+            while not stop_heartbeat.wait(timeout=max(5.0, float(self.lease_seconds) / 3.0)):
+                try:
+                    with get_sync_session() as db:
+                        JobRepository(db).heartbeat(job_id, extend_seconds=self.lease_seconds)
+                except Exception as exc:
+                    logger.debug(f"[Jobrunner] Heartbeat for job {job_id} failed: {exc}")
+
+        hb_thread = threading.Thread(target=_heartbeat_loop, daemon=True)
+        hb_thread.start()
+
         # Execute
         try:
             result = self.execute_job(job)
@@ -399,6 +485,8 @@ class JobrunnerWorker:
                 job_repo = JobRepository(db)
                 job_repo.fail_job(job_id, error_message=str(e))
             return False
+        finally:
+            stop_heartbeat.set()
 
     def start_loop(self) -> None:
         self.is_running = True

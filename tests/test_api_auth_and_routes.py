@@ -175,3 +175,35 @@ def test_simulate_bag_400_without_real_camera_gate_bundle():
     res = client.post(f"/api/sessions/{sess_id}/simulate_bag", json={"direction": 1}, headers=headers)
     assert res.status_code == 400
     assert "camera" in res.json()["detail"].lower() or "gate" in res.json()["detail"].lower() or "deployment" in res.json()["detail"].lower()
+
+
+def test_cvat_status_endpoint():
+    res = client.get("/api/cvat/status?cvat_url=http://127.0.0.1:9999/api")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["status"] == "offline"
+    assert "ui_url" in body
+
+
+def test_cvat_sync_dataset_endpoint():
+    res_login = client.post("/api/auth/login", json={"username": "engineer", "password": "eng123"})
+    headers = {"Authorization": f"Bearer {res_login.json()['token']}"}
+
+    res = client.post("/api/cvat/sync_dataset", json={}, headers=headers)
+    assert res.status_code == 200
+    body = res.json()
+    assert "status" in body
+    assert "real_bags_path" in body
+    assert "image_count" in body
+
+
+def test_auth_via_query_param_token_for_sse():
+    """Verify that get_current_user resolves tokens passed in query string (?token=...) for browser EventSource."""
+    res_login = client.post("/api/auth/login", json={"username": "operator", "password": "op123"})
+    token = res_login.json()["token"]
+
+    # Request without Authorization header, passing token query param only
+    res = client.get(f"/api/sessions?token={token}")
+    assert res.status_code == 200
+
+

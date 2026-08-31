@@ -954,6 +954,146 @@ def update_model_stage(model_id: int, stage: ModelStage):
         return mv
 
 
+@router.get("/models/shadow/comparison", dependencies=[Depends(require_role(UserRole.ENGINEER))])
+def get_shadow_model_comparison():
+    """Retrieve live A/B comparison metrics between active and candidate shadow models (§6.4)."""
+    with get_sync_session() as db:
+        active_model = db.query(ModelVersionORM).filter(ModelVersionORM.stage == "active").order_by(ModelVersionORM.id.desc()).first()
+        shadow_model = db.query(ModelVersionORM).filter(ModelVersionORM.stage == "shadow").order_by(ModelVersionORM.id.desc()).first()
+
+        if not active_model or not shadow_model:
+            return {
+                "active_model_id": active_model.id if active_model else None,
+                "shadow_model_id": shadow_model.id if shadow_model else None,
+                "status": "no_shadow_pair" if not shadow_model else "no_active_model",
+                "is_ready_for_promotion": False,
+                "frames_compared": 0,
+                "agreement_rate": 1.0,
+                "mean_iou": 1.0,
+            }
+
+        from packages.cs_vision.shadow_evaluator import ShadowModelEvaluator
+        evaluator = ShadowModelEvaluator(active_model_id=active_model.id, shadow_model_id=shadow_model.id)
+        metrics = evaluator.get_comparison_summary()
+        return metrics.__dict__
+
+
+
+# ---------------------------------------------------------------------------
+# Integrated CVAT & Labeling Studio (§6.3, §6.4)
+# ---------------------------------------------------------------------------
+
+class CreateCvatTaskRequest(BaseModel):
+    name: str = "Factory_Conveyor_Real_Bags"
+    source_dir: str = "./data/extracted_frames"
+    project_id: int | None = None
+    cvat_url: str | None = None
+    auth_token: str | None = None
+
+
+@router.get("/cvat/status")
+def get_cvat_status(cvat_url: str | None = None):
+    """Check connectivity to self-hosted CVAT instance (§6.3)."""
+    import httpx
+    target_url = (cvat_url or os.environ.get("CVAT_BASE_URL", "http://localhost:8088/api")).rstrip("/")
+    ui_url = target_url.replace("/api", "")
+    try:
+        with httpx.Client(timeout=3.0) as client:
+            resp = client.get(f"{target_url}/server/about")
+            if 200 <= resp.status_code < 300:
+                data = resp.json()
+                return {
+                    "status": "online",
+                    "base_url": target_url,
+                    "ui_url": ui_url,
+                    "version": data.get("version", "2.x"),
+                    "name": data.get("name", "CVAT"),
+                }
+            return {
+                "status": "offline",
+                "base_url": target_url,
+                "ui_url": ui_url,
+                "detail": f"CVAT returned HTTP {resp.status_code}",
+            }
+    except Exception as exc:
+        return {
+            "status": "offline",
+            "base_url": target_url,
+            "ui_url": ui_url,
+            "detail": f"Could not connect to CVAT: {exc}",
+        }
+
+
+@router.post("/cvat/tasks", dependencies=[Depends(require_role(UserRole.ENGINEER))])
+def create_cvat_annotation_task(req: CreateCvatTaskRequest):
+    """Create a standardized 2-class annotation task in CVAT and upload extracted frames (§6.3, §6.4)."""
+    import json
+    from pathlib import Path
+    from packages.cs_data.cvat_client import CvatClient, CvatApiError
+    target_url = (req.cvat_url or os.environ.get("CVAT_BASE_URL", "http://localhost:8088/api")).rstrip("/")
+    client = CvatClient(base_url=target_url, auth_token=req.auth_token)
+
+    try:
+        task = client.create_task(name=req.name, project_id=req.project_id)
+        task_id = task.get("id")
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"CVAT task creation failed: {exc}")
+
+    frames_dir = Path(req.source_dir)
+    uploaded_count = 0
+    if frames_dir.exists() and frames_dir.is_dir():
+        image_files = sorted(
+            [f for f in frames_dir.iterdir() if f.suffix.lower() in [".jpg", ".jpeg", ".png"]]
+        )
+        if image_files:
+            try:
+                client.upload_task_data(task_id=task_id, image_paths=image_files[:200])
+                uploaded_count = min(len(image_files), 200)
+            except Exception as exc:
+                logger.warning(f"Could not upload all frames to CVAT: {exc}")
+
+    return {
+        "status": "created",
+        "task_id": task_id,
+        "name": req.name,
+        "uploaded_frames": uploaded_count,
+        "task_url": f"{target_url.replace('/api', '')}/tasks/{task_id}",
+    }
+
+
+@router.post("/cvat/sync_dataset", dependencies=[Depends(require_role(UserRole.ENGINEER))])
+def sync_cvat_dataset(payload: dict[str, Any] = None):
+    """Verify and summarize data/real_bags directory for fine-tuning (§6.3)."""
+    import json
+    from pathlib import Path
+    target_dir = Path("./data/real_bags")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    (target_dir / "images").mkdir(parents=True, exist_ok=True)
+
+    ann_file = target_dir / "annotations.json"
+    images_dir = target_dir / "images"
+    has_annotations = ann_file.exists()
+    image_count = len(list(images_dir.glob("*.jpg"))) + len(list(images_dir.glob("*.png"))) + len(list(images_dir.glob("*.jpeg")))
+
+    summary = {
+        "status": "ready" if (has_annotations and image_count > 0) else "awaiting_export",
+        "real_bags_path": str(target_dir.resolve()),
+        "has_annotations": has_annotations,
+        "image_count": image_count,
+        "annotation_count": 0,
+        "annotated_images": 0,
+    }
+    if has_annotations:
+        try:
+            with open(ann_file, "r", encoding="utf-8") as f:
+                coco = json.load(f)
+            summary["annotation_count"] = len(coco.get("annotations", []))
+            summary["annotated_images"] = len(coco.get("images", []))
+        except Exception as exc:
+            summary["error"] = f"Invalid annotations JSON: {exc}"
+    return summary
+
+
 # ---------------------------------------------------------------------------
 # Configs, Calibrations & Deployment Bundles
 # ---------------------------------------------------------------------------

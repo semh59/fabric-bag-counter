@@ -8,7 +8,7 @@
 - **`packages/cs_vision/`**: RF-DETR Seg deep instance segmentation network with multi-head attention and dynamic mask heads.
 - **`packages/cs_tracking/`**: ByteTrack multi-object tracker integrated with `BeltMotionModel` and directional gate hysteresis.
 - **`packages/cs_counting/`**: Two-stage state machine (PRE/GATE/POST), area integral cross-verification, and count ledger.
-- **`packages/cs_storage/`**: PostgreSQL / SQLite ORM, migration scripts, transactional outbox, and Merkle tree dispatch seal.
+- **`packages/cs_storage/`**: PostgreSQL / SQLite ORM, migration scripts, transactional outbox, and HMAC-SHA256 dispatch seal.
 - **`drivers/`**: Modular I/O, RTSP video streams, USB relays, and SAP S/4HANA OData adapters.
 
 ---
@@ -24,9 +24,9 @@
    - Multi-stage association algorithm based on clean-room ByteTrack principles.
    - Incorporates known constant conveyor velocity $v_x, v_y$ into Kalman filter process noise covariance.
 
-3. **Cryptographic Ledger & Merkle Root**:
-   - Tamper-evident counting event chain: each count event computes $H_n = \text{SHA256}(H_{n-1} \parallel \text{EventData})$.
-   - Final dispatch manifest generated with 64-character SHA-256 Merkle root seal.
+3. **Cryptographic Dispatch Seal & Audit Ledger**:
+   - Tamper-evident canonical dispatch manifest: generates unique 64-character cryptographic seal locking session ID, SKU, external waybill ref, and verified count total.
+   - Any modification or counter discrepancy invalidates the cryptographic seal.
 
 ---
 

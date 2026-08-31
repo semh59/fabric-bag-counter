@@ -10,7 +10,7 @@ High-precision industrial computer vision, conveyor bag counting, amodal instanc
 - **ByteTrack + BeltMotion**: Spatial multi-object tracking with conveyor motion vector compensation and directional gate hysteresis.
 - **Two-Stage Gate State Machine**: Eliminates false positives from conveyor oscillations and bag jitter (PRE $\rightarrow$ GATE $\rightarrow$ POST).
 - **Secondary Area Integrator**: Redundant cross-verification calculating continuous bag area integral $\int A(t)\,dt$ to flag underfilled or touching bags.
-- **Cryptographic Audit Ledger**: Every count event is chained via SHA-256 Merkle tree hashing to generate tamper-evident dispatch manifests with QR seals.
+- **Cryptographic Dispatch Manifest**: Tamper-evident dispatch reports and reconciliation manifests sealed via HMAC-SHA256 cryptographic signatures covering session metadata, SKU, line ID, and immutable count events.
 - **SAP S/4HANA OData Integration**: Standardized Goods Movement (`API_MATERIAL_DOCUMENT_SRV`) and Outbound Delivery (`API_OUTBOUND_DELIVERY_SRV`) via Transactional Outbox.
 - **Single Page Web Dashboard**: Real-time OpenCV AI Vision HUD, Live MJPEG stream, 60 FPS simulator, and 8 dedicated control-room operational views.
 
@@ -56,6 +56,18 @@ docker compose up -d --build
 ```bash
 docker compose -f docker-compose.edge.yml up -d --build
 ```
+
+### CVAT Annotation Server (Self-Hosted Human-in-the-Loop Labeling)
+```bash
+docker compose -f docker-compose.cvat.yml up -d
+```
+
+---
+
+## 🏷️ Dataset Annotation & Model Fine-Tuning
+
+- **Real Factory Annotations**: Connect to CVAT to annotate real conveyor images with `bag_body` (polygon) and `print_mark` (rectangle) classes.
+- **Active Learning Pipeline**: See [docs/cvat_setup.md](docs/cvat_setup.md) for step-by-step instructions on deploying CVAT, uploading mined hard frames, and feeding real COCO datasets (`data/real_bags/annotations.json`) into the training and evaluation loop.
 
 ---
 

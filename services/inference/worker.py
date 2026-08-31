@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import logging
-import os
-
+from drivers.io_modbus_tcp.controller import ModbusTcpIoController
 from packages.cs_core.frame import Frame
 from packages.cs_core.transport import SharedMemoryTransport
 from packages.cs_counting.engine import CountingEngine
@@ -17,6 +16,7 @@ from packages.cs_counting.events import (
 from packages.cs_storage.db import get_sync_session
 from packages.cs_storage.repositories.config_repo import ConfigRepository
 from packages.cs_storage.repositories.session_repo import SessionRepository
+from packages.cs_vision.side_inspector import SideViewInspector
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,20 @@ class InferenceWorker:
         self.batch_wait_ms = batch_wait_ms
         self.max_consecutive_drops = max_consecutive_drops
         self.engine = engine or CountingEngine()
+        self.side_inspector = SideViewInspector()
         self.is_running = False
+
+        # Industrial Modbus TCP PLC connection (if configured via env)
+        self.modbus: ModbusTcpIoController | None = None
+        modbus_host = os.getenv("MODBUS_HOST")
+        if modbus_host:
+            try:
+                modbus_port = int(os.getenv("MODBUS_PORT", "502"))
+                self.modbus = ModbusTcpIoController(host=modbus_host, port=modbus_port)
+                logger.info(f"[Inference] Initialized industrial Modbus TCP controller -> {modbus_host}:{modbus_port}")
+            except Exception as exc:
+                logger.warning(f"[Inference] Could not initialize Modbus controller at startup: {exc}")
+
         # None (not a hardcoded 1) until a real active bundle is resolved --
         # deployment_bundle_id is a NOT NULL FK on count_event, so a
         # fabricated default here would either point at a bundle that
@@ -174,8 +187,20 @@ class InferenceWorker:
                                 f"[Inference] Discrepancy detected between ledger count ({output.running_net_count}) and area estimate ({output.area_estimate:.1f}). Triggering reconciliation."
                             )
 
+                    # 4b. Physical Modbus TCP PLC Actuation (§4.4, §5.5)
+                    if self.modbus is not None:
+                        try:
+                            self.modbus.write_register("counted_total", output.running_net_count)
+                            if output.scheduled_rejects:
+                                self.modbus.set_signal("reject_diverter", True)
+                            if active_session.target_count and output.running_net_count >= active_session.target_count:
+                                self.modbus.set_signal("conveyor_run", False)
+                        except Exception as exc:
+                            logger.debug(f"[Inference] Modbus telemetry write failed: {exc}")
+
                 # 5. Release shared memory slot
                 self.transport.release(frame)
+
 
         return len(frames)
 

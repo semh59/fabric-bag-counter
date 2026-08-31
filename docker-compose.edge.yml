@@ -69,8 +69,14 @@ services:
       DATABASE_URL: postgresql://bag_admin:${POSTGRES_PASSWORD:-bag_secure_2026}@${POSTGRES_HOST:-host.docker.internal}:5434/bag_counter_db
       DATABASE_SYNC_URL: postgresql://bag_admin:${POSTGRES_PASSWORD:-bag_secure_2026}@${POSTGRES_HOST:-host.docker.internal}:5434/bag_counter_db
       LINE_ID: ${LINE_ID:-1}
+      MODBUS_HOST: ${MODBUS_HOST:-host.docker.internal}
+      MODBUS_PORT: ${MODBUS_PORT:-5020}
+      ENABLE_SIDE_INSPECTION: "true"
+      ENABLE_DETERMINISTIC_REJECT: "true"
+      ENABLE_SHADOW_EVALUATOR: "true"
       LOG_LEVEL: INFO
     command: ["python", "-m", "services.inference.worker"]
     volumes:
       - ./data:/app/data
     # See the commented-out GPU reservation block above -- same applies here.
+

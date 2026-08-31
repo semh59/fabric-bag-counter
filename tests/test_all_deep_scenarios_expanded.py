@@ -9,7 +9,7 @@ Exhaustively verifies every operational scenario, physical invariant, and edge c
 6. Scenario F: Active Learning & Multi-Criteria Hard Frame Mining
 7. Scenario G: Zero-Downtime Model Staging (draft -> shadow -> active -> retired)
 8. Scenario H: Environmental CLAHE Dust Attenuation & 4-Point Homography Warp
-9. Scenario I: Cryptographic SHA-256 Merkle Waybill Audit Trail & Tamper Rejection
+9. Scenario I: Cryptographic SHA-256 Dispatch Seal & Audit Trail Tamper Rejection
 10. Scenario J: OIML R51 Metrology Mass & Weighbridge Discrepancy Reconciliation
 11. Scenario K: High-Concurrency ACID Outbox Retry & Exponential Backoff
 12. Scenario L: 13-Step Automated Factory Setup Wizard End-to-End Execution
@@ -478,9 +478,9 @@ def test_scenario_h_environmental_clahe_and_homography_warp():
 
 
 # ==============================================================================
-# SCENARIO I: Cryptographic SHA-256 Merkle Waybill Audit Trail
+# SCENARIO I: Cryptographic SHA-256 Dispatch Seal & Audit Trail
 # ==============================================================================
-def test_scenario_i_cryptographic_waybill_merkle_seal():
+def test_scenario_i_cryptographic_waybill_audit_seal():
     """Verify SHA-256 digital seal uniquely locks session data and event ledger."""
     session_id = 42
     external_ref = "WB-TR-2026-9042"

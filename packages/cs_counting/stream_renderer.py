@@ -21,6 +21,7 @@ from packages.cs_storage.repositories.camera_epoch_repo import CameraEpochReposi
 from packages.cs_storage.repositories.config_repo import ConfigRepository
 from packages.cs_storage.repositories.session_repo import SessionRepository
 from packages.cs_vision.calibration import apply_perspective_warp
+from packages.cs_vision.side_inspector import SideViewInspector
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ class LiveStreamRenderer:
         self.w = width
         self.h = height
         self.engine = CountingEngine()
+        self.side_inspector = SideViewInspector()
         self.frame_idx = 0
         self.belt_pos = 0.0
         self.gate_x = 480

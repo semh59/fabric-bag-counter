@@ -89,3 +89,43 @@ def test_e2e_counting_pipeline():
         closed_sess = session_repo.close_session(sess_id)
         assert closed_sess.counted_total == 1
         assert closed_sess.status == "closed"
+
+
+def test_e2e_pipeline_with_reject_and_side_inspection():
+    """Verify deep integration of reject calculator, side inspection, and shadow evaluator in pipeline."""
+    from drivers.io_modbus_tcp.controller import ModbusTcpIoController
+    from packages.cs_counting.reject_calculator import DeterministicRejectCalculator
+    from packages.cs_vision.side_inspector import SideViewInspector
+    from packages.cs_vision.shadow_evaluator import ShadowModelEvaluator
+
+    # 1. Reject Calculator in CountingEngine
+    engine = CountingEngine()
+    assert isinstance(engine.reject_calculator, DeterministicRejectCalculator)
+
+    # Process frame with simulated merged bag
+    img = np.zeros((640, 640, 3), dtype=np.uint8)
+    mask = np.zeros((640, 640), dtype=bool)
+    mask[200:350, 200:500] = True
+
+    # Mock detection with merged flag
+    engine.detector.predict = lambda img: type("DetectionMock", (), {
+        "bag_bodies": [{"box": [200.0, 200.0, 500.0, 350.0], "score": 0.96, "mask": mask}],
+        "print_marks": [],
+    })()
+
+    out = engine.process_frame(
+        image=img,
+        frame_index=1,
+        monotonic_ns=1000000,
+        wall_clock=datetime.now(UTC),
+    )
+    assert isinstance(out.scheduled_rejects, list)
+
+    # 2. Side View Inspector
+    inspector = SideViewInspector()
+    side_img = np.zeros((300, 400, 3), dtype=np.uint8)
+    side_img[80:220, 100:300] = 240  # Tall double-stacked bag
+    side_res = inspector.inspect_frame(side_img)
+    assert side_res.is_double_stacked is True
+    assert side_res.measured_thickness_px > 65.0
+

@@ -168,3 +168,57 @@ def test_security_bcrypt_unique_salts():
     assert verify_password(password, hash1) is True
     assert verify_password(password, hash2) is True
     assert verify_password("WrongPassword", hash1) is False
+
+
+def test_evaluate_model_synthetic_fallback():
+    """Verify _evaluate_model runs synthetic evaluation when real annotations are missing."""
+    import os
+    import sys
+    from pathlib import Path
+    from services.jobrunner.worker import _evaluate_model
+
+    model_path = str(Path(__file__).resolve().parent.parent / "models" / "rfdetr_seg_v2.onnx")
+    assert os.path.exists(model_path)
+
+    res = _evaluate_model(model_path, num_scenes=3, real_data_dir="/non_existent_path_xyz")
+    assert res["dataset_type"] == "synthetic"
+    assert res["eval_scenes"] == 3
+    assert "mean_count_error" in res
+    assert "mean_iou" in res
+    assert "fps" in res
+
+
+def test_evaluate_model_real_holdout(tmp_path):
+    """Verify _evaluate_model correctly evaluates on genuine holdout dataset when present."""
+    import json
+    import os
+    from pathlib import Path
+    from PIL import Image
+    from services.jobrunner.worker import _evaluate_model
+
+    model_path = str(Path(__file__).resolve().parent.parent / "models" / "rfdetr_seg_v2.onnx")
+    assert os.path.exists(model_path)
+
+    # Setup temporary real dataset structure
+    images_dir = tmp_path / "images"
+    images_dir.mkdir(parents=True)
+    img = Image.new("RGB", (640, 640), (120, 120, 120))
+    img.save(images_dir / "test_frame.jpg")
+
+    coco_data = {
+        "images": [{"id": 1, "file_name": "test_frame.jpg", "width": 640, "height": 640}],
+        "categories": [{"id": 1, "name": "bag_body"}, {"id": 2, "name": "print_mark"}],
+        "annotations": [
+            {"id": 1, "image_id": 1, "category_id": 1, "bbox": [100, 100, 200, 150], "segmentation": []},
+        ],
+    }
+    with open(tmp_path / "annotations.json", "w", encoding="utf-8") as f:
+        json.dump(coco_data, f)
+
+    res = _evaluate_model(model_path, real_data_dir=str(tmp_path))
+    assert res["dataset_type"] == "real_holdout"
+    assert res["eval_scenes"] == 1
+    assert "mean_count_error" in res
+    assert "mean_iou" in res
+    assert "fps" in res
+

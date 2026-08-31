@@ -86,6 +86,8 @@ sap_odata = "drivers.erp_sap_odata.adapter:SapODataErpAdapter"
 [project.entry-points."cs.io_controller"]
 noop = "drivers.io_noop.controller:NoopIoController"
 usb_relay = "drivers.io_usb_relay.controller:UsbRelayIoController"
+modbus_tcp = "drivers.io_modbus_tcp.controller:ModbusTcpIoController"
+
 
 [project.entry-points."cs.session_identity"]
 operator = "drivers.identity_operator.identity:OperatorSessionIdentity"
