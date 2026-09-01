@@ -129,4 +129,7 @@ addopts = "-p no:asyncio"
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::UserWarning",
+    "ignore::torch.jit.TracerWarning",
+    "ignore:.*Converting a tensor to a Python boolean.*:torch.jit.TracerWarning",
+    "ignore:.*Converting a tensor to a Python float.*:torch.jit.TracerWarning",
 ]

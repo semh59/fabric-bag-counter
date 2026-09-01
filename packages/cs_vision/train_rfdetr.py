@@ -12,6 +12,7 @@ import json
 import os
 import sys
 import time
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -544,25 +545,28 @@ def train_and_export_model(
     model.eval()
     dummy_input = torch.randn(1, 3, 640, 640, dtype=torch.float32)
 
-    torch.onnx.export(
-        model,
-        dummy_input,
-        out_path,
-        input_names=["images"],
-        output_names=["boxes", "scores", "classes", "masks"],
-        opset_version=18,
-        dynamo=False,
-    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=torch.jit.TracerWarning)
+        warnings.filterwarnings("ignore", category=UserWarning)
+        torch.onnx.export(
+            model,
+            dummy_input,
+            out_path,
+            input_names=["images"],
+            output_names=["boxes", "scores", "classes", "masks"],
+            opset_version=18,
+            dynamo=False,
+        )
 
-    torch.onnx.export(
-        model,
-        dummy_input,
-        alias_path,
-        input_names=["images"],
-        output_names=["boxes", "scores", "classes", "masks"],
-        opset_version=18,
-        dynamo=False,
-    )
+        torch.onnx.export(
+            model,
+            dummy_input,
+            alias_path,
+            input_names=["images"],
+            output_names=["boxes", "scores", "classes", "masks"],
+            opset_version=18,
+            dynamo=False,
+        )
 
     # Verify exported model with ONNX Runtime
     session = ort.InferenceSession(out_path, providers=["CPUExecutionProvider"])
