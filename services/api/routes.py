@@ -501,8 +501,83 @@ async def stream_live_counts(line_id: int, request: Request, user: Annotated[Cur
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
+class WebRtcOfferRequest(BaseModel):
+    sdp: str
+    type: str = "offer"
+
+
+@router.post("/live/lines/{line_id}/webrtc/offer")
+async def webrtc_offer(line_id: int, req: WebRtcOfferRequest):
+    """Handle WebRTC SDP offer and establish low-latency (<50ms) live AI vision video stream."""
+    from packages.cs_counting.webrtc_stream import get_webrtc_manager
+    manager = get_webrtc_manager()
+    try:
+        answer = await manager.handle_offer(line_id=line_id, sdp=req.sdp, type_=req.type)
+        return answer
+    except Exception as e:
+        logger.exception(f"[WebRTC] Failed to negotiate SDP offer for line {line_id}: {e}")
+        raise HTTPException(status_code=400, detail=f"WebRTC negotiation failed: {e}")
+
+
+@router.get("/live/lines/{line_id}/webrtc/stats")
+def webrtc_stats(line_id: int):
+    """Return operational statistics for active WebRTC peer connections."""
+    from packages.cs_counting.webrtc_stream import get_webrtc_manager
+    return get_webrtc_manager().get_stats(line_id=line_id)
+
+
+@router.post("/live/lines/{line_id}/thermal/toggle")
+def toggle_thermal_stream(line_id: int, enabled: bool | None = None):
+    """Toggle radiometric infrared thermal fusion heatmap on live video stream."""
+    from packages.cs_counting.stream_renderer import _renderers, LiveStreamRenderer
+    if line_id not in _renderers:
+        _renderers[line_id] = LiveStreamRenderer(line_id=line_id)
+    renderer = _renderers[line_id]
+    state = renderer.toggle_thermal_mode(enabled)
+    return {"line_id": line_id, "thermal_mode_enabled": state}
+
+
+@router.get("/live/lines/{line_id}/thermal/stats")
+def get_thermal_stats(line_id: int):
+    """Return latest bag thermal profile analysis and detected anomalies."""
+    from packages.cs_counting.stream_renderer import _renderers, LiveStreamRenderer
+    if line_id not in _renderers:
+        _renderers[line_id] = LiveStreamRenderer(line_id=line_id)
+    renderer = _renderers[line_id]
+    profiles = [p.__dict__ for p in getattr(renderer, "latest_thermal_profiles", [])]
+    return {
+        "line_id": line_id,
+        "thermal_mode_enabled": renderer.thermal_mode_enabled,
+        "active_profiles": profiles,
+    }
+
+
+
+@router.websocket("/live/lines/{line_id}/ws-stream")
+async def websocket_live_stream(websocket: WebSocket, line_id: int):
+    """Serve ultra-low latency WebSocket binary JPEG frame stream for HTML5 Canvas."""
+    await websocket.accept()
+    from packages.cs_counting.stream_renderer import _renderers, LiveStreamRenderer
+    import cv2
+
+    if line_id not in _renderers:
+        _renderers[line_id] = LiveStreamRenderer(line_id=line_id)
+    renderer = _renderers[line_id]
+
+    try:
+        while True:
+            annotated = renderer.get_next_annotated_frame()
+            _, jpeg = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 75])
+            await websocket.send_bytes(jpeg.tobytes())
+            await asyncio.sleep(0.033)  # ~30 FPS
+    except WebSocketDisconnect:
+        logger.debug(f"[WS-Stream Line {line_id}] Client disconnected.")
+    except Exception as e:
+        logger.debug(f"[WS-Stream Line {line_id}] Stream closed: {e}")
+
+
 @router.get("/live/lines/{line_id}/stream")
-def stream_camera_mjpeg(line_id: int):
+def stream_camera_mjpeg(line_id: int, token: str | None = None):
     """Serve live MJPEG video stream with real-time OpenCV AI bounding boxes and amodal segmentations."""
     from packages.cs_counting.stream_renderer import get_stream_generator
     return StreamingResponse(
@@ -935,6 +1010,24 @@ def start_export_job(model_id: int, payload: dict[str, Any]):
         return SubmitJobResponse(job_id=job.id, kind=job.kind)
 
 
+@router.post("/models/{model_id}/quantize_int8", dependencies=[Depends(require_role(UserRole.ENGINEER))], status_code=202)
+def start_quantize_int8_job(model_id: int, payload: dict[str, Any] = None):
+    """Queue INT8 model quantization job (dynamic or static calibration) for edge acceleration."""
+    with get_sync_session() as db:
+        mv = db.query(ModelVersionORM).filter(ModelVersionORM.id == model_id).first()
+        if not mv:
+            raise HTTPException(status_code=404, detail=f"Model version {model_id} not found")
+        job_repo = JobRepository(db)
+        job_payload = {
+            **(payload or {}),
+            "model_id": model_id,
+            "model_path": mv.onnx_path,
+        }
+        job = job_repo.submit_job(kind="quantize_int8", payload=job_payload, requires_gpu=False, priority=3)
+        return SubmitJobResponse(job_id=job.id, kind=job.kind)
+
+
+
 @router.post("/replay/runs", dependencies=[Depends(require_role(UserRole.ENGINEER))], status_code=202)
 def start_replay_job(payload: dict[str, Any]):
     """Run the offline replay evaluation suite (accuracy/latency regression) as a background job."""
@@ -1256,6 +1349,249 @@ def activate_deployment_bundle(req: ActivateBundleRequest, user: Annotated[Curre
 # ---------------------------------------------------------------------------
 # System Health, Jobs, Outbox
 # ---------------------------------------------------------------------------
+
+@router.get("/system/tls-status")
+def get_system_tls_status(request: Request):
+    """Report current server TLS & Edge Mutual TLS (mTLS) verification status."""
+    from services.api.mtls import get_client_certificate_info, get_tls_status
+    tls_info = get_tls_status()
+    client_info = get_client_certificate_info(request)
+    return {
+        **tls_info,
+        "client_connection": client_info,
+    }
+
+
+@router.get("/system/scada-status")
+def get_system_scada_status():
+    """Report operational status of Modbus TCP, OPC-UA SCADA Server, and MQTT Industry 4.0 publisher."""
+    from drivers.scada_gateway import get_scada_gateway
+    return get_scada_gateway().get_status()
+@router.post("/system/seed_demo")
+def seed_demo_topology():
+    """Seed or reset factory demo topology: Site, Node, Line, Camera, Gate, Products, Calibration, Config, Model, Deployment Bundle, and active Session."""
+    with get_sync_session() as db:
+        # 1. Users
+        user_repo = UserRepository(db)
+        user_repo.seed_default_users()
+
+        # 2. Site
+        site = db.query(SiteORM).first()
+        if not site:
+            site = SiteORM(name="Gebze Industrial Plant Alpha", timezone="Europe/Istanbul", locale="tr_TR")
+            db.add(site)
+            db.commit()
+            db.refresh(site)
+
+        # 3. Node
+        node = db.query(NodeORM).first()
+        if not node:
+            node = NodeORM(
+                site_id=site.id,
+                hostname="edge-node-01",
+                status="online",
+                gpu_info={"name": "NVIDIA RTX 4090", "vram_mb": 24576, "cuda_version": "12.2"},
+            )
+            db.add(node)
+            db.commit()
+            db.refresh(node)
+        else:
+            node.status = "online"
+            db.commit()
+
+        # 4. Line 1
+        line = db.query(LineORM).filter(LineORM.id == 1).first()
+        if not line:
+            line = LineORM(site_id=site.id, name="Packaging Conveyor Line 1", status="counting")
+            db.add(line)
+            db.commit()
+            db.refresh(line)
+        else:
+            line.status = "counting"
+            db.commit()
+
+        # 5. Camera & Epoch for Line 1
+        cam = db.query(CameraORM).filter(CameraORM.line_id == line.id).first()
+        if not cam:
+            cam = CameraORM(
+                line_id=line.id,
+                node_id=node.id,
+                source_driver="synthetic",
+                role="counting",
+                enabled=True,
+                source_config={"width": 800, "height": 400, "fps": 25},
+            )
+            db.add(cam)
+            db.commit()
+            db.refresh(cam)
+
+        epoch_repo = CameraEpochRepository(db)
+        if epoch_repo.get_current_epoch(cam.id) == 0:
+            epoch_repo.increment_and_get_epoch(cam.id)
+
+        # 6. Gate for Line 1
+        gate = db.query(GateORM).filter(GateORM.line_id == line.id).first()
+        if not gate:
+            gate = GateORM(line_id=line.id, name="Optical Counting Gate 1", order_index=0)
+            db.add(gate)
+            db.commit()
+            db.refresh(gate)
+
+        # 7. Products (at least 3 distinct profiles: Poly, Kraft, Mortar)
+        product_defs = [
+            ("50kg Polypropylene CEM I 42.5R", 50000.0, "CEM-PP-50K", {"length": 900, "width": 550, "height": 180}),
+            ("25kg Multi-wall Kraft CEM II/B-M", 25000.0, "CEM-KR-25K", {"length": 750, "width": 450, "height": 150}),
+            ("40kg Dry Ready-Mix Structural Mortar", 40000.0, "MOR-MIX-40K", {"length": 800, "width": 500, "height": 160}),
+        ]
+        prods = []
+        for p_name, p_weight, p_code, p_dims in product_defs:
+            p = db.query(ProductProfileORM).filter(
+                ProductProfileORM.site_id == site.id,
+                ProductProfileORM.erp_material_code == p_code
+            ).first()
+            if not p:
+                p = ProductProfileORM(
+                    site_id=site.id,
+                    name=p_name,
+                    nominal_weight_g=p_weight,
+                    erp_material_code=p_code,
+                    nominal_dims_mm=p_dims,
+                )
+                db.add(p)
+                db.commit()
+                db.refresh(p)
+            prods.append(p)
+
+        # 8. Calibration
+        calib = db.query(LineCalibrationORM).filter(
+            LineCalibrationORM.line_id == line.id,
+            LineCalibrationORM.is_active == True
+        ).first()
+        if not calib:
+            calib = LineCalibrationORM(
+                line_id=line.id,
+                stage="scale",
+                belt_speed_px_per_frame=12.0,
+                belt_direction_vector=[1.0, 0.0],
+                px_per_mm=0.75,
+                mean_bag_gate_area_px=25000.0,
+                bag_area_stddev_px=800.0,
+                roi_src_points=[[50, 50], [750, 50], [750, 350], [50, 350]],
+                is_active=True,
+                created_by="system",
+            )
+            db.add(calib)
+            db.commit()
+            db.refresh(calib)
+
+        # 9. ConfigVersion
+        config = db.query(ConfigVersionORM).filter(ConfigVersionORM.line_id == line.id).first()
+        if not config:
+            config = ConfigVersionORM(
+                line_id=line.id,
+                payload={
+                    "roi_polygon": [[50, 50], [750, 50], [750, 350], [50, 350]],
+                    "gate_position_along_axis": 400.0,
+                    "pre_gate_offset": 60.0,
+                    "post_gate_offset": 60.0,
+                    "confidence_threshold": 0.80,
+                    "merge_area_ratio": 1.5,
+                    "discrepancy_threshold": 0.05,
+                },
+                created_by="system",
+            )
+            db.add(config)
+            db.commit()
+            db.refresh(config)
+
+        # 10. ModelVersion
+        model_ver = db.query(ModelVersionORM).filter(ModelVersionORM.onnx_hash == "sha256:fab20rfdetrprodv2").first()
+        if not model_ver:
+            model_ver = ModelVersionORM(
+                onnx_hash="sha256:fab20rfdetrprodv2",
+                onnx_path="./models/rfdetr_seg_v2.onnx",
+                stage="active",
+            )
+            db.add(model_ver)
+            db.commit()
+            db.refresh(model_ver)
+
+        # 11. DeploymentBundle
+        bundle = db.query(DeploymentBundleORM).filter(
+            DeploymentBundleORM.line_id == line.id,
+            DeploymentBundleORM.deactivated_at == None
+        ).first()
+        if not bundle:
+            bundle = DeploymentBundleORM(
+                line_id=line.id,
+                model_version_id=model_ver.id,
+                config_version_id=config.id,
+                calibration_id=calib.id,
+                git_commit="v2.0.0-prod",
+                activated_by="system",
+            )
+            db.add(bundle)
+            db.commit()
+            db.refresh(bundle)
+
+        # 12. Active Session for Line 1
+        sess = db.query(SessionORM).filter(
+            SessionORM.line_id == line.id,
+            SessionORM.status.in_(["open", "counting"])
+        ).first()
+        if not sess:
+            sess = SessionORM(
+                line_id=line.id,
+                product_profile_id=prods[0].id,
+                external_ref="DISP-2026-00892",
+                target_count=150,
+                vehicle_plate="34 ABC 789",
+                driver_name="Ahmet Yilmaz",
+                carrier_company="Borusan Lojistik",
+                status="counting",
+            )
+            db.add(sess)
+            db.commit()
+            db.refresh(sess)
+        else:
+            sess.status = "counting"
+            if not sess.target_count:
+                sess.target_count = 150
+            db.commit()
+
+        # 13. Transactional Outbox Entry
+        outbox_entry = db.query(OutboxORM).filter(OutboxORM.session_id == sess.id).first()
+        if not outbox_entry:
+            outbox_repo = OutboxRepository(db)
+            outbox_repo.create_entry(
+                session_id=sess.id,
+                payload={
+                    "event": "session_dispatch_init",
+                    "target_count": sess.target_count,
+                    "sku": prods[0].erp_material_code,
+                },
+                external_ref=sess.external_ref,
+            )
+
+        # 14. Refresh LiveStreamRenderer cache if initialized
+        try:
+            from packages.cs_counting.stream_renderer import _renderers
+            if line.id in _renderers:
+                _renderers[line.id].reload_camera_context()
+                _renderers[line.id].reload_active_config()
+                _renderers[line.id].reload_perspective_calibration()
+        except Exception as e:
+            logger.warning(f"Could not refresh LiveStreamRenderer cache: {e}")
+
+        return {
+            "status": "ok",
+            "message": "Gebze factory demo topology and session initialized successfully.",
+            "site_id": site.id,
+            "line_id": line.id,
+            "session_id": sess.id,
+        }
+
+
 
 @router.get("/system/health")
 def get_system_health(user: Annotated[CurrentUser, Depends(get_current_user)]):

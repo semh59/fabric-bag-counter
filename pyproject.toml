@@ -8,7 +8,7 @@ version = "2.0.0"
 description = "Local Conveyor Bag Counting and Dispatch Reconciliation System"
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "MIT" }
+license = { text = "PolyForm Noncommercial 1.0.0" }
 authors = [{ name = "Fabric Bag Counter Core Team" }]
 dependencies = [
     "fastapi>=0.110.0",
@@ -29,7 +29,10 @@ dependencies = [
     "passlib[bcrypt]>=1.7.4",
     "opencv-python-headless>=4.9.0.80",
     "pyserial>=3.5",
+    "paho-mqtt>=2.1.0",
+    "asyncua>=2.0.1",
 ]
+
 
 [project.optional-dependencies]
 # Plain CPU onnxruntime for VisionDetector inside cs-api itself

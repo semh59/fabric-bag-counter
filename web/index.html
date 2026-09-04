@@ -797,7 +797,7 @@
                         <option value="rtsp">🌐 Factory IP Camera (RTSP)</option>
                       </select>
                       <button onclick="toggleFeedMode(${lineId}, ${session.id})" id="feed-mode-toggle" class="text-[11px] px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700">
-                        ${feedMode === 'stream' ? '🎬 Live Stream' : '🎨 60 FPS Canvas'}
+                        ${feedMode === 'webrtc' ? '⚡ WebRTC (<50ms)' : (feedMode === 'stream' ? '🎬 Live MJPEG' : '🎨 60 FPS Canvas')}
                       </button>
                       <span class="text-emerald-400 font-bold text-xs" id="live-fps">— FPS</span>
                     </div>
@@ -807,7 +807,7 @@
                   <div class="flex flex-wrap items-center gap-1.5 p-2 bg-slate-900/90 rounded-xl border border-slate-800 text-[11px] mb-2.5">
                     <button onclick="toggleWebRTC()" id="webrtc-btn" class="px-2.5 py-1 rounded ${isWebRTCActive ? 'bg-rose-600 text-white animate-pulse' : 'bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/30'} flex items-center space-x-1 font-semibold transition">
                       <span>📷</span>
-                      <span id="webrtc-label">${isWebRTCActive ? 'Stop Camera' : 'Start Camera (WebRTC)'}</span>
+                      <span id="webrtc-label">${isWebRTCActive ? 'Stop Camera' : 'Local Camera'}</span>
                     </button>
                     <button onclick="toggleGateDrag()" id="drag-gate-btn" class="px-2.5 py-1 rounded ${isDraggingGateEnabled ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300'} border border-slate-700 font-semibold flex items-center space-x-1 transition">
                       <span>↔️</span>
@@ -825,19 +825,26 @@
                       <span id="audio-icon-live">${soundEnabled ? '🔊' : '🔇'}</span>
                       <span id="audio-label-live">${soundEnabled ? 'Sound On' : 'Muted'}</span>
                     </button>
+                    <button onclick="toggleThermalMode(${lineId})" id="thermal-btn" class="px-2.5 py-1 rounded ${isThermalActive ? 'bg-amber-600 text-white animate-pulse' : 'bg-slate-800 text-slate-300'} border border-slate-700 font-semibold flex items-center space-x-1 transition">
+                      <span>🌡️</span>
+                      <span id="thermal-btn-label">${isThermalActive ? 'Thermal IR (On)' : 'Thermal IR'}</span>
+                    </button>
                     <button onclick="openDispatchReportModal(${session.id})" class="px-2.5 py-1 rounded bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/30 font-semibold flex items-center space-x-1 ml-auto transition">
                       <span>📄</span>
                       <span>Dispatch Report (PDF)</span>
                     </button>
                   </div>
 
+
                   <!-- Live Stream Viewport -->
                   <div class="relative bg-slate-950 rounded-2xl border-2 border-slate-700/80 overflow-hidden shadow-inner flex items-center justify-center min-h-[300px]" id="video-viewport">
-                    ${feedMode === 'stream' ? `
+                    ${feedMode === 'webrtc' ? `
+                      <video id="webrtcVideoFeed" autoplay playsinline muted class="w-full h-auto block rounded-xl ${(perspectiveMode || roiDrawMode) ? 'cursor-crosshair' : ''}" onclick="handleStreamClick(event, ${lineId})"></video>
+                    ` : (feedMode === 'stream' ? `
                       <img id="liveVideoFeed" src="${API}/live/lines/${lineId}/stream" alt="Live AI Vision Camera Stream" class="w-full h-auto block rounded-xl ${(perspectiveMode || roiDrawMode) ? 'cursor-crosshair' : ''}" onclick="handleStreamClick(event, ${lineId})">
                     ` : `
                       <canvas id="conveyorCanvas" width="760" height="300" class="w-full h-full block cursor-crosshair"></canvas>
-                    `}
+                    `)}
                     <div id="gate-flash-overlay" class="absolute inset-0 bg-emerald-400/20 opacity-0 pointer-events-none transition-opacity duration-150"></div>
                   </div>
                 </div>
@@ -1028,10 +1035,79 @@
       }
     }
 
-    function toggleFeedMode(lineId, sessionId) {
-      feedMode = feedMode === 'stream' ? 'canvas' : 'stream';
-      renderLive(document.getElementById('app-container'));
-      toast(`Display mode changed: ${feedMode === 'stream' ? 'Live OpenCV MJPEG Stream' : '60 FPS Canvas Simulator'}`, 'info');
+    let activeWebRtcPc = null;
+
+    async function startWebRtcServerStream(lineId) {
+      if (activeWebRtcPc) {
+        try { activeWebRtcPc.close(); } catch(e) {}
+        activeWebRtcPc = null;
+      }
+      try {
+        toast('Connecting real-time WebRTC AI vision stream...', 'info');
+        const pc = new RTCPeerConnection({
+          iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+        });
+        activeWebRtcPc = pc;
+
+        pc.addTransceiver('video', { direction: 'recvonly' });
+
+        pc.ontrack = (event) => {
+          const videoEl = document.getElementById('webrtcVideoFeed');
+          if (videoEl && event.streams && event.streams[0]) {
+            videoEl.srcObject = event.streams[0];
+            toast('⚡ WebRTC connected: real-time AI HUD active (<50ms)', 'success');
+          }
+        };
+
+        pc.oniceconnectionstatechange = () => {
+          if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+            console.warn('WebRTC connection state:', pc.iceConnectionState);
+          }
+        };
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        const res = await fetch(`${API}/live/lines/${lineId}/webrtc/offer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sdp: pc.localDescription.sdp, type: pc.localDescription.type })
+        });
+
+        if (!res.ok) {
+          throw new Error('Server rejected SDP offer: ' + res.statusText);
+        }
+        const answer = await res.json();
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      } catch (err) {
+        console.error('WebRTC negotiation error:', err);
+        toast('WebRTC error, falling back to MJPEG: ' + err.message, 'warning');
+        feedMode = 'stream';
+        renderLive(document.getElementById('app-container'));
+      }
+    }
+
+    async function toggleFeedMode(lineId, sessionId) {
+      if (activeWebRtcPc) {
+        try { activeWebRtcPc.close(); } catch(e) {}
+        activeWebRtcPc = null;
+      }
+
+      if (feedMode === 'stream') {
+        feedMode = 'webrtc';
+      } else if (feedMode === 'webrtc') {
+        feedMode = 'canvas';
+      } else {
+        feedMode = 'stream';
+      }
+
+      await renderLive(document.getElementById('app-container'));
+
+      if (feedMode === 'webrtc') {
+        startWebRtcServerStream(lineId);
+      } else {
+        toast(`Display mode changed: ${feedMode === 'stream' ? 'Live OpenCV MJPEG Stream' : '60 FPS Canvas Simulator'}`, 'info');
+      }
     }
 
     async function switchCameraSource(lineId, val) {
@@ -1320,7 +1396,25 @@
       toast(isDraggingGateEnabled ? '↔️ Laser gate move mode active (drag on screen)' : 'Laser gate locked', 'info');
     }
 
+    let isThermalActive = false;
+
+    async function toggleThermalMode(lineId) {
+      try {
+        const res = await api(`/live/lines/${lineId}/thermal/toggle`, { method: 'POST' });
+        isThermalActive = res.thermal_mode_enabled;
+        const btn = document.getElementById('thermal-btn');
+        if (btn) {
+          btn.className = `px-2.5 py-1 rounded ${isThermalActive ? 'bg-amber-600 text-white animate-pulse' : 'bg-slate-800 text-slate-300'} border border-slate-700 font-semibold flex items-center space-x-1 transition`;
+          btn.innerHTML = `<span>🌡️</span><span id="thermal-btn-label">${isThermalActive ? 'Thermal IR (On)' : 'Thermal IR'}</span>`;
+        }
+        toast(isThermalActive ? '🔥 Thermal IR radiometric heatmap & hot leak detector active' : 'Thermal IR disabled', 'info');
+      } catch (err) {
+        toast('Thermal toggle error: ' + (err.detail || err.message), 'error');
+      }
+    }
+
     let roiLineId = 1;
+
 
     function toggleRoiDraw(lineId) {
       roiDrawMode = !roiDrawMode;

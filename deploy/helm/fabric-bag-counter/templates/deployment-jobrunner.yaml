@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "fabric-bag-counter.fullname" . }}-jobrunner
+  labels:
+    {{- include "fabric-bag-counter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: jobrunner
+spec:
+  replicas: {{ .Values.jobrunner.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "fabric-bag-counter.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: jobrunner
+  template:
+    metadata:
+      labels:
+        {{- include "fabric-bag-counter.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: jobrunner
+    spec:
+      {{- if and .Values.jobrunner.gpu.enabled .Values.jobrunner.gpu.nodeSelectorKey }}
+      nodeSelector:
+        {{ .Values.jobrunner.gpu.nodeSelectorKey }}: {{ .Values.jobrunner.gpu.nodeSelectorValue | quote }}
+      {{- end }}
+      containers:
+        - name: jobrunner
+          image: "{{ .Values.global.imageRegistry }}/{{ .Values.jobrunner.image.repository }}:{{ .Values.jobrunner.image.tag }}"
+          imagePullPolicy: {{ .Values.jobrunner.image.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "fabric-bag-counter.fullname" . }}-config
+          env:
+            - name: DATABASE_URL
+              value: "postgresql+asyncpg://{{ .Values.database.user }}:$(DB_PASSWORD)@{{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}"
+            - name: DATABASE_SYNC_URL
+              value: "postgresql://{{ .Values.database.user }}:$(DB_PASSWORD)@{{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.passwordSecretName }}
+                  key: {{ .Values.database.passwordSecretKey }}
+                  optional: true
+            - name: DB_SSL_CA
+              value: "/etc/ssl/certs/ca.crt"
+            - name: DB_SSL_CERT
+              value: "/etc/ssl/certs/edge_client.crt"
+            - name: DB_SSL_KEY
+              value: "/etc/ssl/certs/edge_client.key"
+            - name: JOBRUNNER_LEASE_SECONDS
+              value: {{ .Values.jobrunner.leaseSeconds | quote }}
+          volumeMounts:
+            - name: mtls-certs
+              mountPath: /etc/ssl/certs
+              readOnly: true
+            - name: models-storage
+              mountPath: /app/models
+            - name: datasets-storage
+              mountPath: /app/data
+          resources:
+            {{- toYaml .Values.jobrunner.resources | nindent 12 }}
+      volumes:
+        - name: mtls-certs
+          secret:
+            secretName: {{ .Values.database.ssl.caSecretName }}
+            optional: true
+        - name: models-storage
+          persistentVolumeClaim:
+            claimName: {{ .Values.jobrunner.storage.modelsVolumeName }}
+        - name: datasets-storage
+          persistentVolumeClaim:
+            claimName: {{ .Values.jobrunner.storage.datasetsVolumeName }}

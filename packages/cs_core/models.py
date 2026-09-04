@@ -67,6 +67,7 @@ class JobKind(str, Enum):
     CALIBRATE_MOTION = "calibrate_motion"
     CALIBRATE_SCALE = "calibrate_scale"
     MINE_HARD_FRAMES = "mine_hard_frames"
+    QUANTIZE_INT8 = "quantize_int8"
 
 
 class JobStatus(str, Enum):

@@ -1,0 +1,93 @@
+﻿PolyForm Noncommercial License 1.0.0
+https://polyformproject.org/licenses/noncommercial/1.0.0/
+
+Copyright (c) 2026 Fabric Bag Counter Contributors
+
+==============================================================================
+IMPORTANT LEGAL NOTICE: STRICTLY NON-COMMERCIAL & EXPERIMENTAL RESEARCH ONLY
+==============================================================================
+
+## Acceptance
+
+In order to receive this license, you must agree to its rules. The rules of this
+license are both obligations under your agreement and conditions to your license.
+You must not do anything with this software that triggers a rule that you cannot
+or will not follow.
+
+## Copyright License
+
+The licensor grants you a copyright license for the software to do everything
+you might do with the copyright, so long as you do not use the software for a
+commercial purpose.
+
+## Commercial Purpose
+
+A commercial purpose is one primarily intended for or directed toward commercial
+advantage or monetary compensation.
+
+Commercial purposes include, but are not limited to:
+1. Using the software to provide a commercial service, SaaS platform, or hosted
+   counting API, directly or indirectly, for fee, subscription, or monetary consideration.
+2. Using the software in connection with the commercial manufacturing, bagging,
+   packaging, inventory tracking, distribution, or sale of physical goods.
+3. Integrating, distributing, or embedding the software or its machine-learning
+   models into any commercial product, hardware appliance, or enterprise software.
+4. Using the software in any live commercial factory, industrial plant, warehouse,
+   or commercial shipping terminal.
+
+For commercial inquiries, licensing exemptions, or industrial deployment rights,
+contact the repository owner.
+
+## Permitted Non-Commercial Uses
+
+Permitted uses include:
+1. Personal study, academic education, coursework, and university research.
+2. Evaluation, algorithm benchmarking, and non-commercial open-source exploration.
+3. Simulation testing in offline, air-gapped synthetic lab environments.
+4. Contributing bug fixes, features, or pull requests back to this public repository.
+
+## Patent License
+
+The licensor grants you a patent license for the software that covers patent
+claims the licensor can license, or becomes able to license, that you would
+infringe by using the software without a commercial purpose.
+
+## Notices
+
+You must ensure that anyone who gets a copy of any part of this software from
+you also gets a copy of these terms.
+
+## No Other Rights
+
+These terms do not imply any other licenses, including licenses of trademark,
+trade secret, or patent.
+
+## Defensive Termination
+
+If anyone brings a legal claim against the licensor or anyone else for patent
+infringement concerning the software, that person's license under these terms
+ends immediately.
+
+## No Warranty (As-Is)
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, LOST PROFITS,
+FACTORY DOWNTIME, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT
+OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+## Physical Machinery & Industrial Safety Disclaimer
+
+THIS SOFTWARE HAS BEEN DEVELOPED AND TESTED SOLELY IN SYNTHETIC LAB,
+SIMULATION, AND VIRTUAL EMBEDDED BENCH ENVIRONMENTS. IT HAS NOT BEEN FIELD-TESTED,
+VALIDATED, OR CERTIFIED ON PHYSICAL CONVEYOR HARDWARE, REAL OPTICAL SENSORS,
+OR LIVE INDUSTRIAL MACHINERY UNDER OPERATING CONDITIONS.
+
+THIS SOFTWARE IS NOT CERTIFIED AS A LEGAL-FOR-TRADE WEIGHT/MASS RECONCILIATION
+DEVICE (OIML R51 / NTEP) NOR AS A SAFETY-CRITICAL SYSTEM (IEC 61508 / SIL).
+DEPLOYING THIS SOFTWARE IN REAL PHYSICAL FACTORY ENVIRONMENTS WITHOUT INDEPENDENT
+HARDWARE VALIDATION, SAFETY INTERLOCKS, AND REGULATORY CERTIFICATION MAY CAUSE
+EQUIPMENT DAMAGE, PACKAGING JAMS, INVENTORY LOSS, OR BODILY INJURY AND IS
+STRICTLY AT THE USER'S SOLE RISK.

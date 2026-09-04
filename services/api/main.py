@@ -72,10 +72,33 @@ if os.path.exists(web_dist_path):
 
 
 def main() -> None:
+    import ssl
     import uvicorn
     host = os.environ.get("API_HOST", "0.0.0.0")
     port = int(os.environ.get("API_PORT", "8080"))
-    uvicorn.run("services.api.main:app", host=host, port=port, reload=False)
+
+    ssl_keyfile = os.environ.get("SSL_KEYFILE")
+    ssl_certfile = os.environ.get("SSL_CERTFILE")
+    ssl_ca_certs = os.environ.get("SSL_CA_CERTS")
+
+    kwargs: dict[str, Any] = {
+        "host": host,
+        "port": port,
+        "reload": False,
+    }
+
+    if ssl_keyfile and ssl_certfile:
+        kwargs["ssl_keyfile"] = ssl_keyfile
+        kwargs["ssl_certfile"] = ssl_certfile
+        if ssl_ca_certs:
+            kwargs["ssl_ca_certs"] = ssl_ca_certs
+            cert_reqs = int(os.environ.get("SSL_CERT_REQS", str(ssl.CERT_REQUIRED)))
+            kwargs["ssl_cert_reqs"] = cert_reqs
+            logger.info(f"[mTLS] Mutual TLS enabled: cert={ssl_certfile}, ca={ssl_ca_certs}")
+        else:
+            logger.info(f"[TLS] Server TLS enabled: cert={ssl_certfile}")
+
+    uvicorn.run("services.api.main:app", **kwargs)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,163 @@
+global:
+  imageRegistry: "registry.fabric-industrial.internal"
+  imagePullSecrets: []
+  environment: "production"
+  siteId: 1
+  siteName: "Factory Plant 1"
+
+# Database Configuration (PostgreSQL with mTLS)
+database:
+  host: "postgres-cluster.database.svc.cluster.local"
+  port: 5432
+  name: "bag_counter"
+  user: "cs_admin"
+  passwordSecretName: "fabric-db-credentials"
+  passwordSecretKey: "password"
+  ssl:
+    mode: "verify-ca" # disable, require, verify-ca, verify-full
+    caSecretName: "fabric-mtls-certs"
+    caSecretKey: "ca.crt"
+    clientCertSecretName: "fabric-mtls-certs"
+    clientCertKey: "edge_client.crt"
+    clientKeySecretName: "fabric-mtls-certs"
+    clientKeyKey: "edge_client.key"
+  pool:
+    size: 20
+    maxOverflow: 10
+    timeout: 30
+    recycle: 1800
+
+# Central API Server (FastAPI)
+api:
+  replicaCount: 3
+  image:
+    repository: "fabric/cs-api"
+    tag: "v1.0.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    httpPort: 8080
+    webrtcPort: 8081
+  resources:
+    limits:
+      cpu: "4000m"
+      memory: "8Gi"
+    requests:
+      cpu: "1000m"
+      memory: "2Gi"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 75
+    targetMemoryUtilizationPercentage: 80
+  livenessProbe:
+    httpGet:
+      path: /api/health
+      port: 8080
+    initialDelaySeconds: 15
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /api/health
+      port: 8080
+    initialDelaySeconds: 5
+    periodSeconds: 5
+  tls:
+    enabled: true
+    secretName: "fabric-server-tls"
+    requireClientCert: false
+
+# Ingress Controller Configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/websocket-services: "fabric-bag-counter-api"
+  hosts:
+    - host: "counter.fabric-industrial.internal"
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: "fabric-bag-counter-tls"
+      hosts:
+        - "counter.fabric-industrial.internal"
+
+# GPU/CPU Background Jobrunner Worker
+jobrunner:
+  replicaCount: 2
+  image:
+    repository: "fabric/cs-jobrunner"
+    tag: "v1.0.0"
+    pullPolicy: IfNotPresent
+  leaseSeconds: 120
+  gpu:
+    enabled: true
+    count: 1
+    nodeSelectorKey: "nvidia.com/gpu.present"
+    nodeSelectorValue: "true"
+  resources:
+    limits:
+      cpu: "8000m"
+      memory: "16Gi"
+      nvidia.com/gpu: 1
+    requests:
+      cpu: "2000m"
+      memory: "4Gi"
+  storage:
+    modelsVolumeName: "fabric-models-pvc"
+    datasetsVolumeName: "fabric-datasets-pvc"
+
+# ERP Synchronization Relay (SAP S/4HANA / ECC)
+erpRelay:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: "fabric/cs-erp-relay"
+    tag: "v1.0.0"
+    pullPolicy: IfNotPresent
+  pollIntervalSeconds: 3.0
+  sap:
+    mode: "odata" # odata, ecc, csv
+    odataBaseUrl: "https://sap.fabric-industrial.internal:44300/sap/opu/odata/sap"
+    authSecretName: "fabric-sap-credentials"
+    materialDocService: "API_MATERIAL_DOCUMENT_SRV"
+    outboundDeliveryService: "API_OUTBOUND_DELIVERY_SRV"
+
+# Edge Supervisor (DaemonSet on Factory Edge Nodes)
+edgeSupervisor:
+  enabled: true
+  image:
+    repository: "fabric/cs-edge-supervisor"
+    tag: "v1.0.0"
+    pullPolicy: IfNotPresent
+  nodeSelector:
+    factory-role: "edge-conveyor-node"
+  hostIPC: true
+  hostNetwork: false
+  shmSize: "4Gi"
+  devices:
+    videoDevicesEnabled: true
+  modbus:
+    enabled: true
+    plcHost: "192.168.1.50"
+    plcPort: 502
+    unitId: 1
+  opcua:
+    enabled: true
+    port: 4840
+    endpoint: "opc.tcp://0.0.0.0:4840/fabric/server/"
+  mqtt:
+    enabled: true
+    brokerHost: "mqtt.fabric-industrial.internal"
+    brokerPort: 8883
+    useTls: true
+    topicPrefix: "fabric/plant1"
+  thermal:
+    enabled: true
+    warningTempC: 75.0
+    criticalTempC: 90.0

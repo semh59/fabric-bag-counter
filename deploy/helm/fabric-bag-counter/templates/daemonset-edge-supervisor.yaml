@@ -1,0 +1,84 @@
+{{- if .Values.edgeSupervisor.enabled -}}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "fabric-bag-counter.fullname" . }}-edge-supervisor
+  labels:
+    {{- include "fabric-bag-counter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: edge-supervisor
+spec:
+  selector:
+    matchLabels:
+      {{- include "fabric-bag-counter.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: edge-supervisor
+  template:
+    metadata:
+      labels:
+        {{- include "fabric-bag-counter.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: edge-supervisor
+    spec:
+      hostIPC: {{ .Values.edgeSupervisor.hostIPC }}
+      hostNetwork: {{ .Values.edgeSupervisor.hostNetwork }}
+      nodeSelector:
+        {{- toYaml .Values.edgeSupervisor.nodeSelector | nindent 8 }}
+      containers:
+        - name: edge-supervisor
+          image: "{{ .Values.global.imageRegistry }}/{{ .Values.edgeSupervisor.image.repository }}:{{ .Values.edgeSupervisor.image.tag }}"
+          imagePullPolicy: {{ .Values.edgeSupervisor.image.pullPolicy }}
+          securityContext:
+            privileged: true
+          ports:
+            {{- if .Values.edgeSupervisor.opcua.enabled }}
+            - name: opcua
+              containerPort: {{ .Values.edgeSupervisor.opcua.port }}
+              protocol: TCP
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "fabric-bag-counter.fullname" . }}-config
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: DATABASE_SYNC_URL
+              value: "postgresql://{{ .Values.database.user }}:$(DB_PASSWORD)@{{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.passwordSecretName }}
+                  key: {{ .Values.database.passwordSecretKey }}
+                  optional: true
+            - name: DB_SSL_CA
+              value: "/etc/ssl/certs/ca.crt"
+            - name: DB_SSL_CERT
+              value: "/etc/ssl/certs/edge_client.crt"
+            - name: DB_SSL_KEY
+              value: "/etc/ssl/certs/edge_client.key"
+            - name: OPCUA_ENDPOINT
+              value: {{ .Values.edgeSupervisor.opcua.endpoint | quote }}
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: mtls-certs
+              mountPath: /etc/ssl/certs
+              readOnly: true
+            {{- if .Values.edgeSupervisor.devices.videoDevicesEnabled }}
+            - name: dev-video
+              mountPath: /dev
+            {{- end }}
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ .Values.edgeSupervisor.shmSize }}
+        - name: mtls-certs
+          secret:
+            secretName: {{ .Values.database.ssl.caSecretName }}
+            optional: true
+        {{- if .Values.edgeSupervisor.devices.videoDevicesEnabled }}
+        - name: dev-video
+          hostPath:
+            path: /dev
+        {{- end }}
+{{- end }}

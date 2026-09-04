@@ -18,7 +18,7 @@ import numpy as np
 import cv2
 import httpx
 
-API_URL = "http://localhost:8080/api"
+API_URL = "http://127.0.0.1:8080/api"
 
 def print_header(title):
     print("\n" + "=" * 70)
@@ -128,7 +128,7 @@ def main():
 
     # 3.1 Touching Bags Split & Merge Accuracy
     from packages.cs_vision.detector import VisionDetector
-    detector = VisionDetector(conf_threshold=0.25, mean_bag_gate_area_px=25000.0, merge_area_ratio=1.50)
+    detector = VisionDetector(model_path=None, conf_threshold=0.25, mean_bag_gate_area_px=25000.0, merge_area_ratio=1.50)
     
     # Synthetic double bag contour (wide)
     double_bag_img = np.zeros((400, 800, 3), dtype=np.uint8)

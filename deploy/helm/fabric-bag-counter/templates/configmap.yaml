@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "fabric-bag-counter.fullname" . }}-config
+  labels:
+    {{- include "fabric-bag-counter.labels" . | nindent 4 }}
+data:
+  SITE_ID: {{ .Values.global.siteId | quote }}
+  SITE_NAME: {{ .Values.global.siteName | quote }}
+  ENVIRONMENT: {{ .Values.global.environment | quote }}
+  API_PORT: {{ .Values.api.service.httpPort | quote }}
+  DB_POOL_SIZE: {{ .Values.database.pool.size | quote }}
+  DB_MAX_OVERFLOW: {{ .Values.database.pool.maxOverflow | quote }}
+  DB_POOL_TIMEOUT: {{ .Values.database.pool.timeout | quote }}
+  DB_POOL_RECYCLE: {{ .Values.database.pool.recycle | quote }}
+  DB_SSL_MODE: {{ .Values.database.ssl.mode | quote }}
+  MODBUS_PLC_HOST: {{ .Values.edgeSupervisor.modbus.plcHost | quote }}
+  MODBUS_PLC_PORT: {{ .Values.edgeSupervisor.modbus.plcPort | quote }}
+  OPCUA_ENABLED: {{ .Values.edgeSupervisor.opcua.enabled | quote }}
+  OPCUA_PORT: {{ .Values.edgeSupervisor.opcua.port | quote }}
+  MQTT_ENABLED: {{ .Values.edgeSupervisor.mqtt.enabled | quote }}
+  MQTT_BROKER_HOST: {{ .Values.edgeSupervisor.mqtt.brokerHost | quote }}
+  MQTT_BROKER_PORT: {{ .Values.edgeSupervisor.mqtt.brokerPort | quote }}
+  MQTT_TOPIC_PREFIX: {{ .Values.edgeSupervisor.mqtt.topicPrefix | quote }}
+  THERMAL_ENABLED: {{ .Values.edgeSupervisor.thermal.enabled | quote }}
+  THERMAL_WARN_TEMP_C: {{ .Values.edgeSupervisor.thermal.warningTempC | quote }}
+  THERMAL_CRIT_TEMP_C: {{ .Values.edgeSupervisor.thermal.criticalTempC | quote }}

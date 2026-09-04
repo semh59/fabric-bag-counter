@@ -18,11 +18,12 @@ def main():
     print("=" * 60)
 
     # Verify if FastAPI web server is running at localhost:8080
+    # Verify if FastAPI web server is running at 127.0.0.1:8080
     import urllib.request
     try:
-        urllib.request.urlopen("http://localhost:8080", timeout=2)
+        urllib.request.urlopen("http://127.0.0.1:8080", timeout=2)
     except Exception:
-        print("\n[SKIP] Local web server is not actively running at http://localhost:8080.")
+        print("\n[SKIP] Local web server is not actively running at http://127.0.0.1:8080.")
         print("       To execute real Playwright E2E browser tests:")
         print("       1. Start server: python -m uvicorn services.api.main:app --port 8080")
         print("       2. Re-run: python tools/test_browser_ui_end_to_end.py\n")
@@ -36,8 +37,8 @@ def main():
         page = context.new_page()
 
         # 1. Navigate to Web UI
-        print("[2/10] Navigating to http://localhost:8080...")
-        page.goto("http://localhost:8080", wait_until="networkidle", timeout=15000)
+        print("[2/10] Navigating to http://127.0.0.1:8080...")
+        page.goto("http://127.0.0.1:8080", wait_until="networkidle", timeout=15000)
         title = page.title()
         print(f"  [OK] Page loaded. Title: '{title}'")
         assert "Bag Counter" in title or "Fabric" in title, f"Unexpected page title: {title}"

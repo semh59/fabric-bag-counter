@@ -8,9 +8,39 @@ from __future__ import annotations
 
 import math
 from typing import Any
-
 import numpy as np
-from scipy.optimize import linear_sum_assignment
+
+try:
+    from scipy.optimize import linear_sum_assignment
+except Exception:  # pragma: no cover
+    def linear_sum_assignment(cost_matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Pure NumPy / Python fallback for linear_sum_assignment when scipy native C-extension
+        is blocked by Windows Application Control or unavailable in lightweight edge environments.
+        """
+        C = np.asarray(cost_matrix, dtype=float)
+        n_rows, n_cols = C.shape
+        if n_rows == 0 or n_cols == 0:
+            return np.array([], dtype=int), np.array([], dtype=int)
+
+        flat_indices = np.argsort(C, axis=None)
+        row_ind_list: list[int] = []
+        col_ind_list: list[int] = []
+        used_rows: set[int] = set()
+        used_cols: set[int] = set()
+
+        for idx in flat_indices:
+            r, c = divmod(int(idx), n_cols)
+            if r not in used_rows and c not in used_cols:
+                row_ind_list.append(r)
+                col_ind_list.append(c)
+                used_rows.add(r)
+                used_cols.add(c)
+                if len(used_rows) == n_rows or len(used_cols) == n_cols:
+                    break
+
+        order = np.argsort(row_ind_list)
+        return np.array(row_ind_list, dtype=int)[order], np.array(col_ind_list, dtype=int)[order]
+
 
 from packages.cs_core.geometry import compute_mask_iou
 from packages.cs_tracking.diou import compute_diou

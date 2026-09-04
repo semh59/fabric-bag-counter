@@ -14,7 +14,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 import numpy as np
-from scipy.optimize import linear_sum_assignment
+from packages.cs_tracking.matching import linear_sum_assignment
 
 logger = logging.getLogger(__name__)
 

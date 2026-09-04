@@ -417,6 +417,33 @@ class JobrunnerWorker:
             )
             return {"candidates_mined": len(candidates)}
 
+        elif kind == "quantize_int8":
+            from packages.cs_vision.quantization import quantize_rfdetr_model_int8
+            from packages.cs_vision.tensorrt_builder import TensorRtEngineBuilder
+
+            model_path = payload.get("model_path", "models/rfdetr_seg_v2.onnx")
+            out_path = payload.get("output_path")
+            mode = payload.get("mode", "dynamic")
+            calib_dir = payload.get("calibration_data_dir")
+            build_trt = payload.get("build_tensorrt", False)
+
+            res = quantize_rfdetr_model_int8(
+                input_model_path=model_path,
+                output_model_path=out_path,
+                mode=mode,
+                calibration_data_dir=calib_dir,
+            )
+
+            if build_trt:
+                trt_builder = TensorRtEngineBuilder(
+                    onnx_model_path=res["output_path"],
+                    use_int8=True,
+                )
+                trt_ok = trt_builder.build_engine()
+                res["tensorrt_engine_built"] = trt_ok
+
+            return res
+
         return {"status": "success", "kind": kind}
 
     def run_step(self) -> bool:

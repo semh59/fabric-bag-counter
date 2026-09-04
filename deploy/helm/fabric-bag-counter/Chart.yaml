@@ -1,0 +1,15 @@
+apiVersion: v2
+name: fabric-bag-counter
+description: Enterprise Industrial Conveyor Bag Counter, Vision AI & Mutated Ledger Helm Chart
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - computer-vision
+  - industrial-iot
+  - factory-automation
+  - edge-ai
+  - sap-integration
+maintainers:
+  - name: Fabric Engineering Team
+    email: engineering@fabric-industrial.internal

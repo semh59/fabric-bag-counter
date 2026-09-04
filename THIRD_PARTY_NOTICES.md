@@ -25,6 +25,8 @@ This project (`fabric-bag-counter`) utilizes open-source components governed by 
 | **bcrypt** | Apache-2.0 | Password hashing with cryptographic salt |
 | **HTTPX** | BSD-3-Clause | Asynchronous and synchronous HTTP/OData client |
 | **filterpy** | MIT | Kalman filtering for spatial state tracking |
+| **asyncua** | LGPL-3.0+ | Industrial OPC-UA SCADA Server driver |
+| **paho-mqtt** | EPL-2.0 / BSD-3-Clause | MQTT Industry 4.0 telemetry publisher |
 
 ---
 
@@ -32,6 +34,7 @@ This project (`fabric-bag-counter`) utilizes open-source components governed by 
 
 - **PyAV & FFmpeg**: PyAV dynamically links against unmodified LGPL-licensed FFmpeg shared libraries. No static linking is performed.
 - **psycopg2**: Binary distribution connects dynamically to PostgreSQL `libpq` client libraries.
+- **asyncua**: Pure-Python library used dynamically as an independent network SCADA driver.
 
 ---
 

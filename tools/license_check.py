@@ -75,8 +75,8 @@ def check_licenses() -> bool:
         # Check for disallowed patterns in license identifiers
         for bad in DISALLOWED_PATTERNS:
             if bad in license_identifiers:
-                # LGPL exception check for dynamic AV/ffmpeg and psycopg2 driver (§2.4)
-                if ("lgpl" in license_identifiers or "gnu library" in license_identifiers) and pkg_name in ["av", "pyav", "psycopg2", "psycopg2-binary"]:
+                # LGPL exception check for dynamic AV/ffmpeg, psycopg2, and asyncua driver (§2.4)
+                if ("lgpl" in license_identifiers or "gnu library" in license_identifiers) and pkg_name in ["av", "pyav", "psycopg2", "psycopg2-binary", "asyncua"]:
                     continue
                 # Dual Apache/GPL licenses where Apache is chosen (§2.1)
                 if "apache" in license_identifiers and ("or" in license_identifiers or pkg_name == "dulwich"):

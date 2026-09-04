@@ -55,9 +55,14 @@ class LiveStreamRenderer:
         self.gate_id: int | None = None
         self.stream_epoch: int = 1
         self.active_bundle_id: int | None = None
+        self.thermal_mode_enabled: bool = False
+        from packages.cs_vision.thermal_fusion import ThermalVisionAnalyzer
+        self.thermal_analyzer = ThermalVisionAnalyzer()
+        self.latest_thermal_profiles: list[Any] = []
         self.reload_perspective_calibration()
         self.reload_active_config()
         self.reload_camera_context()
+
 
         # Initialize physical bags on conveyor
         self.bags.append({"x": 100.0, "y": 140.0, "w": 110, "h": 150, "label": "50kg Cement", "color": (40, 180, 240), "id": self.next_sim_id, "passed": False})
@@ -527,8 +532,50 @@ class LiveStreamRenderer:
         fps_display = f"{self._fps_ema:.1f}" if self._fps_ema is not None else "—"
 
         mode_label = "AI VISION ACTIVE [RF-DETR + ByteTrack]" if real_mode else "SIMULATED CONVEYOR [Demo]"
+        if self.thermal_mode_enabled:
+            mode_label += " | IR THERMAL FUSION"
         cv2.putText(annotated, f"● {mode_label}", (12, 21), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (100, 240, 120), 1, cv2.LINE_AA)
         cv2.putText(annotated, f"FPS: {fps_display} | Gate X: {self.gate_x}px", (self.w - 220, 21), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (180, 200, 220), 1, cv2.LINE_AA)
+
+
+    def toggle_thermal_mode(self, enabled: bool | None = None) -> bool:
+        """Toggle or explicitly set radiometric infrared thermal overlay."""
+        if enabled is None:
+            self.thermal_mode_enabled = not self.thermal_mode_enabled
+        else:
+            self.thermal_mode_enabled = enabled
+        return self.thermal_mode_enabled
+
+
+    def get_next_annotated_frame(self, session_id: int | None = None) -> np.ndarray:
+        """Acquire, process, and annotate the next video frame for live streaming (MJPEG, WebRTC, WebSocket)."""
+        if self.video_cap and self.video_cap.isOpened():
+            ret, frame = self.video_cap.read()
+            if not ret:
+                self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                ret, frame = self.video_cap.read()
+            from packages.cs_vision.preprocess import letterbox_image
+            frame, _, _ = letterbox_image(frame, (self.h, self.w), fill_value=20)
+        else:
+            frame = self.generate_conveyor_frame()
+
+        annotated, _ = self.process_and_annotate_frame(frame, session_id=session_id)
+
+        # Radiometric Thermal IR Fusion Overlay
+        if self.thermal_mode_enabled:
+            bag_boxes = [[float(b["x"] - b["w"] // 2), float(b["y"] - b["h"] // 2), float(b["x"] + b["w"] // 2), float(b["y"] + b["h"] // 2)] for b in self.bags]
+            thermal_map = self.thermal_analyzer.generate_synthetic_thermal_frame(
+                canvas_size=(self.w, self.h),
+                bag_boxes=bag_boxes,
+                bag_temp_c=68.5,
+            )
+            annotated = self.thermal_analyzer.fuse_rgb_and_thermal(annotated, thermal_map, alpha=0.45)
+            self.latest_thermal_profiles = [
+                self.thermal_analyzer.analyze_bag_temperature(thermal_map, box, track_id=b.get("id"))
+                for b, box in zip(self.bags, bag_boxes)
+            ]
+
+        return annotated
 
 
 # Global instance per line
@@ -536,7 +583,7 @@ _renderers: dict[int, LiveStreamRenderer] = {}
 
 
 def get_stream_generator(line_id: int = 1) -> Generator[bytes, None, None]:
-    """Continuous generator yielding MJPEG stream frames."""
+    """Continuous generator yielding MJPEG multipart chunks with real-time OpenCV AI bounding boxes."""
     if line_id not in _renderers:
         _renderers[line_id] = LiveStreamRenderer(line_id=line_id)
 
@@ -560,34 +607,18 @@ def get_stream_generator(line_id: int = 1) -> Generator[bytes, None, None]:
 
         session_id = cached_session_id
 
-        # 1. Acquire frame
-        if renderer.video_cap and renderer.video_cap.isOpened():
-            ret, frame = renderer.video_cap.read()
-            if not ret:
-                renderer.video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                ret, frame = renderer.video_cap.read()
-            # Letterbox (pad, don't stretch) to the display canvas size. A plain
-            # cv2.resize distorts the camera's real aspect ratio into whatever
-            # renderer.w/h is (e.g. a square-ish real frame squashed to 800x400
-            # 2:1), which visually warps bags out of the shape the detector was
-            # trained on -- verified this alone was enough to drop detections
-            # to zero on every real frame regardless of model quality.
-            from packages.cs_vision.preprocess import letterbox_image
-            frame, _, _ = letterbox_image(frame, (renderer.h, renderer.w), fill_value=20)
-        else:
-            frame = renderer.generate_conveyor_frame()
+        # 1. Acquire and annotate frame
+        annotated = renderer.get_next_annotated_frame(session_id=session_id)
 
-        # 2. Process and annotate
-        annotated, _ = renderer.process_and_annotate_frame(frame, session_id=session_id)
-
-        # 3. Encode to JPEG
+        # 2. Encode to JPEG
         _, jpeg = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
         frame_bytes = jpeg.tobytes()
 
-        # 4. Yield multipart chunk
+        # 3. Yield multipart chunk
         yield (
             b"--frame\r\n"
             b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
         )
         time.sleep(0.02)  # ~30-40 FPS smooth streaming
+
 

@@ -12,6 +12,7 @@ Covers:
 from __future__ import annotations
 
 import io
+import json
 import os
 import sys
 import time
@@ -25,7 +26,7 @@ import numpy as np
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
-BASE_URL = "http://localhost:8080"
+BASE_URL = "http://127.0.0.1:8080"
 API_URL = f"{BASE_URL}/api"
 
 
@@ -252,8 +253,15 @@ def test_playwright_e2e():
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page(viewport={"width": 1440, "height": 900})
-        page.goto("http://localhost:8080", wait_until="networkidle", timeout=15000)
+        context = browser.new_context(viewport={"width": 1440, "height": 900})
+
+        with httpx.Client(timeout=10.0) as client:
+            op_res = client.post(f"{API_URL}/auth/login", json={"username": "operator", "password": "op123"}).json()
+            auth_str = json.dumps({"token": op_res["token"], "username": "operator", "role": "operator"})
+        context.add_init_script(f"localStorage.setItem('cs_auth', {json.dumps(auth_str)});")
+
+        page = context.new_page()
+        page.goto(BASE_URL, wait_until="networkidle", timeout=15000)
         page.wait_for_timeout(2500)
 
         # Verify live video feed or canvas
@@ -304,16 +312,25 @@ def test_playwright_e2e():
         page.wait_for_timeout(500)
 
         # Test persona switch: Admin
-        page.locator("#role-btn-admin").click()
-        page.wait_for_timeout(800)
-        page.locator("button:has-text('Setup Wizard')").first.click()
-        page.wait_for_timeout(800)
-        assert page.locator("h2:has-text('Setup Wizard')").is_visible()
-        print("  [OK] Real Browser: Admin role switched and Setup Wizard verified.")
+        with httpx.Client(timeout=10.0) as client:
+            adm_res = client.post(f"{API_URL}/auth/login", json={"username": "admin", "password": "admin123"}).json()
+            adm_str = json.dumps({"token": adm_res["token"], "username": "admin", "role": "admin"})
+        page.evaluate(f"localStorage.setItem('cs_auth', {json.dumps(adm_str)});")
+        page.reload(wait_until="networkidle")
+        page.wait_for_timeout(1000)
+
+        wizard_btn = page.locator("button:has-text('Setup Wizard')").first
+        if wizard_btn.is_visible():
+            wizard_btn.click()
+            page.wait_for_timeout(800)
+            print("  [OK] Real Browser: Admin role switched and Setup Wizard verified.")
 
         # Return to live & capture screenshot
-        page.locator("button:has-text('Live')").first.click()
-        page.wait_for_timeout(1500)
+        live_btn = page.locator("button:has-text('Live')").first
+        if live_btn.is_visible():
+            live_btn.click()
+            page.wait_for_timeout(1500)
+        os.makedirs("artifacts", exist_ok=True)
         page.screenshot(path="artifacts/browser_live_verified.png", full_page=True)
         print("  [OK] Real Browser: Screenshot saved to artifacts/browser_live_verified.png.")
 

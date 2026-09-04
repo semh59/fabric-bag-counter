@@ -9,7 +9,7 @@ import urllib.request
 import urllib.error
 import numpy as np
 
-BASE_URL = "http://localhost:8080/api"
+BASE_URL = "http://127.0.0.1:8080/api"
 
 
 def make_request(path: str, method: str = "GET", data: dict | None = None, token: str | None = None) -> tuple[int, dict | list]:
@@ -60,6 +60,13 @@ def main():
     _, prods = make_request("/products", token=op_token)
     line_id = lines[0]["id"]
     prod_id = prods[0]["id"]
+
+    # Close any existing active sessions on this line to allow fresh creation
+    _, sess_list = make_request(f"/sessions?line_id={line_id}", token=op_token)
+    if isinstance(sess_list, list):
+        for s in sess_list:
+            if s.get("status") in ["open", "counting", "paused"]:
+                make_request(f"/sessions/{s['id']}/close", method="POST", token=op_token)
 
     _, sess = make_request("/sessions", method="POST", data={
         "line_id": line_id,

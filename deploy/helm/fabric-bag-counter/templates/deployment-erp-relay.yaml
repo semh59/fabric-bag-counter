@@ -1,0 +1,56 @@
+{{- if .Values.erpRelay.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "fabric-bag-counter.fullname" . }}-erp-relay
+  labels:
+    {{- include "fabric-bag-counter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: erp-relay
+spec:
+  replicas: {{ .Values.erpRelay.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "fabric-bag-counter.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: erp-relay
+  template:
+    metadata:
+      labels:
+        {{- include "fabric-bag-counter.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: erp-relay
+    spec:
+      containers:
+        - name: erp-relay
+          image: "{{ .Values.global.imageRegistry }}/{{ .Values.erpRelay.image.repository }}:{{ .Values.erpRelay.image.tag }}"
+          imagePullPolicy: {{ .Values.erpRelay.image.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "fabric-bag-counter.fullname" . }}-config
+          env:
+            - name: DATABASE_SYNC_URL
+              value: "postgresql://{{ .Values.database.user }}:$(DB_PASSWORD)@{{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.passwordSecretName }}
+                  key: {{ .Values.database.passwordSecretKey }}
+                  optional: true
+            - name: DB_SSL_CA
+              value: "/etc/ssl/certs/ca.crt"
+            - name: DB_SSL_CERT
+              value: "/etc/ssl/certs/edge_client.crt"
+            - name: DB_SSL_KEY
+              value: "/etc/ssl/certs/edge_client.key"
+            - name: ERP_MODE
+              value: {{ .Values.erpRelay.sap.mode | quote }}
+            - name: SAP_ODATA_URL
+              value: {{ .Values.erpRelay.sap.odataBaseUrl | quote }}
+          volumeMounts:
+            - name: mtls-certs
+              mountPath: /etc/ssl/certs
+              readOnly: true
+      volumes:
+        - name: mtls-certs
+          secret:
+            secretName: {{ .Values.database.ssl.caSecretName }}
+            optional: true
+{{- end }}

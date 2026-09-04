@@ -68,3 +68,14 @@ data/test_exports/*.csv
 data/csv_exports/*.csv
 *.log
 
+# Certificates and keys
+certs/
+*.key
+*.crt
+*.pem
+
+# Generated INT8 models & TensorRT caches
+models/*_int8*.onnx
+models/*.cache
+models/trt_cache/
+

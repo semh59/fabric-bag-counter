@@ -54,6 +54,82 @@ def _check_db_environment(target_url: str) -> None:
         )
 
 
+def get_db_ssl_config() -> dict[str, Any]:
+    """Inspect environment for mutual TLS / SSL database configuration (§4.4, §8.1)."""
+    ssl_mode = os.getenv("DB_SSL_MODE")
+    ssl_ca = os.getenv("DB_SSL_CA") or os.getenv("DB_SSL_ROOTCERT")
+    ssl_cert = os.getenv("DB_SSL_CERT")
+    ssl_key = os.getenv("DB_SSL_KEY")
+    return {
+        "ssl_mode": ssl_mode,
+        "ssl_ca": ssl_ca,
+        "ssl_cert": ssl_cert,
+        "ssl_key": ssl_key,
+        "is_mtls_configured": bool(ssl_ca and ssl_cert and ssl_key),
+        "is_ssl_enabled": bool(ssl_mode or ssl_ca or ssl_cert),
+    }
+
+
+def get_sync_connect_args(target_url: str) -> dict[str, Any]:
+    """Build connection arguments for sync SQLAlchemy engine (SQLite or PostgreSQL with mTLS)."""
+    if "sqlite" in target_url:
+        return {"check_same_thread": False, "timeout": 30}
+
+    connect_args: dict[str, Any] = {}
+    cfg = get_db_ssl_config()
+    if cfg["ssl_mode"]:
+        connect_args["sslmode"] = cfg["ssl_mode"]
+    elif cfg["ssl_ca"]:
+        connect_args["sslmode"] = "verify-ca"
+
+    if cfg["ssl_ca"]:
+        connect_args["sslrootcert"] = cfg["ssl_ca"]
+    if cfg["ssl_cert"]:
+        connect_args["sslcert"] = cfg["ssl_cert"]
+    if cfg["ssl_key"]:
+        connect_args["sslkey"] = cfg["ssl_key"]
+    return connect_args
+
+
+def get_async_connect_args(target_url: str) -> dict[str, Any]:
+    """Build connection arguments for asyncpg engine with SSLContext supporting mTLS."""
+    if "sqlite" in target_url:
+        return {}
+
+    cfg = get_db_ssl_config()
+    if not cfg["is_ssl_enabled"]:
+        return {}
+
+    import ssl
+
+    ssl_mode = (cfg["ssl_mode"] or ("verify-ca" if cfg["ssl_ca"] else "prefer")).lower()
+    if ssl_mode in ("disable", "0", "false"):
+        return {"ssl": False}
+
+    ssl_ctx = ssl.create_default_context(
+        cafile=cfg["ssl_ca"] if (cfg["ssl_ca"] and os.path.exists(cfg["ssl_ca"])) else None
+    )
+    if cfg["ssl_cert"] and cfg["ssl_key"]:
+        if os.path.exists(cfg["ssl_cert"]) and os.path.exists(cfg["ssl_key"]):
+            ssl_ctx.load_cert_chain(certfile=cfg["ssl_cert"], keyfile=cfg["ssl_key"])
+        else:
+            logger.warning(
+                f"[Database mTLS] Certificate or key file not found: cert={cfg['ssl_cert']}, key={cfg['ssl_key']}"
+            )
+
+    if ssl_mode == "verify-full":
+        ssl_ctx.check_hostname = True
+        ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+    elif ssl_mode == "verify-ca":
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+    elif ssl_mode in ("require", "prefer", "allow"):
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+
+    return {"ssl": ssl_ctx}
+
+
 def get_sync_engine(url: str | None = None) -> Any:
     global _sync_engine, _sync_session_factory
     if _sync_engine is None or url is not None:
@@ -62,8 +138,8 @@ def get_sync_engine(url: str | None = None) -> Any:
         target_url = url or DEFAULT_SYNC_URL
         _check_db_environment(target_url)
 
+        connect_args = get_sync_connect_args(target_url)
         if "sqlite" in target_url:
-            connect_args = {"check_same_thread": False, "timeout": 30}
             _sync_engine = create_engine(target_url, echo=False, connect_args=connect_args)
         else:
             _sync_engine = create_engine(
@@ -73,6 +149,7 @@ def get_sync_engine(url: str | None = None) -> Any:
                 max_overflow=DB_MAX_OVERFLOW,
                 pool_timeout=DB_POOL_TIMEOUT,
                 pool_recycle=DB_POOL_RECYCLE,
+                connect_args=connect_args,
             )
         _sync_session_factory = sessionmaker(bind=_sync_engine, expire_on_commit=False)
     return _sync_engine
@@ -93,6 +170,8 @@ def get_async_engine(url: str | None = None) -> Any:
             _async_engine.sync_engine.dispose()
         target_url = url or DEFAULT_ASYNC_URL
         _check_db_environment(target_url)
+
+        connect_args = get_async_connect_args(target_url)
         if "sqlite" in target_url:
             _async_engine = create_async_engine(target_url, echo=False)
         else:
@@ -103,6 +182,7 @@ def get_async_engine(url: str | None = None) -> Any:
                 max_overflow=DB_MAX_OVERFLOW,
                 pool_timeout=DB_POOL_TIMEOUT,
                 pool_recycle=DB_POOL_RECYCLE,
+                connect_args=connect_args,
             )
         _async_session_factory = async_sessionmaker(bind=_async_engine, expire_on_commit=False, class_=AsyncSession)
     return _async_engine

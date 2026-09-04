@@ -89,7 +89,32 @@ class ModbusTcpIoController:
         self._sock = socket_client
         self._last_connected_at: float = 0.0
 
+    @property
+    def is_connected(self) -> bool:
+        """Check if socket connection is actively established."""
+        return self._sock is not None
+
+    def connect(self) -> bool:
+        """Attempt immediate connection to PLC."""
+        try:
+            sock = self._get_socket()
+            return sock is not None
+        except Exception as e:
+            logger.debug(f"[Modbus] Connection attempt failed: {e}")
+            return False
+
+    def disconnect(self) -> None:
+        """Close connection to PLC."""
+        with self._lock:
+            if self._sock is not None:
+                try:
+                    self._sock.close()
+                except Exception:
+                    pass
+                self._sock = None
+
     def _next_tx_id(self) -> int:
+
         with self._lock:
             tx = self._transaction_id
             self._transaction_id = (self._transaction_id + 1) % 65535 or 1
